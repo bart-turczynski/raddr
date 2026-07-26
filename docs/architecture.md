@@ -282,21 +282,64 @@ Three implementations was too small a sample to conclude "they disagree, so
 consult the paper" and leave it there. `data-raw/survey-zone.sh` reproduces the
 whole table on demand:
 
-| Implementation | `fe80::1%lo0` | Keeps the zone? |
-|---|---|---|
-| Rust `std::net::Ipv6Addr` | reject | — |
-| Ruby `IPAddr` | reject | — |
-| PHP `filter_var(FILTER_VALIDATE_IP)` | reject | — |
-| ada / WHATWG URL (`adaR`, Node `new URL`) | reject | — |
-| Python `ipaddress` | accept | yes, `.scope_id` |
-| Go `net/netip` | accept | yes, `Zone()` |
-| R `ipaddress` 1.0.3 | accept | **no — silently discarded** |
-| Node `net.isIPv6()` | accept | n/a, returns a boolean |
+| Implementation | Zone slot in the type | `fe80::1%lo0` | Keeps it? |
+|---|---|---|---|
+| Rust `std::net::Ipv6Addr` | none | reject | — |
+| Ruby `IPAddr` | none | reject | — |
+| PHP `filter_var(FILTER_VALIDATE_IP)` | none (returns the string) | reject | — |
+| ada / WHATWG URL (`adaR`, Node `new URL`) | none | reject | — |
+| Python `ipaddress` | `.scope_id`, string | accept | yes |
+| Go `net/netip` | `Zone()`, string | accept | yes |
+| Rust `std::net::SocketAddrV6` | `scope_id`, **`u32`** | **numeric only** | yes |
+| R `ipaddress` 1.0.3 | none | accept | **no — discarded** |
+| Node `net.SocketAddress` | none | accept | **no — discarded** |
+| Node `net.isIPv6()` | n/a, returns a boolean | accept | n/a |
 
-So the tally among parsers that return a value is **four reject, two accept and
-keep, one accepts and loses it**. The paper's answer is also the plurality
-answer, which is a better position than the tie-break §3.5.2 originally
-described. Nothing here changes the decision; it stops being a coin toss.
+**The split is not paper-versus-reality, and not RFC-versus-WHATWG. It is
+storage.** Every implementation that has somewhere to put a zone accepts one;
+every implementation that does not either rejects it or loses it. The grammar
+each parser admits is the shape of its own data model, read back out.
+
+Rust proves it within one language. `Ipv6Addr` is sixteen bytes with no zone
+field and rejects every zone; `SocketAddrV6` carries a `scope_id: u32` and
+accepts `%1` — while still rejecting `%lo0`, `%bogus0` and `%LO0`, because a
+name does not fit in a `u32`. Same crate, same address grammar underneath, and
+the accepted syntax tracks the field type exactly, down to its width.
+
+Python looks like the same story across time rather than across types —
+`scope_id` is documented as new in 3.9, and the grammar would have arrived with
+it — but the oldest interpreter on this machine is 3.9.6, so that half is
+**from the changelog, not measured**. Every other row in the table is measured.
+
+Two consequences worth stating plainly:
+
+- **The RFC-versus-WHATWG reading fails in both directions.** Rust, Ruby and
+  PHP are RFC-lineage and reject; ada is the only WHATWG entry among four
+  rejecters. And there is no single RFC answer to appeal to — RFC 4291 §2.2's
+  address grammar has no `%`, RFC 4007 §11 defines the syntax, and RFC 6874
+  defines it for URIs. ada rejects even the RFC 6874 spelling `%25lo0`
+  **[verified 2026-07-27]**, so the WHATWG URL parser has not adopted 6874;
+  that belongs to §3.4, not here.
+- **The two that accept without a slot are the two that lose data**, and both
+  are also *more lenient* than a validator in their own library: R's
+  `ipaddress` accepts a second `%` that Apple's `inet_pton` rejects, and Node's
+  `SocketAddress` accepts `fe80::1%lo0%en0`, which `net.isIPv6()` in the same
+  module rejects. Accepting a zone you cannot store does not just lose the
+  zone — it loosens the grammar, because there is no longer anything to
+  validate the discarded text against.
+
+**Where that leaves raddr.** raddr has a `character` zone field, so structurally
+it sits with Python and Go: the data model imposes no constraint here, and it is
+wide enough that Rust's `u32` problem and O14's modulo-2^16 truncation cannot
+arise. `strict` therefore rejects the zone as a **decision about the paper**,
+not as a consequence of storage — which is exactly why §3.5.2 stays a one-line
+reversal (plus splitting `rules_v6_paper`, since `whatwg` must keep rejecting).
+The reality dialects, which have no paper to answer to, accept and keep it.
+
+So the tally among parsers that return a value is four reject, three accept and
+keep, two accept and lose. The paper's answer is also the plurality answer,
+which is a better position than the tie-break this section originally described.
+Nothing here changes the decision; it stops being a coin toss.
 
 **R's `ipaddress` is the case worth dwelling on**, because it is raddr's nearest
 peer — same language, same problem, `Suggests`-adjacent in every comparison in

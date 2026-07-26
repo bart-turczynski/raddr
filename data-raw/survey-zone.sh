@@ -96,6 +96,35 @@ RUST
   else
     echo "  failed to compile, skipped"
   fi
+
+  # The control that makes section 3.5.2's point: same language, same crate,
+  # same address grammar underneath. SocketAddrV6 has a `scope_id: u32` field
+  # and Ipv6Addr has no zone field at all, and the accepted grammar tracks the
+  # storage exactly -- including the u32, which is why only a *numeric* zone
+  # gets through.
+  printf '\n== Rust Ipv6Addr vs SocketAddrV6 (the storage control) ==\n'
+  cat > "$dir/s.rs" <<'RUST'
+use std::net::{Ipv6Addr, SocketAddrV6};
+use std::str::FromStr;
+fn main() {
+    for c in std::env::args().skip(1) {
+        let a = Ipv6Addr::from_str(&c);
+        let s = SocketAddrV6::from_str(&format!("[{}]:80", c));
+        println!("  {:<22} Ipv6Addr={:<8} SocketAddrV6={}", c,
+            if a.is_ok() { "OK" } else { "REJECT" },
+            match s {
+                Ok(v) => format!("OK scope_id={}", v.scope_id()),
+                Err(_) => "REJECT".to_string(),
+            });
+    }
+}
+RUST
+  if rustc -O -o "$dir/s" "$dir/s.rs" 2>/dev/null; then
+    # shellcheck disable=SC2086
+    "$dir/s" $CASES
+  else
+    echo "  failed to compile, skipped"
+  fi
   rm -rf "$dir"
 else
   skip "Rust std"
@@ -176,15 +205,23 @@ fi
 # zones belong.
 if have node; then
   printf '\n== Node net.isIPv6 / new URL (ada) ==\n'
+  # The URL column encodes the zone as RFC 6874's "%25" and is still rejected,
+  # so ada does not implement RFC 6874 (section 3.4). net.SocketAddress is the
+  # second implementation found that accepts a zone with nowhere to put it and
+  # drops it, alongside R's ipaddress (section 3.5.2).
   CASES="$CASES" node -e '
     const net = require("net");
     for (const c of process.env.CASES.split(" ")) {
       let url = "REJECT";
       try { url = new URL("http://[" + c.replace(/%/g, "%25") + "]/").hostname; }
       catch (e) { /* stays REJECT */ }
+      let sock = "REJECT";
+      try { sock = new net.SocketAddress({address: c, family: "ipv6"}).address; }
+      catch (e) { /* stays REJECT */ }
       console.log("  " + c.padEnd(22) +
         " isIPv6=" + (net.isIPv6(c) ? "OK    " : "REJECT") +
-        " URL=" + url);
+        " URL=" + url.padEnd(10) +
+        " SocketAddress=" + sock);
     }
   '
 else
