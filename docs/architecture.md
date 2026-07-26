@@ -223,6 +223,32 @@ reads the raw bits — but the R-level field holds `NA_integer_`, so comparison
 yields `NA`. For IPv4 this is a single address; for IPv6 it is every address
 with that pattern in any of the four words. Report upstream (O11).
 
+**This is not a bug in R, and the question will be asked again.** R documents the
+constraint at every level **[verified 2026-07-26]**:
+
+- `?integer` — "the range of representable integers is restricted to about
+  ±2×10^9"
+- `.Machine$integer.max` is `2147483647`, not `2147483648`; INT_MIN is excluded
+  by definition
+- `as.integer(-2147483648)` returns `NA` *with* a warning: "NAs introduced by
+  coercion to integer range"
+- `?bitwAnd` — "Pairwise operations can result in integer `NA`"
+
+R represents missingness **in band**, spending one value of the type rather than
+carrying a separate validity mask. For `double` that is free — IEEE-754 has 2^52
+NaN payloads to spare, so `NA_real_` costs nothing anyone can observe. For
+`integer` there is no spare value, so the sentinel costs a real one. That is a
+deliberate trade inherited from S, not an oversight.
+
+The defect is therefore squarely in the library, not the language: storing
+*unsigned* 32-bit data in a *signed* type that reserves a value, and not handling
+the one collision. Any library doing this must handle it; `ipaddress` does not.
+
+The sharp edge worth knowing: `as.integer()` warns at the boundary, but
+`bitwShiftL(1L, 31)` and `bitwNot(2147483647L)` both return `NA` **silently**.
+Documented, but easy to walk into — and another reason §11 requires arithmetic
+(`2^(8*n)`) rather than bit-shifts.
+
 raddr's resolution:
 
 - **Words store the raw signed bit pattern.** No value is forbidden.
@@ -530,7 +556,7 @@ Second-order. None blocks the API freeze except where noted.
 | O8 | RFC 5952 test vectors | None published upstream. raddr authors its own |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
 | O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
-| O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug in §5.1.1, with `ip_address("128.0.0.0") == ip_address("128.0.0.0")` returning `NA` as the reproducer. File both regardless of what raddr ships |
+| O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
 
 ---
