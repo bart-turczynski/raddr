@@ -1,18 +1,33 @@
 Package: raddr
 Type: Package
-Title: One Line Description in Title Case
+Title: Show What an IP Address Literal Means Under Every Standard
 Version: 0.0.0.9000
+Language: en-US
 Authors@R:
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: A single paragraph describing what the package does and why it is
-    useful. End the description with a full stop. Replace this placeholder text
-    before submitting to CRAN.
+    person("Bart", "Turczynski", email = "bartek@turczynski.pl", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-8788-7980"))
+Description: Standards and implementations disagree about what an IP address
+    literal means: the string "0177.0.0.1" is rejected by the dotted-quad
+    grammar, read as 127.0.0.1 by browsers, and read as 177.0.0.1 by some
+    'inet_pton' implementations. Most libraries pick one reading and discard the
+    rest. This package reports them all, alongside the reason codes that explain
+    each one, and classifies parsed values against the IANA special-purpose
+    address registries. It is pure R, performs no network access, and returns
+    facts rather than allow or deny verdicts.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Depends:
     R (>= 4.0.0)
+Imports:
+    rlang,
+    vctrs
+URL: https://github.com/bart-turczynski/raddr
+BugReports: https://github.com/bart-turczynski/raddr/issues
+X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
+    inet-aton, whatwg-url, cidr, iana, special-purpose-registry, nat64,
+    teredo, 6to4, r, rstats, r-stats, r-package
 Suggests:
     cucumber (>= 2.0.0),
     knitr,
