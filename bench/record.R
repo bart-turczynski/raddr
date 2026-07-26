@@ -84,4 +84,30 @@ if (!is.null(ip)) {
   }
 }
 
+cat("\n== parsing ==\n")
+
+octet <- function() sample.int(255, n, replace = TRUE)
+canonical <- sprintf("%d.%d.%d.%d", octet(), octet(), octet(), octet())
+# Nothing here can take the plain-decimal fast path.
+obfuscated <- rep(
+  c("0177.0.0.1", "0x7f.0.0.1", "192.0.048.1", "2130706433"),
+  length.out = n
+)
+
+parsers <- list(
+  strict = addr_strict, whatwg = addr_whatwg, pton = addr_pton,
+  aton = addr_aton, getaddrinfo = addr_getaddrinfo, curl = addr_curl
+)
+for (name in names(parsers)) {
+  parser <- parsers[[name]]
+  report(paste("addr", name), timing(parser(canonical)), "s")
+}
+report("addr_whatwg, obfuscated", timing(addr_whatwg(obfuscated)), "s")
+
+if (!is.null(ip)) {
+  theirs <- timing(ipaddress::ip_address(canonical))
+  report("ipaddress::ip_address", theirs, "s")
+  report("ratio, whatwg / ipaddress", timing(addr_whatwg(canonical)) / theirs, "x")
+}
+
 cat("\n")

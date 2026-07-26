@@ -118,6 +118,22 @@ Every measured row falls out of those two orderings. They are implemented as
 literal compositions of the exported primitives, so a precedence change upstream
 is an argument swap, not a rewrite.
 
+**One leak, found while implementing Epic C [verified 2026-07-26].** The
+`getaddrinfo` composition is exact except for whitespace. `inet_aton` stops at
+the first whitespace character and ignores everything after it, so
+`"1.2.3.4 junk"` is an address to it — but `getaddrinfo()` rejects any input
+containing whitespace before either primitive sees it:
+
+| input | `pton` | `aton` | `getaddrinfo` |
+|---|---|---|---|
+| `1.2.3.4 ` | reject | 1.2.3.4 | **reject** |
+| `1.2.3.4 x` | reject | 1.2.3.4 | **reject** |
+| `1.2 .3.4` | reject | 1.0.0.2 | **reject** |
+
+`addr_getaddrinfo()` therefore rejects whitespace-bearing input first, then
+composes. The composition claim holds for every other measured row; this is a
+gate in front of it rather than a different precedence.
+
 ### 3.3 Measured divergence **[verified 2026-07-26]**
 
 | input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
@@ -138,6 +154,36 @@ Two rows carry most of the package's value:
 
 `pton` is the one dialect whose row is **platform-dependent**. Apple libc strips
 leading zeros and reads decimal. glibc and musl are **unverified** — see §10.
+
+### 3.3.1 The rest of the measured surface **[verified 2026-07-26]**
+
+The eight rows above are the headline. Implementing Epic C required pinning the
+whole surface, and `data-raw/oracle-ipv4.py` (Apple libc) plus
+`data-raw/oracle-ipv4.R` (ada, for `whatwg`) now record 91 inputs as
+`tests/testthat/fixtures/ipv4-oracle.csv`. Regenerate after a libc or curl
+upgrade; the fixture is asserted, so drift fails loudly rather than silently.
+
+The findings that shaped the implementation, none of which were in the draft
+spec or the scratch documents:
+
+- **`inet_aton` range-checks every arity except the whole-host number.** With
+  two to four parts the final part is bounded by `256^(5-k) - 1` and a larger
+  value is rejected: `127.16777215` is fine, `127.16777216` is not. With one
+  part there is no check at all — the value is truncated to 32 bits. That is
+  why `4294967296` is `0.0.0.0` while `1.4294967296` is a rejection.
+- **The truncation is exactly modulo 2^32.** libc wraps in a C `unsigned long`
+  and then keeps the low 32 bits, and 2^32 divides 2^64, so the two agree for
+  every input. `99999999999999999999999999` is `227.255.255.255` under both.
+  This is what lets raddr accumulate modulo 2^32 in a `double` and stay exact.
+- **`inet_aton` stops at the first whitespace character** (space, tab, CR, LF,
+  VT, FF) and ignores the remainder, so `1.2.3.4 junk` parses. Leading
+  whitespace still fails, because the truncation leaves nothing to parse, and
+  glued-on non-whitespace (`1.2.3.4x`) fails too.
+- **A digitless `0x` is tolerated by `inet_aton` in any part but the last.**
+  `0x.1` and `0x.0x.0` parse; `0x`, `0x.0x` and `1.2.0x` do not. WHATWG has no
+  such carve-out — a bare `0x` is simply zero.
+- **`inet_pton` puts no width limit on leading zeros.** `00000000177.0.0.1` is
+  `177.0.0.1` and a nineteen-digit run of zeros before a `1` is still `1`.
 
 ### 3.4 What is deliberately absent
 
@@ -589,7 +635,7 @@ the decisions are not relitigated.
 
 | # | Item | Disposition |
 |---|---|---|
-| O1 | Pure R vs compiled | Pure R for v0.1. Benchmark honestly against §11 targets. Not the biggest open question — the API can freeze first, so the escape hatch is real |
+| O1 | Pure R vs compiled | **Measured 2026-07-26, see §11.2.** The record meets both targets in pure R; the parsers miss the speed target by 18x and that is the pure R floor. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp |
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
@@ -654,6 +700,47 @@ algorithmic:
 
 The lesson generalizes to the parsers: at 1e6 rows the cost is allocation and
 copying, not arithmetic.
+
+### 11.2 Parsing misses the speed target, and that is the O1 evidence
+**[verified 2026-07-26]**
+
+The record meets both targets. **Parsing does not, and not by a little.**
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_whatwg()`, canonical dotted quads | 1.11 s | 0.06 s | **18x** | <= 3x |
+| `addr_strict()` | 1.23 s | — | — | |
+| `addr_aton()` | 1.57 s | — | — | |
+| `addr_curl()` | 1.58 s | — | — | |
+| `addr_whatwg()`, nothing canonical | 1.64 s | — | — | |
+
+That is after tuning took it from 2.9 s, a 2.6x improvement, via:
+
+- a **fast path for plain decimal parts** — a digit run with no leading zero
+  means the same thing in every dialect and is almost all real input, so it goes
+  through `as.numeric()` and skips the digit-at-a-time loop;
+- **scatter-add over the four part positions** instead of `rowsum()`, which
+  costs several times as much for groups this small;
+- `grepl("[^0-9]", perl = TRUE)` over an anchored alternation, and
+  `endsWith()` + `substr()` over `sub()`.
+
+What is left is spread thin — `strsplit()`, one `grepl()`, one `as.numeric()`,
+and a long tail of vector operations over four million parts. There is no
+remaining hot spot to remove, which is the point: **18x is the pure R floor for
+this shape of work, not a coding defect.**
+
+This is the concrete evidence O1 was waiting for, and it splits the question
+rather than settling it:
+
+- The **record** is fine in pure R. Storage, equality, ordering and hashing all
+  meet target with room to spare, so `src/` buys nothing there.
+- The **parsers** are the case for compiled code, and they are also the case
+  that was always going to be. Splitting and scanning a million strings a
+  character at a time is what C is for.
+
+The API does not change either way (§8), so this stays a v0.2 decision made on
+its own schedule. Recorded here so it is decided on measurements rather than
+re-argued from first principles. Plain C, not Rcpp.
 
 `ipaddress`'s 19.1 MB is not a like-for-like comparison: it has no `zone` field
 and encodes family as a single `logical`. An R `logical` and a factor are both
