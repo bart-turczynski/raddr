@@ -194,13 +194,20 @@ test_that("sort() puts missing last and unique() collapses duplicates", {
   expect_true(is.na(sort(addrs, na.last = TRUE)[[3]]))
 })
 
-# --- Formatting (placeholder until RFC 5952 lands) ---------------------------
+# --- Formatting --------------------------------------------------------------
+#
+# The renderers themselves are test-format.R's business. What is asserted here
+# is only that the type's `format()` is wired to the canonical one.
 
-test_that("format emits the expanded form and appends the zone", {
+test_that("format is the canonical rendering and appends the zone", {
   expect_identical(format(v4(192, 0, 2, 1)), "192.0.2.1")
   expect_identical(format(v4(128, 0, 0, 0)), "128.0.0.0")
   expect_identical(
     format(raddr_address(-25165824L, 0L, 0L, 1L, "v6", "lo0")),
+    "fe80::1%lo0"
+  )
+  expect_identical(
+    addr_expand(raddr_address(-25165824L, 0L, 0L, 1L, "v6", "lo0")),
     "fe80:0000:0000:0000:0000:0000:0000:0001%lo0"
   )
 })

@@ -132,4 +132,28 @@ if (!is.null(ip)) {
   report("ratio, strict / ipaddress", timing(addr_strict(v6_plain)) / theirs, "x")
 }
 
+cat("\n== formatting ==\n")
+
+# `v6` above is random bits, which almost never contain a zero field, so the
+# zero-run search is measured on values that actually have runs to find.
+formattable <- addr_strict(v6_plain)
+mapped <- addr_strict(v6_tail)
+
+report("addr_format, IPv4", timing(addr_format(v4)), "s")
+report("addr_format, IPv6", timing(addr_format(formattable)), "s")
+report("addr_format, IPv6 dense", timing(addr_format(v6)), "s")
+report("addr_format, 4-in-6", timing(addr_format(mapped)), "s")
+report("addr_expand, IPv6", timing(addr_expand(formattable)), "s")
+
+if (!is.null(ip)) {
+  theirs <- timing(format(ip))
+  report("ipaddress format, IPv4", theirs, "s")
+  report("ratio, IPv4 / ipaddress", timing(addr_format(v4)) / theirs, "x")
+
+  ip6 <- ipaddress::ip_address(v6_plain)
+  theirs6 <- timing(format(ip6))
+  report("ipaddress format, IPv6", theirs6, "s")
+  report("ratio, IPv6 / ipaddress", timing(addr_format(formattable)) / theirs6, "x")
+}
+
 cat("\n")

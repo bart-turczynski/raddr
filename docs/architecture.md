@@ -481,6 +481,50 @@ design. Consumers who want the embedded ordering sort on `addr_embedded()`.
 Zone is excluded from the comparison proxy as well as the equality proxy, so
 ordering and equality stay consistent: `x == y` implies `vec_compare(x, y) == 0`.
 
+#### 5.1.3 Rendering — two forms, and why both are public **[verified 2026-07-27]**
+
+`addr_format()` is RFC 5952 canonical and is what `format()`, `print()` and
+`as.character()` emit. `addr_expand()` is the fully expanded eight-hextet form.
+Both are in §6.2, and both append the zone as `%zone` without ever reading it
+back into the bits.
+
+Two renderers rather than one, because the canonical form is **variable-width
+by construction** — that is the point of §4.2's `::` — and a variable-width
+string cannot line up in a column, sort as text in address order, or be matched
+by a prefix. Those are ordinary things to want of an address, and every one of
+them needs the expanded form. `ipaddress` reaches the same conclusion from the
+other direction, exposing both.
+
+**The mixed form is decided by the family, never by the spelling.** RFC 5952 §5
+asks for `::ffff:192.0.2.1`; raddr emits it for `v6_4in6`, which §5.1 decides
+from the bits (`w1 == 0 && w2 == 0 && w3 == 0xffff`). So `::ffff:7f00:1` and
+`::ffff:127.0.0.1` render identically, and `parse(format(x)) == x` holds —
+including the family, which is the invariant the three-state family exists to
+protect. The deprecated v4-compatible form is `v6`, so `::1.2.3.4` renders as
+`::102:304`. The renderer does not *assume* the `::ffff:` prefix, though: it
+compresses the leading six fields under the ordinary rules and appends the quad
+as a seventh piece, so a `v6_4in6` built through the low-level constructor with
+some other prefix still renders correctly.
+
+**O8 — RFC 5952 publishes no test vectors**, so raddr authors its own in
+`tests/testthat/test-format.R`, organized by the RFC's own section numbers.
+Where the RFC's prose gives an example (§4.2.2's `2001:db8:0:1:1:1:1:1`,
+§4.2.3's `2001:0:0:1::1`), that example is the row. The vectors are pinned by
+four properties: the canonical form round-trips through the parser, it is a
+fixed point of itself, equal addresses render identically and unequal ones do
+not, and the vectorized rendering equals the one-at-a-time rendering.
+
+The implementation is one 8 x n hextet matrix and vectorized operations over
+it — §2's rule, and the same shape as the parser. The zero run is found by a
+backwards recursion over the eight rows (eight steps, each over all n columns),
+and the leftmost argmax of that gives §4.2.3's tie-break for free. The
+compressed run is then **blanked rather than removed**, and the pieces joined
+with `:` regardless: a run of two blanks already puts `::` in the right place,
+and a longer one leaves one colon per blank, which a single `sub(":{3,}", "::")`
+collapses. That keeps the ragged part — how many fields `::` swallowed, and
+whether it touches either end — inside two vectorized calls instead of a
+per-row assembly.
+
 ### 5.2 `raddr_parse`
 
 **Outcomes are per-dialect.** A single scalar status cannot express
@@ -765,7 +809,7 @@ the decisions are not relitigated.
 | O5 | Trie vs sorted masked vector for the 53 IANA rows plus the transition overlay | Benchmark; probably neither a trie nor `triebeard` |
 | O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only, and §3.5 raises the stakes: the IPv6 leading-zero rule, the fold and the lift are all Apple behaviors |
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
-| O8 | RFC 5952 test vectors | None published upstream. raddr authors its own |
+| O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
 | O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
@@ -847,6 +891,31 @@ The record meets both targets. **Parsing does not, and not by a little.**
 | `addr_pton()`, IPv6 | 5.34 s | — | — | |
 | `addr_pton()`, IPv6 with a zone | 4.67 s | — | — | |
 | `addr_strict()`, dotted-quad tail | 7.04 s | 0.09 s | **78x** | <= 3x |
+
+**Rendering, by contrast, is close to target [verified 2026-07-27, Epic E]:**
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_format()`, IPv4 | 0.41 s | 0.36 s | **1.1x** | <= 3x |
+| `addr_format()`, IPv6 | 2.30 s | 0.30 s | **7.5x** | <= 3x |
+| `addr_format()`, IPv6 dense (no zero run) | 2.28 s | — | — | |
+| `addr_format()`, 4-in-6 | 2.36 s | — | — | |
+| `addr_expand()`, IPv6 | 1.29 s | — | — | |
+
+Worth recording because it is the *asymmetry* that is informative, not the
+numbers. Rendering is 5x cheaper than parsing on the same values and lands
+within target for IPv4, on the same interpreter, with no compiled code — and
+the renderer was written straightforwardly, with none of the tuning §11.2
+describes. The difference is that rendering knows the shape of its work in
+advance: eight fields, always, so every step is a whole-matrix operation with
+no ragged case. Parsing does not know how many pieces it has until it looks.
+The cost of pure R is paid on **irregularity**, not on volume, and that is a
+sharper reading of O1 than "string work is slow".
+
+The three timings inside the IPv6 row are flat to within noise, which is the
+answer to the obvious worry: the zero-run search is eight vectorized steps
+whether or not there is a run to find, and the mixed form costs a `paste()`
+column, not a branch.
 
 Three changes took the plain case from 7.0 s and the dotted tail from 13.0 s,
 and all three are the same lesson as §11.1 — do not touch a vector you do not

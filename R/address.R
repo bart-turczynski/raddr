@@ -286,45 +286,10 @@ vec_proxy_compare.raddr_address <- function(x, ...) {
 
 # --- Printing ----------------------------------------------------------------
 
+# The canonical rendering lives in R/format.R.
 #' @export
 format.raddr_address <- function(x, ...) {
-  # A placeholder. RFC 5952 formatting -- zero-run compression, the 4-in-6 form,
-  # the zone suffix -- is its own body of work; until it lands this emits the
-  # fully expanded form so that addresses can be printed and eyeballed at all.
-  family <- field(x, "family")
-  words <- lapply(
-    c("w1", "w2", "w3", "w4"),
-    function(f) widen_word(field(x, f))
-  )
-
-  out <- vapply(
-    seq_along(x),
-    function(i) {
-      if (is.na(family[[i]])) {
-        return(NA_character_)
-      }
-      if (family[[i]] == "v4") {
-        return(format_v4(words[[4L]][[i]]))
-      }
-      format_v6_expanded(vapply(words, `[[`, double(1), i))
-    },
-    character(1)
-  )
-
-  zone <- field(x, "zone")
-  zoned <- !is.na(out) & !is.na(zone)
-  out[zoned] <- paste0(out[zoned], "%", zone[zoned])
-  out
-}
-
-format_v4 <- function(word) {
-  octets <- (word %/% 256^(3:0)) %% 256
-  paste(octets, collapse = ".")
-}
-
-format_v6_expanded <- function(words) {
-  groups <- as.vector(rbind(words %/% 65536, words %% 65536))
-  paste(sprintf("%04x", groups), collapse = ":")
+  addr_format(x)
 }
 
 #' @export

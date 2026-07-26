@@ -32,7 +32,7 @@ test_that("the section 3.5 divergence table holds", {
 
   for (dialect in names(expected)) {
     expect_identical(
-      format(dialect_fn(dialect)(input)),
+      addr_expand(dialect_fn(dialect)(input)),
       expected[[dialect]],
       label = dialect
     )
@@ -62,7 +62,7 @@ ipv6_oracle <- function() {
 
 # The zone travels in its own field, so the oracle is compared against the
 # address alone and the zone is asserted separately below.
-address_only <- function(x) sub("%.*$", "", format(x))
+address_only <- function(x) sub("%.*$", "", addr_expand(x))
 
 test_that("aton has no IPv6 reading at all", {
   # Measured rather than assumed: both compositions in section 3.2 lean on it.
@@ -137,7 +137,7 @@ test_that("getaddrinfo matches Apple libc bit for bit", {
 
 test_that("the elision expands at either end and in the middle", {
   expect_identical(
-    format(addr_strict(c("::", "::1", "1::", "1::8", "1:2::7:8"))),
+    addr_expand(addr_strict(c("::", "::1", "1::", "1::8", "1:2::7:8"))),
     c(
       "0000:0000:0000:0000:0000:0000:0000:0000",
       "0000:0000:0000:0000:0000:0000:0000:0001",
@@ -178,7 +178,7 @@ test_that("a hextet is four hex digits on paper, four significant to libc", {
   # zeros, exactly as its IPv4 reading does not.
   expect_true(all(is.na(addr_strict(c("00001::", "01234::", "0abcd::")))))
   expect_identical(
-    format(addr_pton(c("00001::", "01234::", "0000000000001::"))),
+    addr_expand(addr_pton(c("00001::", "01234::", "0000000000001::"))),
     c(
       "0001:0000:0000:0000:0000:0000:0000:0000",
       "1234:0000:0000:0000:0000:0000:0000:0000",
@@ -225,7 +225,7 @@ test_that("the tail is read under the dialect's own IPv4 rules", {
   # This is the finding, and the reason no new number parser appears in
   # R/ipv6.R: the tail is not a grammar of its own.
   expect_identical(
-    format(addr_strict(c("::1.2.3.4", "1:2:3:4:5:6:1.2.3.4"))),
+    addr_expand(addr_strict(c("::1.2.3.4", "1:2:3:4:5:6:1.2.3.4"))),
     c(
       "0000:0000:0000:0000:0000:0000:0102:0304",
       "0001:0002:0003:0004:0005:0006:0102:0304"
@@ -237,7 +237,7 @@ test_that("the tail is read under the dialect's own IPv4 rules", {
   zeros <- c("::1.2.3.04", "::01.2.3.4", "::00000000001.2.3.4", "::1.02.3.4")
   expect_true(all(is.na(addr_strict(zeros))))
   expect_identical(
-    format(addr_pton(zeros)),
+    addr_expand(addr_pton(zeros)),
     rep("0000:0000:0000:0000:0000:0000:0102:0304", length(zeros))
   )
 })
@@ -325,7 +325,10 @@ test_that("getaddrinfo lifts an embedded scope out of a link-local address", {
   # zone ID [verified 2026-07-26]. Unlike inet_pton's forward fold, this is a
   # pure function of the input, so raddr models it.
   a <- addr_getaddrinfo("fe80:abcd::1")
-  expect_identical(format(a), "fe80:0000:0000:0000:0000:0000:0000:0001%43981")
+  expect_identical(
+    addr_expand(a),
+    "fe80:0000:0000:0000:0000:0000:0000:0001%43981"
+  )
   expect_identical(
     format(addr_pton("fe80:abcd::1")),
     format(addr_curl("fe80:abcd::1"))
@@ -334,7 +337,7 @@ test_that("getaddrinfo lifts an embedded scope out of a link-local address", {
 
   # An explicit zone wins, but the hextet is cleared either way.
   expect_identical(
-    format(addr_getaddrinfo("fe80:abcd::1%1")),
+    addr_expand(addr_getaddrinfo("fe80:abcd::1%1")),
     "fe80:0000:0000:0000:0000:0000:0000:0001%1"
   )
 })
