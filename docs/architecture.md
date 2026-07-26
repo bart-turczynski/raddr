@@ -68,7 +68,7 @@ idiom a consumer reaches for.
 `strict = FALSE`, no `...`-buried dialect knob. A named function is harder to
 "helpfully" default away than an argument.
 
-**P4 — Classification is registry-derived, never hardcoded.** `classify()`
+**P4 — Classification is registry-derived, never hardcoded.** `addr_classify()`
 returns the matched IANA row with its RFC citation and all five policy columns.
 
 **P5 — The value the resolver sees is the value that gets classified.**
@@ -155,8 +155,14 @@ leading zeros and reads decimal. glibc and musl are **unverified** — see §10.
 - **Dialect is selected by calling a named function** (P3).
 - **A default exists only where R structurally forces a single value** —
   `as.character()`, `format()`, a data-frame column. There the default is
-  **`whatwg`**, because it is a standard rather than an implementation, and
-  because defaulting to libcurl would make an R package parochial about R.
+  **`whatwg`**, because it is a fixed, versioned standard rather than an
+  implementation. Defaulting to a reality dialect would make the answer depend
+  on the machine raddr happens to be running on — §3.1 marks `pton` as
+  platform-varying, and `curl` and `getaddrinfo` both compose it.
+- **P5 does not conflict with this.** P5 governs *formatting*: `format()` emits
+  the canonical form of a parsed value rather than echoing the input spelling.
+  It says nothing about which dialect produced that value. Choosing `whatwg` as
+  the display default is a §4 question; P5 applies whichever dialect is chosen.
 - **The print method carries the load.** It collapses to one line when all
   dialects agree, and expands to show the divergence when they do not. Quiet
   when there is nothing to say, loud when there is.
@@ -175,13 +181,50 @@ A `vctrs_rcrd`.
 
 | Field | Type | Notes |
 |---|---|---|
-| `w1`–`w4` | `integer` | 4 x 32-bit words, big-endian. IPv4 occupies `w4` |
-| `family` | factor | three states: `v4`, `v6`, `v6_4in6` |
+| `w1`–`w4` | `integer` | 4 x 32-bit words, big-endian. IPv4 occupies `w4`. Raw bit patterns — see §5.1.1 |
+| `family` | factor | three states: `v4`, `v6`, `v6_4in6`; `NA` marks a missing address |
 | `zone` | `character` | RFC 4007 zone ID, `NA` when absent. **Never in the bytes** |
 
 The three-state family is Go's `net/netip` lesson: `parse("::ffff:127.0.0.1")`
 must not equal `parse("127.0.0.1")`, and `format()` on a 4-in-6 must emit
 `::ffff:127.0.0.1` so `parse(format(x)) == x` holds.
+
+#### 5.1.1 The `0x80000000` problem — why the words need a widening proxy
+
+A 32-bit word has 2^32 possible bit patterns. R's `integer` can distinguish only
+2^32 − 1 of them, because R reserves the pattern `0x80000000` (INT_MIN) as
+`NA_integer_`. One address per word position is therefore unrepresentable by the
+naive layout.
+
+**This is not theoretical. `ipaddress` 1.0.3 ships the bug**
+**[verified 2026-07-26]**:
+
+```r
+ip_address("0.0.0.128") == ip_address("0.0.0.128")
+#> NA          # should be TRUE
+```
+
+It prints correctly and `is.na()` returns `FALSE`, because the C++ formatter
+reads the raw bits — but the R-level field holds `NA_integer_`, so comparison
+yields `NA`. For IPv4 this is a single address; for IPv6 it is every address
+with that pattern in any of the four words. Report upstream (O11).
+
+raddr's resolution:
+
+- **Words store the raw signed bit pattern.** No value is forbidden.
+  `NA_integer_` in a word means the pattern `0x80000000`, *not* missingness.
+- **Missingness lives in `family`.** A row is a missing address if and only if
+  `family` is `NA`. That is what disambiguates the two meanings.
+- **`vec_proxy_equal()` and `vec_proxy_compare()` widen to `double`,** mapping
+  the `NA_integer_` pattern to `2^31`. Doubles are exact to 2^53, so every
+  32-bit value survives the round trip. Storage stays 4 bytes per word; only the
+  transient comparison proxy is wide.
+
+This keeps the memory profile (§11) and stays pure R, at the cost of one
+non-obvious invariant. It must therefore carry an explicit regression test named
+for the failing address — `0.0.0.128` for IPv4 and its IPv6 analogues — asserting
+`parse(x) == parse(x)` is `TRUE`, never `NA`. A contributor who "simplifies" the
+proxy away must see that test go red.
 
 The zone is separate because Apple's `inet_pton` embeds the interface index into
 the address bytes (`fe80::1%lo0` -> `fe80:1::1`), which makes a byte-comparing
@@ -231,12 +274,18 @@ per-dialect.
 | `scope` | factor | raddr's vocabulary |
 | `globally_reachable` | `logical` | the IANA column, **not** a derived `is_global` |
 | `forwardable`, `source`, `destination`, `reserved_by_protocol` | `logical` | the other four IANA columns |
-| `embedded` | `raddr_address` | unwrapped IPv4, or `NA` |
+| `embedded` | `raddr_address` | the extracted inner IPv4, or `NA` |
 | `embedded_kind` | factor | `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
-| `unwrapped_scope` | factor | scope after recursive unwrapping |
+| `embedded_scope` | factor | scope after recursive extraction |
 | `registry_version` | `character` | snapshot stamp (P7) |
 
-`unwrapped_scope` was `effective_scope` in the draft. The computation is
+**Vocabulary — one word, and it is the RFCs' word.** raddr says *embedded*
+throughout: field names, accessors, prose. RFC 6052 §2 speaks of "embedding an
+IPv4 address" in an IPv6 prefix, and RFC 4291 §2.5.5 of the "IPv4-mapped" form.
+Matching the standards' noun means someone reading the RFC and someone reading
+raddr use the same term. "Unwrap" does not appear in the API.
+
+`embedded_scope` was `effective_scope` in the draft. The computation is
 RFC 6052-derived and stays; the name goes, because "effective" asserts that one
 of three simultaneously-true fields is the real one. That is a judgment raddr no
 longer makes.
@@ -259,8 +308,19 @@ addr_curl(x)           # -> raddr_address   (aton, then pton)
 
 **All seven take `character`.** They are parsers, not accessors. To read a
 dialect out of an existing `raddr_parse`, use `addr_reading(p, dialect)`.
+
 `addr_reading()`'s `dialect` argument is a view selector on output, not a
-leniency knob on input, so P3 is unaffected.
+leniency knob on input, so P3 is unaffected. It admits **all six** dialect names;
+`raddr_parse` stores only the four primitives, and the two compositions are
+resolved from those on request (§3.2).
+
+**P2 is scoped to `addr_parse()`, deliberately.** The six single-dialect parsers
+return a bare `raddr_address`, so a rejected input comes back as `NA` — which is
+what P2 forbids of the *multi-dialect* result. That is the trade for having them:
+they exist so a caller who has already chosen a dialect is not made to carry an
+outcome they do not need. Their documentation must say so, and must point at
+`addr_parse()` as the total, outcome-bearing form. P2's guarantee is that raddr's
+*primary* answer is never a bare `NA`; it is not a claim about every shortcut.
 
 ```r
 addr_reading(p, dialect)   # -> raddr_address
@@ -279,7 +339,7 @@ local `curl` in the `data-raw/` oracle run so drift fails loudly.
 ### 6.2 Inspect
 
 ```r
-addr_family(a)  addr_zone(a)  addr_unwrap(a)  addr_unwrap_kind(a)
+addr_family(a)  addr_zone(a)  addr_embedded(a)  addr_embedded_kind(a)
 addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 ```
 
@@ -288,7 +348,7 @@ addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 ```r
 addr_classify(a)         # -> raddr_class
 addr_scope(a)            # factor
-addr_unwrapped_scope(a)  # factor, after recursive unwrapping
+addr_embedded_scope(a)   # factor, after recursive extraction
 addr_within(a, blocks)   addr_within_any(a, blocks)
 ```
 
@@ -329,7 +389,7 @@ inside a non-global `192.0.0.0/24`.
 
 Table lookup is necessary but not sufficient. `64:ff9b::/96` is marked globally
 reachable *because it maps onto global IPv4*; the embedded address must be
-extracted and classified separately. Hence `scope` and `unwrapped_scope`.
+extracted and classified separately. Hence `scope` and `embedded_scope`.
 
 One overlay remains, separately stamped from the IANA table: **transition
 prefixes needing sub-registry granularity** — 6to4 `2002::/16`, Teredo
@@ -360,8 +420,8 @@ half of their guards and keep the policy half. The mirrored-patch cost ends when
 - `raddr_address` with three-state family and separate zone.
 - Four primitives, two compositions, `addr_parse()` with per-dialect outcomes.
 - Full IPv4 obfuscation handling; full IPv6 parse; RFC 5952 format and expand.
-- Embedded-IPv4 unwrap for every wrapper in §8.1, **including ISATAP**.
-- Registry-driven `addr_classify()` with `scope` / `unwrapped_scope`.
+- Embedded-IPv4 extraction for every wrapper in §8.1, **including ISATAP**.
+- Registry-driven `addr_classify()` with `scope` / `embedded_scope`.
 - Versioned reason-code vocabulary shipped as data.
 - `addr_within` / `addr_within_any`, encoding round-trips, reverse pointer.
 - WPT + IANA vendored with upstream SHAs; the invariant suite.
@@ -374,7 +434,10 @@ half of their guards and keep the policy half. The mirrored-patch cost ends when
   archival and of `ipaddress`'s OS-dependent parse.
 - `addr_registry_refresh()` (network).
 - `xff_extract` equivalent — HTTP header parsing, not address parsing. `ssrfr`.
-- Any CIDR set algebra beyond containment.
+
+CIDR set algebra beyond containment is **not** on this list — §1.1 excludes it
+permanently and assigns it to `ipaddress`. Deferred means "later"; excluded means
+"never". Keep the two lists disjoint.
 
 ISATAP returns to scope. It was cut as "nobody implements it; low value until
 someone asks", which was an urgency judgment. It is RFC 5214, it is already a
@@ -450,19 +513,34 @@ Second-order. None blocks the API freeze except where noted.
 | O8 | RFC 5952 test vectors | None published upstream. raddr authors its own |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
 | O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
-| O11 | NAT64 gap upstream to `davidchall/ipaddress` | File regardless of what raddr ships |
+| O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug in §5.1.1, with `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA` as the reproducer. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
 
 ---
 
 ## 11. Performance targets
 
-Measured against `ipaddress` 1.0.3 on M-series, 1e6 rows. Target: **within 3x**
-on every operation, and <= 25 MB memory for 1e6 addresses (`ipaddress`: 19.1 MB).
+Measured against `ipaddress` 1.0.3 on M-series, 1e6 rows. Speed target:
+**within 3x** on every operation.
 
-Within 3x is deliberate. raddr does strictly more work — four dialects,
-per-dialect code collection, unwrapping — and correctness is the product. Pure R
-landing within 3x of a C++ package is a good trade.
+Memory target: **<= 30 MB per 1e6 addresses**, revised up from the draft's
+25 MB, which was not reachable. The arithmetic, from §5.1's record:
+
+| Component | per 1e6 |
+|---|---|
+| `w1`–`w4`, 4 x `integer` | 16 MB |
+| `family` factor | 4 MB |
+| `zone` character (pointers; all `NA` share one CHARSXP) | 8 MB |
+| **total** | **~28 MB** |
+
+`ipaddress`'s 19.1 MB is not a like-for-like comparison: it has no `zone` field
+and encodes family as a single `logical`. The gap is the cost of the two fields
+§5.1 argues for, and the `0x80000000` correctness fix (§5.1.1) is free at rest —
+it widens only the transient comparison proxy.
+
+Within 3x on speed is deliberate. raddr does strictly more work — four dialects,
+per-dialect code collection, embedded-address extraction — and correctness is
+the product. Pure R landing within 3x of a C++ package is a good trade.
 
 Vectorize aggressively: one pass over the character vector returning all fields
 at once, never per-element. Use arithmetic (`2^(8*n)`), not `bitwShiftL` —
@@ -493,9 +571,19 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 ## 13. Relationship to the stack
 
 ```
-punycoder ── raddr ──┬── rurl ── pslr
-                     └── ssrfr
+   leaf layer          consumer layer
+   ───────────         ──────────────
+   punycoder                rurl ── pslr
+   raddr                    ssrfr
 ```
+
+**This is a layering diagram, not a dependency graph.** `punycoder` and `raddr`
+are sibling leaves: both are pure, offline, and depend on neither each other nor
+anything above them. `rurl` and `ssrfr` sit above and may import either. The only
+edges that exist as package dependencies are the downward ones — see §12, which
+admits `vctrs` and `rlang` and argues about everything else. raddr importing
+`punycoder` would violate §1.1, which puts IDNA and punycode permanently out of
+scope.
 
 Sequencing: build raddr, validate it against `rurl`'s conformance CSV, the
 in-house guards' assertions, and WPT as external oracles, then ship to CRAN.
