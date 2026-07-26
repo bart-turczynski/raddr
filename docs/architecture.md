@@ -271,6 +271,47 @@ The zone is separate because Apple's `inet_pton` embeds the interface index into
 the address bytes (`fe80::1%lo0` -> `fe80:1::1`), which makes a byte-comparing
 filter treat one host as two and two hosts as one.
 
+#### 5.1.2 Equality and ordering
+
+Settled 2026-07-26; this closes O2 and O3.
+
+**Zone does not participate in `==` (O2).** Equality is over the 128 bits and
+`family`, and nothing else. `fe80::1%lo0 == fe80::1%en0` is `TRUE`: same
+address, different interface. A consumer for whom the interface matters queries
+`addr_zone()` separately.
+
+This follows from the reason zone is out of the bytes at all. Apple's
+`inet_pton` folds the interface index *into* the address, which §5.1 already
+notes makes a byte-comparing filter treat one host as two. Admitting zone into
+`==` reintroduces that failure at the R level: `unique()` would partition by
+interface name, and a consumer filtering against a zoneless blocklist would
+silently miss every zoned address. raddr reports what the address *is*; which
+interface it was named on is a separate fact, exposed separately (P8).
+
+**Ordering is total, IPv4 before IPv6 (O3).** `vec_proxy_compare()` prepends a
+family rank so `sort()` and `vec_order()` are total and `vec_compare()` never
+returns `NA` for a pair of non-missing addresses.
+
+| family | rank |
+|---|---|
+| `v4` | 0 |
+| `v6` | 1 |
+| `v6_4in6` | 1 |
+
+Comparing an IPv4 to an IPv6 address is arguably a category error, and a partial
+order would say so. It would also make `sort()` on a mixed vector error or
+produce garbage, and vctrs wants a total order. The v4-before-v6 rule is
+arbitrary; what matters is that it is fixed, documented, and testable.
+
+**`v6_4in6` ranks with `v6`, and sorts by its full 128 bits** — it *is* an IPv6
+address, which is the whole reason the family is three-state (§5.1). It is
+deliberately not interleaved with IPv4 by embedded value: doing so would make
+ordering disagree with equality, since `::ffff:127.0.0.1 != 127.0.0.1` by
+design. Consumers who want the embedded ordering sort on `addr_embedded()`.
+
+Zone is excluded from the comparison proxy as well as the equality proxy, so
+ordering and equality stay consistent: `x == y` implies `vec_compare(x, y) == 0`.
+
 ### 5.2 `raddr_parse`
 
 **Outcomes are per-dialect.** A single scalar status cannot express
@@ -542,13 +583,15 @@ reintroduced.
 
 ## 10. Open items
 
-Second-order. None blocks the API freeze except where noted.
+Second-order. With O2 and O3 settled on 2026-07-26, **nothing here blocks the
+API freeze**; the two that did are kept in the table with their resolutions so
+the decisions are not relitigated.
 
 | # | Item | Disposition |
 |---|---|---|
 | O1 | Pure R vs compiled | Pure R for v0.1. Benchmark honestly against §11 targets. Not the biggest open question — the API can freeze first, so the escape hatch is real |
-| O2 | Does `zone` participate in `==`? | Recommend no; equality over the 128 bits and family; `addr_zone()` queried separately. **Blocks type design** |
-| O3 | Cross-family ordering | Recommend total order, v4 before v6, documented, so `sort()` is total. **Blocks type design** |
+| O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
+| O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
 | O5 | Trie vs sorted masked vector for the 53 IANA rows plus the transition overlay | Benchmark; probably neither a trie nor `triebeard` |
 | O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only |
