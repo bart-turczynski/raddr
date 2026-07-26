@@ -161,6 +161,11 @@ test_that("an IPv4 address is a dotted quad under both renderers", {
 })
 
 test_that("the zone is appended by both renderers", {
+  # Not a formality. CPython's ipaddress raises AddressValueError from
+  # .exploded and .reverse_pointer on any address carrying a scope_id, because
+  # the renderer re-parses str(self) -- zone included -- through a parser that
+  # rejects it (section 3.5.2, verified on 3.9.6, 3.12.13 and 3.14.6). raddr's
+  # renderers never re-parse: they read the fields and append the zone last.
   a <- addr_pton(c("fe80::1%lo0", "::ffff:192.0.2.1%en0", "fe80::1%"))
   expect_identical(
     addr_format(a),

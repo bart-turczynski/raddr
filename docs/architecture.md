@@ -9,6 +9,11 @@ Empirical claims marked **[verified 2026-07-26]** were measured on this machine:
 macOS Darwin 25.4.0 arm64, R 4.6.0, `ipaddress` 1.0.3, `adaR` 0.3.5,
 `curl` 7.1.0 / libcurl 8.14.1, Python 3.x, Apple libc.
 
+Claims marked **[verified 2026-07-27]** were measured on the same machine during
+Epic E, and additionally against Python 3.9.6 / 3.12.13 / 3.14.6, Rust 1.91.1,
+Ruby 2.6.10, PHP 8.5.7 and Node 26.3.1. `data-raw/survey-zone.sh` reproduces the
+cross-implementation ones; §11's numbers come from `bench/record.R`.
+
 ---
 
 ## 1. What raddr is
@@ -272,6 +277,79 @@ the zone.** The consequence is the only place raddr's `strict` and Python's
 `ipaddress` disagree about IPv6 — 23 rows in the fixture, every one of them a
 literal carrying a `%`, and none otherwise.
 
+**The wider survey says the same thing more strongly [verified 2026-07-27].**
+Three implementations was too small a sample to conclude "they disagree, so
+consult the paper" and leave it there. `data-raw/survey-zone.sh` reproduces the
+whole table on demand:
+
+| Implementation | `fe80::1%lo0` | Keeps the zone? |
+|---|---|---|
+| Rust `std::net::Ipv6Addr` | reject | — |
+| Ruby `IPAddr` | reject | — |
+| PHP `filter_var(FILTER_VALIDATE_IP)` | reject | — |
+| ada / WHATWG URL (`adaR`, Node `new URL`) | reject | — |
+| Python `ipaddress` | accept | yes, `.scope_id` |
+| Go `net/netip` | accept | yes, `Zone()` |
+| R `ipaddress` 1.0.3 | accept | **no — silently discarded** |
+| Node `net.isIPv6()` | accept | n/a, returns a boolean |
+
+So the tally among parsers that return a value is **four reject, two accept and
+keep, one accepts and loses it**. The paper's answer is also the plurality
+answer, which is a better position than the tie-break §3.5.2 originally
+described. Nothing here changes the decision; it stops being a coin toss.
+
+**R's `ipaddress` is the case worth dwelling on**, because it is raddr's nearest
+peer — same language, same problem, `Suggests`-adjacent in every comparison in
+§11. It accepts a zone, truncates the literal at the **first** `%`, and throws
+the rest away without a warning:
+
+```r
+ipaddress::ip_address("fe80::1%lo0")                       # -> fe80::1
+ipaddress::ip_address("fe80::1%lo0%en0%wat")               # -> fe80::1
+ipaddress::ip_address("fe80::1%lo0") == ip_address("fe80::1")   # -> TRUE
+```
+
+There is no `zone` field and no accessor to recover it. The zone is not merely
+excluded from equality, as it is in raddr under O2 — it is **gone**, and the
+last two rows are accepted where Apple's `inet_pton` rejects a second `%`
+outright. That is a measured argument for §5.1's separate field: the choice is
+not "in the bits or out of them" but "kept or lost", and a parser that answers
+`fe80::1` to `fe80::1%lo0%en0%wat` has silently discarded the part of the input
+that decides which host it is.
+
+**And Python keeps the zone but cannot render it [verified 2026-07-27].**
+Found while writing the survey, on CPython 3.9.6, 3.12.13 and 3.14.6 alike:
+
+```python
+a = ipaddress.IPv6Address("fe80::1%lo0")
+str(a)          # 'fe80::1%lo0'
+a.scope_id      # 'lo0'
+a.packed        # b'\xfe\x80...\x01'
+a.compressed    # 'fe80::1%lo0'
+a.exploded         # AddressValueError: Only hex digits permitted in '1%lo0'
+a.reverse_pointer  # AddressValueError, same cause
+```
+
+`_explode_shorthand_ip_string()` re-parses `str(self)` — zone suffix included —
+without splitting the scope off first, so a **valid object raises on two of its
+own accessors**. The value is fine; only those two renderings are broken.
+
+Three consequences for raddr, in ascending order of importance:
+
+1. It is why `data-raw/oracle-ipv6.py` reads `.packed` rather than `.exploded`,
+   and why the fixture is unaffected. Confirmed by regenerating it byte for byte
+   on 3.14.6 **[verified 2026-07-27]**. A survey script that used `.exploded`
+   reported "Python rejects every zone", which is wrong in the most misleading
+   possible direction — it looks like a *grammar* difference.
+2. `.exploded` is Python's `addr_expand()` and `.reverse_pointer` is Epic K's
+   `addr_reverse_pointer()`. Both of raddr's must work on a zoned address, and
+   `test-format.R` asserts it for the renderers. Epic K inherits the warning.
+3. It is a second instance of the §5.1 pattern, from the opposite direction.
+   R's `ipaddress` loses the zone at parse time; Python keeps it and then trips
+   over it at render time, because the renderer round-trips through text that
+   the parser it calls does not accept. raddr's renderers never re-parse: they
+   read the fields and append the zone last (§5.1.3).
+
 The reality dialects accept one, on any address, and resolve nothing at parse
 time: `%`, `%bogus0`, `%99999999999` and `%LO0` all parse. A second `%` is a
 rejection, and a bare `%lo0` is not an address.
@@ -287,6 +365,13 @@ bytes. The measurement sharpens that in three ways it did not say:
   `%1`, `%bogus0` and `%LO0` do not;
 - it **overwrites the second hextet** rather than filling a spare one:
   `fe80:abcd::1%lo0` is `fe80:1::1`, and `abcd` is gone.
+
+All three were re-measured through PHP's `inet_pton` **[verified 2026-07-27]**,
+which is a different binding to the same libc, and all three reproduce exactly —
+`fe80::1%lo0` gives `fe800001…`, while `%1`, `%bogus0`, `%LO0` and
+`%99999999999` do not fold. That rules out the oracle's Python binding as the
+source of the behavior, so the fold is libc's. It says **nothing** about glibc
+or musl, which is still O6: same libc, different doorway.
 
 **raddr does not reproduce the fold**, and the reason is a principle rather than
 a shortcut: `if_nametoindex()` reads the host's interface table, so the fold is
@@ -815,6 +900,8 @@ the decisions are not relitigated.
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
 | O13 | The `curl` = aton-then-pton composition for **IPv6** | **Unverified against real curl.** The IPv4 composition was measured; the IPv6 half is derived, and since `aton` rejects every IPv6 literal it reduces to a claim that curl reaches `inet_pton` rather than `getaddrinfo` for a bracketed literal. Those two now disagree (§3.5.3), so the claim is testable and worth testing |
+| O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
+| O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
 | O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
 
 ---
