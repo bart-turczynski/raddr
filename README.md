@@ -119,15 +119,15 @@ pre-commit install && pre-commit install --hook-type pre-push
 Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }' && Rscript -e 'rcmdcheck::rcmdcheck(args = "--as-cran", error_on = "warning")'
 ```
 
-`R CMD check` runs the testthat and cucumber specs, so the behaviour specs are
-verified as part of the check.
+`R CMD check` runs the testthat suite, so the tests are verified as part of the
+check.
 
 ## Project Layout
 
 - `R/` contains the package source.
 - `man/` contains generated help pages (regenerate with `devtools::document()`).
 - `NAMESPACE` and `man/` are roxygen2-generated — edit the roxygen comments in `R/`, not these.
-- `tests/testthat/` contains testthat tests and the cucumber feature specs.
+- `tests/testthat/` contains the testthat tests.
 - `vignettes/` contains long-form documentation.
 - `DESCRIPTION` declares package metadata and dependencies.
 - `docs/architecture.md` is the settled design record — read it before changing the API.

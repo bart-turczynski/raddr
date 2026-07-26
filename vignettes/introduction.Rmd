@@ -18,9 +18,49 @@ knitr::opts_chunk$set(
 library(raddr)
 ```
 
-Replace this vignette with a real introduction to your package: what it does,
-the problem it solves, and a worked example or two.
+raddr reports what an IP address literal means under each of the standards and
+implementations that disagree about it. The parsers that do that are not written
+yet; what exists today is the value type they will return.
+
+## The address type
+
+`raddr_address()` is a low-level constructor over four 32-bit words. IPv4 lives
+in the last word:
 
 ```{r}
-scaffold_ready()
+localhost <- raddr_address(0L, 0L, 0L, 2130706433L, "v4")
+localhost
 ```
+
+The family has three states, not two, so the 4-in-6 form is not confused with
+the IPv4 address it carries:
+
+```{r}
+mapped <- raddr_address(0L, 0L, 65535L, 2130706433L, "v6_4in6")
+mapped == localhost
+```
+
+## The zone travels beside the bits
+
+An RFC 4007 zone ID names an interface, not an address, so it is stored
+separately and does not participate in equality. Two addresses that differ only
+by zone are the same address:
+
+```{r}
+lo0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", zone = "lo0")
+en0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", zone = "en0")
+
+lo0 == en0
+addr_zone(lo0)
+```
+
+## Ordering is total
+
+IPv4 sorts before IPv6, so `sort()` works on a vector that mixes families:
+
+```{r}
+sort(c(mapped, localhost, lo0))
+```
+
+Formatting is deliberately unfinished: the output above is the fully expanded
+form, not the RFC 5952 canonical form.
