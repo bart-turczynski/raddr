@@ -50,6 +50,7 @@ discards the rest. raddr does not pick.
 | Public-suffix logic | `pslr` |
 | URL parsing, scheme/port policy, reg-name-vs-IP host form | `rurl` |
 | General CIDR set algebra (collapse, exclude, subnets) | `ipaddress` |
+| `X-Forwarded-For` extraction (HTTP header parsing, not address parsing) | `ssrfr` |
 | Visualization | `ggip` |
 
 ---
@@ -60,9 +61,11 @@ discards the rest. raddr does not pick.
 value and nothing else. No exported function takes `character` and returns a
 classification.
 
-**P2 — Unparseable is a distinct outcome, never bare `NA`.** Every parse result
-carries a named outcome the consumer must read. `NA` fails silently in every R
-idiom a consumer reaches for.
+**P2 — Unparseable is a distinct outcome, never bare `NA`.** Scoped to
+`addr_parse()`, raddr's primary answer: every `addr_parse()` result carries a
+named outcome the consumer must read. `NA` fails silently in every R idiom a
+consumer reaches for. The six single-dialect parsers are an explicit, documented
+exception — see §6.1.
 
 **P3 — Dialect is chosen by function name, never by a leniency flag.** No
 `strict = FALSE`, no `...`-buried dialect knob. A named function is harder to
@@ -75,7 +78,8 @@ returns the matched IANA row with its RFC citation and all five policy columns.
 Formatting never echoes the input.
 
 **P6 — Everything the parser noticed is in the output.** Nothing is silently
-normalized away.
+normalized away. Scoped like P2 to `addr_parse()`: the single-dialect parsers
+return an address without `codes`, and are documented as the shortcut they are.
 
 **P7 — Provenance travels with the verdict.** Registry snapshot version on every
 classification; RFC on every reason code; verification date on anything modelled
@@ -202,7 +206,17 @@ naive layout.
 ```r
 ip_address("0.0.0.128") == ip_address("0.0.0.128")
 #> NA          # should be TRUE
+
+ip_address("128.0.0.0") == ip_address("128.0.0.0")
+#> TRUE        # fine, because ipaddress stores little-endian
 ```
+
+**Which literal triggers it depends on byte order, so name the layout whenever
+you quote one.** `ipaddress` stores words **little-endian**, so its colliding
+IPv4 address is `0.0.0.128` (bytes `00 00 00 80` → word `0x80000000`)
+**[verified 2026-07-26]**. raddr stores words **big-endian** (§5.1), so raddr's
+colliding address is `128.0.0.0`. Same defect, different literal; quoting the
+wrong one against the wrong layout looks like a false alarm.
 
 It prints correctly and `is.na()` returns `FALSE`, because the C++ formatter
 reads the raw bits — but the R-level field holds `NA_integer_`, so comparison
@@ -222,7 +236,8 @@ raddr's resolution:
 
 This keeps the memory profile (§11) and stays pure R, at the cost of one
 non-obvious invariant. It must therefore carry an explicit regression test named
-for the failing address — `0.0.0.128` for IPv4 and its IPv6 analogues — asserting
+for the failing address — `128.0.0.0` for IPv4 in raddr's big-endian layout, plus
+its IPv6 analogues, one per word position — asserting
 `parse(x) == parse(x)` is `TRUE`, never `NA`. A contributor who "simplifies" the
 proxy away must see that test go red.
 
@@ -283,7 +298,11 @@ per-dialect.
 throughout: field names, accessors, prose. RFC 6052 §2 speaks of "embedding an
 IPv4 address" in an IPv6 prefix, and RFC 4291 §2.5.5 of the "IPv4-mapped" form.
 Matching the standards' noun means someone reading the RFC and someone reading
-raddr use the same term. "Unwrap" does not appear in the API.
+raddr use the same term. "Unwrap" does not appear anywhere in raddr.
+
+This governs **identifiers** — field names, accessor names, code names. Prose
+may still say "wrapper" for the outer IPv6 form that carries an inner address
+(§8.1's wrapper matrix), because that names the *container*, not the operation.
 
 `embedded_scope` was `effective_scope` in the draft. The computation is
 RFC 6052-derived and stays; the name goes, because "effective" asserts that one
@@ -433,8 +452,6 @@ half of their guards and keep the policy half. The mirrored-patch cost ends when
   Rcpp/Boost, whose dependency weight is the plausible cause of `iptools`'
   archival and of `ipaddress`'s OS-dependent parse.
 - `addr_registry_refresh()` (network).
-- `xff_extract` equivalent — HTTP header parsing, not address parsing. `ssrfr`.
-
 CIDR set algebra beyond containment is **not** on this list — §1.1 excludes it
 permanently and assigns it to `ipaddress`. Deferred means "later"; excluded means
 "never". Keep the two lists disjoint.
@@ -507,13 +524,13 @@ Second-order. None blocks the API freeze except where noted.
 | O2 | Does `zone` participate in `==`? | Recommend no; equality over the 128 bits and family; `addr_zone()` queried separately. **Blocks type design** |
 | O3 | Cross-family ordering | Recommend total order, v4 before v6, documented, so `sort()` is total. **Blocks type design** |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
-| O5 | Trie vs sorted masked vector for ~55 registry rows | Benchmark; probably neither a trie nor `triebeard` |
+| O5 | Trie vs sorted masked vector for the 53 IANA rows plus the transition overlay | Benchmark; probably neither a trie nor `triebeard` |
 | O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only |
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | Still unread; IPv6 is the genuinely new work |
 | O8 | RFC 5952 test vectors | None published upstream. raddr authors its own |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
 | O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
-| O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug in §5.1.1, with `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA` as the reproducer. File both regardless of what raddr ships |
+| O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug in §5.1.1, with `ip_address("128.0.0.0") == ip_address("128.0.0.0")` returning `NA` as the reproducer. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
 
 ---
@@ -534,11 +551,14 @@ Memory target: **<= 30 MB per 1e6 addresses**, revised up from the draft's
 | **total** | **~28 MB** |
 
 `ipaddress`'s 19.1 MB is not a like-for-like comparison: it has no `zone` field
-and encodes family as a single `logical`. The gap is the cost of the two fields
-§5.1 argues for, and the `0x80000000` correctness fix (§5.1.1) is free at rest —
+and encodes family as a single `logical`. An R `logical` and a factor are both
+4 bytes per element, so `family` is not where the difference lies: the whole
+gap is the `zone` field
+§5.1 argues for, and
+ the `0x80000000` correctness fix (§5.1.1) is free at rest —
 it widens only the transient comparison proxy.
 
-Within 3x on speed is deliberate. raddr does strictly more work — four dialects,
+Within 3x on speed is deliberate. raddr does strictly more work — four primitives,
 per-dialect code collection, embedded-address extraction — and correctness is
 the product. Pure R landing within 3x of a C++ package is a good trade.
 
@@ -563,7 +583,7 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 | `ipaddress` | **No.** Would import its `is_global` semantics and its gaps |
 | `adaR` | **No.** Oracle in `data-raw/`, not a runtime dep |
 | `rurl` | **No.** raddr must not depend on rurl; the dependency runs the other way |
-| `triebeard` | Probably unnecessary for ~55 rows (O5) |
+| `triebeard` | Probably unnecessary at this table size (O5) |
 | Rcpp / BH / AsioHeaders | **No** |
 
 ---
