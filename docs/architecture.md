@@ -688,6 +688,82 @@ the honest answer; the draft spec called it `malformed`, which was wrong.
 The question of whether it deserves its own status dissolves once outcomes are
 per-dialect.
 
+#### 5.2.1 Storage, and the two silences **[implemented 2026-07-27]**
+
+Two clarifications Epic F forced, both recorded because the field table above
+is too compressed to settle them.
+
+**`outcome` and `codes` are data-frame columns**, four columns each, one per
+primitive — which is what "one per primitive" means once it has to be a vector
+of the record's own length. `outcome`'s four columns are factors over `ok`,
+`rejected`, `not_an_address`; `codes`' four are `list_of<character>`. The
+alternative reading — a length-four object stored per *row* — would allocate
+four lists per address and put a per-element loop in the middle of an engine
+built to avoid one.
+
+Internally the codes travel as a **per-row integer mask**, one bit per code,
+and are unpacked once at the end via the distinct masks rather than row by row.
+A million-row vector has a handful of masks, nearly all of them zero. The
+one-bit-per-code layout caps the vocabulary at 31, which `R/codes.R` asserts.
+
+**`ok` means every primitive *with a say* accepts, not all four.** Two silences
+look alike and are not:
+
+| input | the silence | is it dissent? |
+|---|---|---|
+| `::1` | `aton` is `AF_INET` by signature and has no IPv6 grammar to withhold | **No.** Counting it would make every IPv6 address `divergent` |
+| `1.2.3.4 junk` | `strict` has the grammar and declines to see an address — but `aton` finds `1.2.3.4` in it | **Yes.** This is the class where curl reaches a host a browser will not dial |
+
+So a dialect has a say when it accepted, or when it is *applicable* — has a
+grammar for the family the literal is spelled in — and either saw an attempt or
+some other dialect found an address in the string. An acceptance anywhere means
+the literal is an address, and no applicable dialect gets to shrug after that.
+The §5.2 table says "all four" because its worked examples are IPv4, where all
+four are applicable; this is the same rule written out for both families.
+
+The consequence for `aton` and a colon literal is that it reports
+`not_an_address` rather than `rejected`, for `::ffff:1.2.3.4` exactly as for
+`::1` — the outcome no longer depends on how the tail happens to be spelled.
+
+#### 5.2.2 The reason-code vocabulary **[implemented 2026-07-27]**
+
+One const registry in `R/codes.R`, exported as `addr_codes_registry()`, with the
+valid-value set derived from it rather than restated. The codes are a cross-repo
+contract — `ssrfr` reports raddr's rather than inventing a parallel set — so
+adding one is an API addition and removing one is breaking, which is what
+`since` records.
+
+| code | layer | provenance | fires when |
+|---|---|---|---|
+| `not_a_number` | `parse` | RFC 3986 §3.2.2 | a part is not a number in any radix this dialect reads |
+| `leading_zero` | `parse` | RFC 6943 §3.1.1 | a part carries a leading zero and the dialect forbids one |
+| `empty_part` | `parse` | RFC 3986 §3.2.2 | two consecutive dots, or a leading dot |
+| `empty_hex` | `parse` | WHATWG URL, IPv4 number parser | a digitless `0x` where the dialect requires digits |
+| `out_of_range` | `parse` | RFC 3986 §3.2.2 | a part exceeds the largest value its position can hold |
+| `wrong_part_count` | `parse` | RFC 3986 §3.2.2 | the number of dot-separated parts is not one the dialect accepts |
+| `trailing_dot` | `parse` | WHATWG URL, IPv4 parser | the literal ends in a dot the dialect does not drop |
+| `zone_not_permitted` | `parse` | RFC 4291 §2.2 | a zone ID on a dialect that has none (§3.5.2) |
+| `multiple_zones` | `parse` | RFC 4007 §11.2 | more than one `%` |
+| `bad_hextet` | `parse` | RFC 4291 §2.2 | a group is not one to four hex digits |
+| `empty_group` | `parse` | RFC 4291 §2.2 | a stray colon leaves a group empty |
+| `bad_elision` | `parse` | RFC 4291 §2.2 | more than one `::`, or a `:::` run |
+| `wrong_group_count` | `parse` | RFC 4291 §2.2 | the literal does not resolve to exactly eight groups |
+| `bad_embedded_ipv4` | `parse` | RFC 4291 §2.2 | the dotted-quad tail fails the dialect's own IPv4 rules |
+| `whitespace` | `parse` | POSIX `getaddrinfo(3)` | whitespace in the address, which `getaddrinfo` refuses outright (§3.2) |
+
+**This table is machine-checked in both directions** — `test-codes.R` fails on an
+undocumented code and on an orphan entry left by a rename — and every code is
+required to have at least one corpus row that produces it, so a code nothing can
+emit fails the build. That coverage requirement is why there is no
+`no_ipv6_reading`: an `AF_INET`-only dialect has no *objection* to a colon
+literal, it has no reading of one, which §5.2.1 settles as an outcome.
+
+A code fires **once per part, first match wins**, so a part that is not a number
+does not also report the range its garbage value happened to land outside of. A
+row still collects every code its parts raised. On the IPv6 side the engine
+already narrows row by row through one gate at a time, so the first gate a row
+fails is its reason, at no extra cost.
+
 ### 5.3 `raddr_class`
 
 | Field | Type | Notes |

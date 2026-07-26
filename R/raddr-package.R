@@ -3,9 +3,14 @@
 
 ## usethis namespace: start
 #' @importFrom rlang abort
+#' @importFrom rlang is_string
 #' @importFrom vctrs field
+#' @importFrom vctrs new_data_frame
+#' @importFrom vctrs new_list_of
 #' @importFrom vctrs new_rcrd
 #' @importFrom vctrs obj_print_data
+#' @importFrom vctrs obj_print_footer
+#' @importFrom vctrs vec_equal
 #' @importFrom vctrs vec_cast
 #' @importFrom vctrs vec_ptype2
 #' @importFrom vctrs vec_ptype_abbr

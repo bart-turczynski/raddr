@@ -177,17 +177,22 @@ parse_ipv4_number_slow <- function(parts, hex = TRUE, octal = TRUE) {
 #'
 #' @param x A character vector.
 #' @param rules A list from [ipv4_rules()].
+#' @param codes Whether to collect reason codes. Off by default: the six
+#'   single-dialect parsers return a bare address and have nowhere to put them,
+#'   so they should not pay for them. [addr_parse()] turns them on.
 #'
 #' @return A list with `value` (double in `[0, 2^32)`, `NA` where the dialect
-#'   rejects) and `ok` (logical).
+#'   rejects), `ok` (logical) and, when `codes` is `TRUE`, `mask` (integer, the
+#'   packed reason codes -- see R/codes.R).
 #'
 #' @noRd
-parse_ipv4_addr <- function(x, rules) {
+parse_ipv4_addr <- function(x, rules, codes = FALSE) {
   n <- length(x)
   value <- rep(NA_real_, n)
   ok <- rep(FALSE, n)
+  mask <- integer(n)
   if (n == 0L) {
-    return(list(value = value, ok = ok))
+    return(list(value = value, ok = ok, mask = mask))
   }
 
   input <- x
@@ -209,10 +214,16 @@ parse_ipv4_addr <- function(x, rules) {
       input[dotted] <- substr(input[dotted], 1L, nchar(input[dotted]) - 1L)
     }
   }
-  live <- live & !is.na(input) & nzchar(input)
-  live[live] <- !endsWith(input[live], ".")
+  present <- live & !is.na(input)
+  empty <- present & !nzchar(input)
+  trailing <- present & !empty & endsWith(input, ".")
+  live <- present & !empty & !trailing
+  if (codes) {
+    mask[empty] <- code_bit("empty_part")
+    mask[trailing] <- code_bit("trailing_dot")
+  }
   if (!any(live)) {
-    return(list(value = value, ok = ok))
+    return(list(value = value, ok = ok, mask = mask))
   }
 
   # Ragged split, flattened so the parts can be parsed in one pass.
@@ -229,27 +240,48 @@ parse_ipv4_addr <- function(x, rules) {
   }
 
   parsed <- parse_ipv4_number(flat, hex = rules$hex, octal = rules$octal)
-  bad <- parsed$status == "not_a_number" | !nzchar(flat)
-  if (!rules$leading_zeros) {
-    bad <- bad | grepl("^0[0-9]", flat)
-  }
-  if (!rules$empty_hex) {
-    bad <- bad | parsed$empty
+  blank <- !nzchar(flat)
+  nan <- parsed$status == "not_a_number"
+  zeroed <- if (rules$leading_zeros) FALSE else grepl("^0[0-9]", flat)
+  hexless <- if (!rules$empty_hex) {
+    parsed$empty
   } else if (!is.null(rules$empty_hex_final) && !rules$empty_hex_final) {
     # inet_aton tolerates a digitless "0x" anywhere but in the final part.
-    bad <- bad | (parsed$empty & last)
+    parsed$empty & last
+  } else {
+    FALSE
   }
 
   # Every part but the last is one octet; the last fills whatever is left.
+  # A row with more than four parts is already rejected on arity, and its parts
+  # past the fourth never reach the accumulation below, so pinning the lookup at
+  # four only keeps an NA out of `over` -- it changes no verdict.
   bound <- rep(255, length(pos))
-  bound[last] <- ipv4_final_bounds[k[id][last]]
+  bound[last] <- ipv4_final_bounds[pmin(k[id][last], 4L)]
   over <- parsed$status == "overflow" | parsed$value > bound
   if (rules$wrap) {
     # inet_aton range-checks every arity but the whole-host number, which it
     # simply truncates to 32 bits.
     over <- over & !(last & k[id] == 1L)
   }
-  bad <- bad | over
+  bad <- blank | nan | zeroed | hexless | over
+
+  # One code per part, first match wins, so a part that is not a number does not
+  # also report the range its garbage value happened to land outside of. A row
+  # still collects every code its parts raised, which is the honest answer when
+  # two parts fail for two different reasons.
+  part_mask <- if (codes) {
+    first_code(
+      list(
+        empty_part = blank,
+        not_a_number = nan,
+        leading_zero = zeroed,
+        empty_hex = hexless,
+        out_of_range = over
+      ),
+      length(flat)
+    )
+  }
 
   weight <- ipv4_weights[pos]
   weight[last] <- 1
@@ -260,6 +292,7 @@ parse_ipv4_addr <- function(x, rules) {
   # sizes here are bounded by four.
   total <- numeric(length(k))
   spoiled <- logical(length(k))
+  row_mask <- integer(length(k))
   for (i in seq_len(4L)) {
     at <- which(pos == i)
     if (!length(at)) {
@@ -268,13 +301,28 @@ parse_ipv4_addr <- function(x, rules) {
     group <- id[at]
     total[group] <- total[group] + contribution[at]
     spoiled[group] <- spoiled[group] | bad[at]
+    if (codes) {
+      # `group` is unique within one position, so this is a scatter and not a
+      # reduction -- bitwOr() is what makes it accumulate across the four.
+      row_mask[group] <- bitwOr(row_mask[group], part_mask[at])
+    }
   }
   good <- arity_ok & !spoiled
   good[is.na(good)] <- FALSE
 
+  if (codes) {
+    # Parts past the fourth never reach the loop above, so their codes are lost
+    # -- which is the right answer, because the arity is the whole objection.
+    row_mask[!arity_ok] <- bitwOr(
+      row_mask[!arity_ok],
+      code_bit("wrong_part_count")
+    )
+    mask[live] <- row_mask
+  }
+
   value[live][good] <- total[good] %% 4294967296
   ok[live] <- good
-  list(value = value, ok = ok)
+  list(value = value, ok = ok, mask = mask)
 }
 
 # The rule sets. Each one is a claim about a standard or an implementation, and
@@ -321,18 +369,20 @@ ipv4_word <- function(value) {
 # Run the IPv4 engine over everything except `skip`, unless the rule set is one
 # that could still accept a skipped row. Rows not parsed come back rejected,
 # which is what they would have been anyway.
-parse_ipv4_skipping <- function(x, rules, skip) {
+parse_ipv4_skipping <- function(x, rules, skip, codes = FALSE) {
   if (rules$stop_at_space || !any(skip)) {
-    return(parse_ipv4_addr(x, rules))
+    return(parse_ipv4_addr(x, rules, codes = codes))
   }
   n <- length(x)
   at <- which(!skip)
-  parsed <- parse_ipv4_addr(x[at], rules)
+  parsed <- parse_ipv4_addr(x[at], rules, codes = codes)
   value <- rep(NA_real_, n)
   ok <- logical(n)
+  mask <- integer(n)
   value[at] <- parsed$value
   ok[at] <- parsed$ok
-  list(value = value, ok = ok)
+  mask[at] <- parsed$mask
+  list(value = value, ok = ok, mask = mask)
 }
 
 ipv4_address <- function(parsed) {
@@ -363,21 +413,40 @@ ipv4_address <- function(parsed) {
 # colon, so every other one is spared looking at the IPv6 rows at all. On a
 # vector of IPv6 literals that is most of the IPv4 engine's work removed.
 parse_dialect <- function(x, rules, rules6 = NULL, arg = "x") {
+  parse_dialect_full(x, rules, rules6, arg = arg, codes = FALSE)$address
+}
+
+# The same engine, returning the reason codes alongside. The six single-dialect
+# parsers return a bare `raddr_address` (section 6.1) and have nowhere to put a
+# mask, so they go through the wrapper above and pay for nothing; `addr_parse()`
+# is the only caller that asks for both.
+parse_dialect_full <- function(x, rules, rules6 = NULL, arg = "x",
+                               codes = FALSE) {
   if (!is.character(x)) {
     x <- vec_cast(x, character(), x_arg = arg)
   }
   colon <- grepl(":", x, fixed = TRUE) & !is.na(x)
-  out <- ipv4_address(parse_ipv4_skipping(x, rules, skip = colon))
+  parsed <- parse_ipv4_skipping(x, rules, skip = colon, codes = codes)
+  out <- ipv4_address(parsed)
+  mask <- parsed$mask
+
   if (is.null(rules6)) {
-    return(out)
+    if (codes) {
+      # An AF_INET-only dialect has no reading of a colon literal to object to,
+      # so whatever its IPv4 rules made of one is noise. `inet_aton` reaches
+      # here with real codes for "1.2.3.4 :5", which it accepts, so the erasure
+      # is scoped to the colon rows it rejected.
+      mask[colon & is.na(field(out, "family"))] <- 0L
+    }
+    return(list(address = out, mask = mask))
   }
+
   candidate <- is.na(field(out, "family")) & colon
   if (!any(candidate)) {
-    return(out)
+    return(list(address = out, mask = mask))
   }
-  vec_assign(
-    out,
-    candidate,
-    ipv6_address(parse_ipv6_addr(x[candidate], rules6))
-  )
+  parsed6 <- parse_ipv6_addr(x[candidate], rules6, codes = codes)
+  out <- vec_assign(out, candidate, ipv6_address(parsed6))
+  mask[candidate] <- parsed6$mask
+  list(address = out, mask = mask)
 }

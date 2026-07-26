@@ -51,18 +51,21 @@ ipv6_pieces <- function(s) {
 #'
 #' @param x A character vector.
 #' @param rules A list from [ipv6_rules()].
+#' @param codes Whether to collect reason codes. See [parse_ipv4_addr()].
 #'
 #' @return A list with `w1`-`w4` (doubles in `[0, 2^32)`), `zone` (character,
-#'   `NA` where the literal carried none), `four_in_six` (logical) and `ok`.
+#'   `NA` where the literal carried none), `four_in_six` (logical), `ok`, and
+#'   `mask` (integer, the packed reason codes).
 #'
 #' @noRd
-parse_ipv6_addr <- function(x, rules) {
+parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   n <- length(x)
   out <- list(
     w1 = numeric(n), w2 = numeric(n), w3 = numeric(n), w4 = numeric(n),
     zone = rep(NA_character_, n),
     four_in_six = logical(n),
-    ok = logical(n)
+    ok = logical(n),
+    mask = integer(n)
   )
   if (n == 0L) {
     return(out)
@@ -71,6 +74,22 @@ parse_ipv6_addr <- function(x, rules) {
   live <- !is.na(x)
   body <- x
   zone <- rep(NA_character_, n)
+
+  # The engine narrows `live` one gate at a time, so the first gate a row fails
+  # is the reason it was rejected. `mark()` writes that reason and never
+  # overwrites it, which turns the existing control flow into the precedence
+  # order at no extra cost.
+  mask <- integer(n)
+  mark <- function(mask, hit, code) {
+    if (!codes) {
+      return(mask)
+    }
+    hit <- hit & mask == 0L
+    if (any(hit)) {
+      mask[hit] <- code_bit(code)
+    }
+    mask
+  }
 
   # --- The zone ID, which never enters the bits (section 5.1) ---------------
   #
@@ -83,16 +102,22 @@ parse_ipv6_addr <- function(x, rules) {
   if (any(zoned)) {
     if (identical(rules$zone, "reject")) {
       live <- live & !zoned
+      mask <- mark(mask, zoned, "zone_not_permitted")
     } else {
       at <- marker[zoned]
       zone[zoned] <- substring(body[zoned], at + 1L)
       body[zoned] <- substr(body[zoned], 1L, at - 1L)
-      live[zoned] <- !grepl("%", zone[zoned], fixed = TRUE)
+      doubled <- zoned
+      doubled[zoned] <- grepl("%", zone[zoned], fixed = TRUE)
+      live <- live & !doubled
+      mask <- mark(mask, doubled, "multiple_zones")
     }
   }
 
   # A literal that is nothing but a zone, or a single colon, is not an address.
-  live <- live & nchar(body) >= 2L
+  short <- live & nchar(body) < 2L
+  live <- live & !short
+  mask <- mark(mask, short, "wrong_group_count")
 
   # --- The dotted-quad tail -------------------------------------------------
   #
@@ -118,6 +143,9 @@ parse_ipv6_addr <- function(x, rules) {
     usable <- quad$ok & dots_total == dots_last
     where <- which(dotted)
     live[where] <- usable
+    unusable <- logical(n)
+    unusable[where] <- !usable
+    mask <- mark(mask, unusable, "bad_embedded_ipv4")
     if (any(usable)) {
       keep <- where[usable]
       tail_value[keep] <- quad$value[usable]
@@ -130,12 +158,17 @@ parse_ipv6_addr <- function(x, rules) {
   # At most one, and it must stand for at least one group: "1:2:3:4:5:6:7:8::"
   # is a rejection rather than a no-op, because the eight groups are already
   # spoken for.
-  live <- live & !grepl(":::", body, fixed = TRUE)
+  run <- live & grepl(":::", body, fixed = TRUE)
+  live <- live & !run
+  mask <- mark(mask, run, "bad_elision")
   elision <- regexpr("::", body, fixed = TRUE)
   elided <- live & elision > 0L
   if (any(elided)) {
     rest <- substring(body[elided], elision[elided] + 2L)
-    live[elided] <- regexpr("::", rest, fixed = TRUE) < 0L
+    second <- elided
+    second[elided] <- regexpr("::", rest, fixed = TRUE) > 0L
+    live <- live & !second
+    mask <- mark(mask, second, "bad_elision")
     elided <- live & elision > 0L
   }
 
@@ -146,7 +179,16 @@ parse_ipv6_addr <- function(x, rules) {
     tail_part[elided] <- substring(body[elided], elision[elided] + 2L)
   }
   gap <- 8L - ipv6_pieces(head_part) - ipv6_pieces(tail_part)
-  live <- live & !is.na(gap) & ifelse(elided, gap >= 1L, gap == 0L)
+  counted <- live & !is.na(gap) & ifelse(elided, gap >= 1L, gap == 0L)
+  miscounted <- live & !counted
+  # ":1" fails the count and the stray-colon gate below both, and the count is
+  # simply the one it reaches first. Reporting it as a group count would send a
+  # reader off to add groups, so an edge colon on an unelided literal is named
+  # for what it is. A leading "::" is not one -- that row is elided.
+  edge <- miscounted & !elided & grepl("(^:|:$)", body)
+  mask <- mark(mask, edge, "empty_group")
+  mask <- mark(mask, miscounted, "wrong_group_count")
+  live <- counted
 
   # Expand to exactly eight pieces, so the parse below is a single flat pass
   # over 8n hextets rather than a ragged one.
@@ -165,8 +207,11 @@ parse_ipv6_addr <- function(x, rules) {
   }
 
   # An empty piece anywhere is a stray colon: ":1", "1:", "1:::2" all land here.
-  live <- live & !grepl("(^:|::|:$)", full)
+  stray <- live & grepl("(^:|::|:$)", full)
+  live <- live & !stray
+  mask <- mark(mask, stray, "empty_group")
   if (!any(live)) {
+    out$mask <- mask
     return(out)
   }
 
@@ -217,6 +262,13 @@ parse_ipv6_addr <- function(x, rules) {
   if (length(at)) {
     w4[at] <- tails[at]
   }
+
+  if (any(spoiled)) {
+    hextet <- logical(n)
+    hextet[rows] <- spoiled
+    mask <- mark(mask, hextet, "bad_hextet")
+  }
+  out$mask <- mask
 
   good <- rows[!spoiled]
   keep <- !spoiled
