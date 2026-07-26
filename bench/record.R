@@ -156,4 +156,23 @@ if (!is.null(ip)) {
   report("ratio, IPv6 / ipaddress", timing(addr_format(formattable)) / theirs6, "x")
 }
 
+cat("\n== addr_parse ==\n")
+
+# Four engines over one input, plus the code bookkeeping the single-dialect
+# parsers do not pay for. The interesting number is the ratio to one dialect:
+# anything near 4x means the codes are close to free.
+one_v4 <- timing(addr_whatwg(canonical))
+one_v6 <- timing(addr_whatwg(v6_plain))
+parse_v4 <- timing(addr_parse(canonical))
+parse_v6 <- timing(addr_parse(v6_plain))
+
+report("addr_parse, IPv4", parse_v4, "s")
+report("addr_parse, IPv6", parse_v6, "s")
+report("ratio, parse / one dialect, IPv4", parse_v4 / one_v4, "x")
+report("ratio, parse / one dialect, IPv6", parse_v6 / one_v6, "x")
+
+# Every row rejected, so every row allocates a code vector.
+bad <- rep(c("1.2.3.4.5", "0177.0.0.1", "example.com", "g::1"), length(canonical) / 4)
+report("addr_parse, every row rejected", timing(addr_parse(bad)), "s")
+
 cat("\n")

@@ -831,7 +831,14 @@ addr_status(p)             # derived factor
 addr_outcome(p, dialect)   # per-dialect factor
 addr_codes(p)              # union of codes; addr_codes(p, dialect) narrows
 addr_is_divergent(p)       # logical
+addr_input(p)              # the literals back, verbatim
+is_raddr_parse(x)          # logical, scalar
 ```
+
+The last two were added in Epic F. `input` is a field of the record and the
+print method shows it, so leaving it reachable only through `vctrs::field()`
+would have been a wart; `is_raddr_parse()` is the counterpart of the
+`is_raddr_address()` that already existed.
 
 `addr_curl()` is an exported convenience despite naming a third-party
 implementation. Compliance is the floor, not the ceiling. Its liability is
@@ -1075,6 +1082,30 @@ algorithmic:
 
 The lesson generalizes to the parsers: at 1e6 rows the cost is allocation and
 copying, not arithmetic.
+
+### 11.1.1 `addr_parse()`, 1e6 addresses **[verified 2026-07-27]**
+
+Measured standalone rather than through `bench/record.R`, which now carries the
+same section.
+
+| | one dialect | `addr_parse()` | ratio |
+|---|---|---|---|
+| IPv4 | 1.92 s | 8.03 s | **4.2x** |
+| IPv6 | 2.39 s | 12.59 s | **5.3x** |
+| every row rejected | — | 9.68 s | — |
+
+`addr_parse()` runs four engines over one input, so **4x is the floor** and the
+ratio is the number to read, not the wall clock. IPv4 is essentially at that
+floor; IPv6 costs a further 1.1x because `pton` and `strict` disagree about the
+grammar (§3.5), so the two paper dialects share a rule set but the libc one does
+not, and its rows cannot be shared.
+
+The all-rejected row is the one worth noting: **rejecting a million addresses
+with reason codes is cheaper than accepting a million**, because a rejected row
+exits at the first gate that fails it and never reaches the arithmetic. The
+codes themselves are close to free — the mask is one integer per row per
+dialect, and the unpacking runs over the distinct masks, of which a million bad
+rows have four.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**

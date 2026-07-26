@@ -28,8 +28,8 @@ A \code{raddr_address} vector.
 \description{
 \code{raddr_address()} builds a vector of IP addresses from raw 32-bit words. It
 is a low-level constructor: it does no parsing and accepts whatever bits it
-is given. Parsing text into addresses is the job of the dialect parsers,
-which are not written yet.
+is given. Parsing text into addresses is the job of \code{\link[=addr_parse]{addr_parse()}} and the
+single-dialect shortcuts in \link{dialects}.
 }
 \section{Storage}{
 

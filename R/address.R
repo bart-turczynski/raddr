@@ -18,8 +18,8 @@ addr_family_ranks <- c(v4 = 0L, v6 = 1L, v6_4in6 = 1L)
 #'
 #' `raddr_address()` builds a vector of IP addresses from raw 32-bit words. It
 #' is a low-level constructor: it does no parsing and accepts whatever bits it
-#' is given. Parsing text into addresses is the job of the dialect parsers,
-#' which are not written yet.
+#' is given. Parsing text into addresses is the job of [addr_parse()] and the
+#' single-dialect shortcuts in [dialects].
 #'
 #' @section Storage:
 #'

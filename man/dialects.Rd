@@ -122,8 +122,8 @@ curl that a browser refuses to dial.}
 These are shortcuts for a caller who has already chosen a dialect. They
 return a bare address, so a rejected input comes back as \code{NA} with no reason
 attached. The total, outcome-bearing form -- every reading at once, with the
-reason codes -- is \code{addr_parse()}, which is not written yet. The package is
-unreleased.
+reason codes -- is \code{\link[=addr_parse]{addr_parse()}}, and its result is what \code{\link[=addr_reading]{addr_reading()}}
+reads a single dialect back out of.
 }
 
 \section{Provenance}{

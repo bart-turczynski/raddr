@@ -112,7 +112,8 @@ architecture_codes <- function() {
   path <- testthat::test_path("..", "..", "docs", "architecture.md")
   skip_if_not(file.exists(path), "docs/architecture.md is not in the tarball")
   lines <- readLines(path, warn = FALSE)
-  rows <- grep("^\\| `[a-z0-9_]+` \\| `(parse|classify)` \\|", lines, value = TRUE)
+  pattern <- "^\\| `[a-z0-9_]+` \\| `(parse|classify)` \\|"
+  rows <- grep(pattern, lines, value = TRUE)
   skip_if(length(rows) == 0L, "no reason-code table in docs/architecture.md")
   sub("^\\| `([a-z0-9_]+)` .*$", "\\1", rows)
 }
