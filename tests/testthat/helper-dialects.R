@@ -24,8 +24,12 @@ rows_table <- function(names, ...) {
 }
 
 # The fixture escapes control characters so it stays plain ASCII and git cannot
-# rewrite a test input while normalizing line endings.
+# rewrite a test input while normalizing line endings. The IPv6 fixture escapes
+# the space as well, because a zone ID can carry a trailing one and the
+# trailing-whitespace hook would eat it; the IPv4 fixture has no such column and
+# leaves its spaces literal, which this handles either way.
 unescape_control <- function(x) {
+  x <- gsub("\\\\s", " ", x)
   x <- gsub("\\\\t", "\t", x)
   x <- gsub("\\\\r", "\r", x)
   x <- gsub("\\\\n", "\n", x)

@@ -318,6 +318,23 @@ ipv4_word <- function(value) {
   suppressWarnings(as.integer(signed))
 }
 
+# Run the IPv4 engine over everything except `skip`, unless the rule set is one
+# that could still accept a skipped row. Rows not parsed come back rejected,
+# which is what they would have been anyway.
+parse_ipv4_skipping <- function(x, rules, skip) {
+  if (rules$stop_at_space || !any(skip)) {
+    return(parse_ipv4_addr(x, rules))
+  }
+  n <- length(x)
+  at <- which(!skip)
+  parsed <- parse_ipv4_addr(x[at], rules)
+  value <- rep(NA_real_, n)
+  ok <- logical(n)
+  value[at] <- parsed$value
+  ok[at] <- parsed$ok
+  list(value = value, ok = ok)
+}
+
 ipv4_address <- function(parsed) {
   n <- length(parsed$ok)
   new_raddr_address(
@@ -333,9 +350,34 @@ ipv4_address <- function(parsed) {
   )
 }
 
-parse_dialect <- function(x, rules, arg = "x") {
+# The IPv4 and IPv6 grammars are disjoint, so a dialect is the two engines side
+# by side rather than one engine that branches. IPv6 is asked only about rows
+# the IPv4 rules declined *and* that contain a colon, which is both an exact
+# filter -- no IPv6 literal is colon-free -- and a cheap one.
+#
+# The colon test alone would not be exact: `inet_aton` stops at the first
+# whitespace character, so "1.2.3.4 :5" is an IPv4 address carrying a colon.
+# Asking IPv4 first and IPv6 only about its leftovers keeps that row IPv4.
+#
+# That whitespace quirk is also the *only* way an IPv4 rule set can accept a
+# colon, so every other one is spared looking at the IPv6 rows at all. On a
+# vector of IPv6 literals that is most of the IPv4 engine's work removed.
+parse_dialect <- function(x, rules, rules6 = NULL, arg = "x") {
   if (!is.character(x)) {
     x <- vec_cast(x, character(), x_arg = arg)
   }
-  ipv4_address(parse_ipv4_addr(x, rules))
+  colon <- grepl(":", x, fixed = TRUE) & !is.na(x)
+  out <- ipv4_address(parse_ipv4_skipping(x, rules, skip = colon))
+  if (is.null(rules6)) {
+    return(out)
+  }
+  candidate <- is.na(field(out, "family")) & colon
+  if (!any(candidate)) {
+    return(out)
+  }
+  vec_assign(
+    out,
+    candidate,
+    ipv6_address(parse_ipv6_addr(x[candidate], rules6))
+  )
 }

@@ -110,4 +110,26 @@ if (!is.null(ip)) {
   report("ratio, whatwg / ipaddress", timing(addr_whatwg(canonical)) / theirs, "x")
 }
 
+cat("\n== parsing, IPv6 ==\n")
+
+hextet <- function() sample.int(65535, n, replace = TRUE)
+v6_plain <- sprintf(
+  "%x:%x::%x", hextet(), hextet(), hextet()
+)
+# The dotted-quad tail runs the IPv4 engine on top of the IPv6 one, so it is
+# measured separately rather than averaged into the line above.
+v6_tail <- sprintf("::ffff:%d.%d.%d.%d", octet(), octet(), octet(), octet())
+v6_zoned <- paste0(v6_plain, "%lo0")
+
+report("addr_strict, IPv6", timing(addr_strict(v6_plain)), "s")
+report("addr_pton, IPv6", timing(addr_pton(v6_plain)), "s")
+report("addr_pton, IPv6 + zone", timing(addr_pton(v6_zoned)), "s")
+report("addr_strict, dotted tail", timing(addr_strict(v6_tail)), "s")
+
+if (!is.null(ip)) {
+  theirs <- timing(ipaddress::ip_address(v6_plain))
+  report("ipaddress::ip_address, IPv6", theirs, "s")
+  report("ratio, strict / ipaddress", timing(addr_strict(v6_plain)) / theirs, "x")
+}
+
 cat("\n")

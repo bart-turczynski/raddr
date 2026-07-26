@@ -65,8 +65,39 @@ raddr models Apple libc, and glibc and musl are unverified.}
 three quirks worth knowing: a whole-host number is truncated to 32 bits
 rather than rejected, so \code{4294967296} is \verb{0.0.0.0}; parsing stops at the
 first whitespace character and ignores the rest, so \verb{1.2.3.4 junk} is an
-address; and a digitless \verb{0x} is tolerated in any part but the last.}
+address; and a digitless \verb{0x} is tolerated in any part but the last.
+\code{inet_aton()} is \code{AF_INET} by signature, so it rejects \strong{every} IPv6
+literal.}
 }
+}
+
+\section{IPv6}{
+
+
+The shape of the disagreement inverts. The two paper dialects agree about
+IPv6 on every measured input, and all of the divergence is on the reality
+side:
+
+\describe{
+\item{Leading zeros}{A hextet is four hex digits on paper. Apple
+\code{inet_pton()} counts only the \emph{significant} four and lets the zeros run
+as wide as they like, so \verb{0000000000001::} is \verb{1::} where \code{strict} and
+\code{whatwg} reject. The dotted-quad tail splits the same way.}
+\item{The zone ID}{The paper dialects have none: RFC 4291's grammar does
+not admit one and the WHATWG parser rejects \verb{\%}. The reality dialects
+accept a zone on any address and resolve nothing, so \verb{\%bogus0} parses.
+The zone is stored beside the bits and read with \code{\link[=addr_zone]{addr_zone()}}; it never
+enters the address and never affects equality.}
+\item{\verb{fe80::/10}}{\code{addr_getaddrinfo()} lifts the second hextet of a
+link-local address out into the zone and clears it, zone ID or not, so
+\verb{fe80:abcd::1} is \verb{fe80::1} with zone \code{43981} -- while \code{addr_pton()}
+leaves it alone. One string, one machine, two different hosts.}
+}
+
+Apple \code{inet_pton()} also does the reverse, writing a resolved interface index
+\emph{into} the second hextet. raddr deliberately does not reproduce that: the
+index comes from the host's interface table, so it is not a function of the
+input, and raddr is pure and offline.
 }
 
 \section{Compositions}{
@@ -91,10 +122,8 @@ curl that a browser refuses to dial.}
 These are shortcuts for a caller who has already chosen a dialect. They
 return a bare address, so a rejected input comes back as \code{NA} with no reason
 attached. The total, outcome-bearing form -- every reading at once, with the
-reason codes -- is \code{addr_parse()}, which is not written yet.
-
-IPv6 literals are also not written yet, and are currently rejected by all
-six. The package is unreleased.
+reason codes -- is \code{addr_parse()}, which is not written yet. The package is
+unreleased.
 }
 
 \section{Provenance}{
@@ -118,5 +147,13 @@ addr_curl("192.0.048.1")
 
 # inet_aton truncates a whole-host number instead of rejecting it
 addr_aton("4294967296")
+
+# Two libc entry points, one machine, two different IPv6 hosts
+addr_pton("fe80:abcd::1")
+addr_getaddrinfo("fe80:abcd::1")
+
+# The zone travels beside the bits, so it does not affect equality
+addr_pton("fe80::1\%lo0") == addr_pton("fe80::1\%en0")
+addr_zone(addr_pton("fe80::1\%lo0"))
 
 }

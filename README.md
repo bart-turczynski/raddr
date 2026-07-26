@@ -4,8 +4,10 @@ Report what an IP address literal means under each of the standards and
 implementations that disagree about it, and classify parsed values against the
 IANA special-purpose address registries.
 
-> **Status: pre-alpha.** The design is settled (`docs/architecture.md`); the
-> package code is not written yet. Nothing below is installable.
+> **Status: pre-alpha.** The design is settled (`docs/architecture.md`). The
+> address type and the six dialect parsers exist and are tested against measured
+> oracles for IPv4 and IPv6; `addr_parse()`, formatting and classification do
+> not. The API is not stable and the package is not released.
 
 ## The problem, in one string
 
@@ -63,6 +65,31 @@ Two rows carry most of the package's value:
 
 - **`192.0.048.1`** — curl reaches a host a browser refuses to dial.
 - **`4294967296`** — `aton` wraps modulo 2^32 to `0.0.0.0`; the standards reject.
+
+### For IPv6 the disagreement inverts
+
+The two paper dialects disagree about IPv4 on six of the eight rows above. About
+IPv6 they agree on every input measured, and all of the divergence moves to the
+reality side:
+
+| input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
+|---|---|---|---|---|---|---|
+| `::1` | ::1 | ::1 | ::1 | reject | ::1 | ::1 |
+| `00001::` | reject | reject | 1:: | reject | 1:: | 1:: |
+| `::1.2.3.04` | reject | reject | ::102:304 | reject | ::102:304 | ::102:304 |
+| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | fe80:abcd::1 |
+| `fe80::1%lo0` | reject | reject | ::1 %lo0 | reject | ::1 %lo0 | ::1 %lo0 |
+
+- **`fe80:abcd::1`** — two libc entry points on one machine return different
+  bits for one string. Apple's `getaddrinfo` reads the second hextet of a
+  link-local address as a scope ID and clears it; `inet_pton` does not. This is
+  the IPv6 counterpart of `0177.0.0.1`.
+- **`00001::`** — `inet_pton` counts only the four *significant* hex digits and
+  lets the leading zeros run as wide as they like. The standards cap the digits
+  outright.
+- **The zone ID** lives in its own field, never in the address bits, and does
+  not participate in equality: `fe80::1%lo0 == fe80::1%en0` is `TRUE`, and
+  `addr_zone()` is how you tell them apart.
 
 ## raddr is a shower, not a protector
 

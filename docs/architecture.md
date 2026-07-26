@@ -134,6 +134,18 @@ containing whitespace before either primitive sees it:
 composes. The composition claim holds for every other measured row; this is a
 gate in front of it rather than a different precedence.
 
+The gate covers the **address, not the zone ID**. `fe80::1%lo0 ` is accepted and
+`fe80::1 %lo0` is not **[verified 2026-07-26]**, so the whitespace test runs on
+the text before the `%`. An IPv4 literal carries no `%`, so this is the same
+gate it always was for IPv4.
+
+**A second leak, found while implementing Epic D, and it is IPv6-only.** See
+§3.5.3: Apple's `getaddrinfo` lifts an embedded scope out of a link-local
+address where `inet_pton` does not, so the two disagree on bits for an input
+both accept. That one is modelled as a post-step on the composition, for the
+same reason the whitespace gate is modelled as a pre-step: the precedence is
+right, the entry point does something extra around it.
+
 ### 3.3 Measured divergence **[verified 2026-07-26]**
 
 | input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
@@ -195,6 +207,110 @@ spec or the scratch documents:
   `fixup_posture` — all scheme-layer knobs. raddr never sees a scheme, so the
   two would collapse to one bundle. "Browser" appears in raddr's prose, never as
   an identifier.
+- **Bracketed IPv6 hosts.** `[::1]` is a URL-layer form: the WHATWG host parser
+  is handed the text *between* the brackets, and libc rejects them outright
+  **[verified 2026-07-26]**. raddr never sees a URL, so it never sees brackets.
+
+### 3.5 IPv6, and how its divergence is shaped differently
+**[verified 2026-07-26]**
+
+Measured by `data-raw/oracle-ipv6.py` (Apple `inet_pton`, `inet_aton`,
+`getaddrinfo`, and Python's `ipaddress`) and `data-raw/oracle-ipv6.R` (ada),
+recorded as `tests/testthat/fixtures/ipv6-oracle.csv`.
+
+**The headline finding is that the shape of the disagreement inverts.** For IPv4
+the two paper dialects are the divergence — `strict` and `whatwg` disagree on
+six of §3.3's eight rows. For IPv6 they **agree on every measured row**, and all
+of the divergence is on the reality side.
+
+| input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
+|---|---|---|---|---|---|---|
+| `::1` | ::1 | ::1 | ::1 | reject | ::1 | ::1 |
+| `00001::` | reject | reject | 1:: | reject | 1:: | 1:: |
+| `::1.2.3.04` | reject | reject | ::102:304 | reject | ::102:304 | ::102:304 |
+| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | fe80:abcd::1 |
+| `fe80::1%lo0` | reject | reject | ::1 %lo0 | reject | ::1 %lo0 | ::1 %lo0 |
+| `1.2.3.4` | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 |
+| `[::1]` | reject | reject | reject | reject | reject | reject |
+
+The row that carries the value is **`fe80:abcd::1`**: two libc entry points on
+one machine return different bits for one string, which is the IPv6 counterpart
+of what `0177.0.0.1` does for IPv4.
+
+#### 3.5.1 The four measured facts
+
+- **`inet_aton` has no IPv6 reading at all.** It is `AF_INET` by signature and
+  rejects every colon-bearing literal. Measured rather than assumed, because
+  both compositions in §3.2 lean on it: for IPv6, `getaddrinfo` and `curl` both
+  collapse onto their `pton` half.
+- **Apple `inet_pton` puts no width limit on leading zeros in a hextet**, then
+  caps the *significant* digits at four. `0000000000001::` is `1::`; `12345::`,
+  `abcde::` and `ffff1::` are rejections. This is exactly the IPv4 finding of
+  §3.3.1 repeated one grammar up. The RFC 4291 grammar caps the raw digits at
+  four, so the paper dialects reject the whole family.
+- **The dotted-quad tail is not a grammar of its own.** It is the dialect's own
+  four-part decimal IPv4 grammar: `strict` and `whatwg` read it under
+  `rules_strict` (no leading zeros), the reality dialects under `rules_pton`
+  (leading zeros at any width). Notably `whatwg`'s IPv6 tail is **stricter than
+  `whatwg`'s standalone IPv4 parser** — no hex, no octal, no short form, no
+  trailing dot reach it. rust-url implements it as a separate loop rather than
+  by calling its own `parse_ipv4addr`, and that is why.
+- **A hextet is case-insensitive, a `::` may appear once and must stand for at
+  least one group.** `1:2:3:4:5:6:7:8::` is a rejection, not a no-op.
+
+#### 3.5.2 The zone ID, and why `strict` rejects it
+
+The paper dialects have **no zone ID**. RFC 4291 §2.2's text grammar does not
+admit one; the WHATWG IPv6 parser sends `%` to its catch-all and rejects
+(rust-url `host.rs` ~364-512, read 2026-07-26).
+
+The named `strict` reference implementations **disagree with each other**:
+Python's `ipaddress` and Go's `net/netip` accept a zone, Rust's `std` does not
+**[verified 2026-07-26]**. Since "what the implementations do" does not decide
+it, the paper does, and §3.1 calls `strict` a paper dialect. **`strict` rejects
+the zone.** The consequence is the only place raddr's `strict` and Python's
+`ipaddress` disagree about IPv6 — 23 rows in the fixture, every one of them a
+literal carrying a `%`, and none otherwise.
+
+The reality dialects accept one, on any address, and resolve nothing at parse
+time: `%`, `%bogus0`, `%99999999999` and `%LO0` all parse. A second `%` is a
+rejection, and a bare `%lo0` is not an address.
+
+#### 3.5.3 The fold, the lift, and which one raddr reproduces
+
+§5.1 records that Apple's `inet_pton` folds the interface index into the address
+bytes. The measurement sharpens that in three ways it did not say:
+
+- the fold applies to **`fe80::/10` only** — not `fec0::`, not the `ff0x::`
+  multicast link-local scopes;
+- it fires only when the zone **names a resolvable interface**. `%lo0` folds,
+  `%1`, `%bogus0` and `%LO0` do not;
+- it **overwrites the second hextet** rather than filling a spare one:
+  `fe80:abcd::1%lo0` is `fe80:1::1`, and `abcd` is gone.
+
+**raddr does not reproduce the fold**, and the reason is a principle rather than
+a shortcut: `if_nametoindex()` reads the host's interface table, so the fold is
+not a function of the input. The same string means different bits on a different
+machine. raddr is pure and offline (§1), so it keeps the zone in its own field
+and reports the text it was given. This *strengthens* §5.1's argument rather than
+qualifying it: the zone is out of the bytes precisely because putting it in is
+machine-dependent.
+
+**raddr does reproduce the lift**, which is the same convention running the
+other way. Apple's `getaddrinfo` takes the second hextet of an `fe80::/10`
+address as the scope ID and clears it from the bytes, **whether or not a zone ID
+was written**; an explicit zone wins, and the hextet is cleared either way. That
+transform is pure arithmetic on the input, so raddr models it, and
+`addr_getaddrinfo()` applies it as a post-step on the §3.2 composition.
+
+| | reads the host's interface table | raddr models it |
+|---|---|---|
+| `inet_pton` fold (name -> bits) | yes | **no** |
+| `getaddrinfo` lift (bits -> scope) | no | **yes** |
+
+Six fixture rows are therefore expected to differ from the `pton` oracle column,
+and `tests/testthat/test-ipv6.R` names them individually rather than matching a
+pattern, so that a change to the set is visible in the diff.
 
 ---
 
@@ -316,6 +432,13 @@ proxy away must see that test go red.
 The zone is separate because Apple's `inet_pton` embeds the interface index into
 the address bytes (`fe80::1%lo0` -> `fe80:1::1`), which makes a byte-comparing
 filter treat one host as two and two hosts as one.
+
+**Epic D measured that fold and found a second, stronger reason.** The index
+comes from `if_nametoindex()`, so the fold reads the host's interface table and
+`fe80::1%lo0` means different bits on different machines. A field that raddr
+cannot fill as a pure function of its input does not belong in the bits at all.
+raddr therefore keeps the zone text and declines to fold; §3.5.3 has the
+measurement, and the inverse transform that raddr *does* reproduce.
 
 #### 5.1.2 Equality and ordering
 
@@ -640,13 +763,15 @@ the decisions are not relitigated.
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
 | O5 | Trie vs sorted masked vector for the 53 IANA rows plus the transition overlay | Benchmark; probably neither a trie nor `triebeard` |
-| O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only |
-| O7 | IPv6 half of rust-url `host.rs` (~363–512) | Still unread; IPv6 is the genuinely new work |
+| O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only, and §3.5 raises the stakes: the IPv6 leading-zero rule, the fold and the lift are all Apple behaviors |
+| O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | None published upstream. raddr authors its own |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
 | O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
+| O13 | The `curl` = aton-then-pton composition for **IPv6** | **Unverified against real curl.** The IPv4 composition was measured; the IPv6 half is derived, and since `aton` rejects every IPv6 literal it reduces to a claim that curl reaches `inet_pton` rather than `getaddrinfo` for a bracketed literal. Those two now disagree (§3.5.3), so the claim is testable and worth testing |
+| O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
 
 ---
 
@@ -713,6 +838,36 @@ The record meets both targets. **Parsing does not, and not by a little.**
 | `addr_aton()` | 1.57 s | — | — | |
 | `addr_curl()` | 1.58 s | — | — | |
 | `addr_whatwg()`, nothing canonical | 1.64 s | — | — | |
+
+**IPv6 is worse, and for the same reason [verified 2026-07-26, Epic D]:**
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_strict()`, IPv6 | 5.64 s | 0.12 s | **41x** | <= 3x |
+| `addr_pton()`, IPv6 | 5.34 s | — | — | |
+| `addr_pton()`, IPv6 with a zone | 4.67 s | — | — | |
+| `addr_strict()`, dotted-quad tail | 7.04 s | 0.09 s | **78x** | <= 3x |
+
+Three changes took the plain case from 7.0 s and the dotted tail from 13.0 s,
+and all three are the same lesson as §11.1 — do not touch a vector you do not
+have to:
+
+- **The dotted-quad tail is stood down to the constant `"0:0"`** and its value
+  carried alongside, rather than rendered back into hex text. A tail is always
+  the final piece, so it always lands in the last two groups and can be written
+  there after the fact. The `sprintf()` it replaces cost more than the entire
+  rest of the parse.
+- **The IPv4 engine skips colon-bearing rows** unless the rule set is the one
+  that could still accept them (`aton`, via its stop-at-whitespace quirk). Every
+  IPv6 literal used to be fully parsed as IPv4 and rejected first.
+- **The leading-zero strip and the malformed-piece path are both guarded**, so
+  the common case runs neither over the 8n hextets.
+
+What is left is spread across `paste0()`, `grepl()`, `strsplit()` and `substr()`
+with no single hot spot above 17% — the same shape, and the same conclusion, as
+the IPv4 result below. IPv6 is worse than IPv4 because there is simply more
+string work per row: eight groups to validate instead of four parts, plus the
+elision arithmetic. It strengthens rather than changes the O1 reading.
 
 That is after tuning took it from 2.9 s, a 2.6x improvement, via:
 

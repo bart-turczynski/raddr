@@ -34,8 +34,37 @@
 #'     three quirks worth knowing: a whole-host number is truncated to 32 bits
 #'     rather than rejected, so `4294967296` is `0.0.0.0`; parsing stops at the
 #'     first whitespace character and ignores the rest, so `1.2.3.4 junk` is an
-#'     address; and a digitless `0x` is tolerated in any part but the last.}
+#'     address; and a digitless `0x` is tolerated in any part but the last.
+#'     `inet_aton()` is `AF_INET` by signature, so it rejects **every** IPv6
+#'     literal.}
 #' }
+#'
+#' @section IPv6:
+#'
+#' The shape of the disagreement inverts. The two paper dialects agree about
+#' IPv6 on every measured input, and all of the divergence is on the reality
+#' side:
+#'
+#' \describe{
+#'   \item{Leading zeros}{A hextet is four hex digits on paper. Apple
+#'     `inet_pton()` counts only the *significant* four and lets the zeros run
+#'     as wide as they like, so `0000000000001::` is `1::` where `strict` and
+#'     `whatwg` reject. The dotted-quad tail splits the same way.}
+#'   \item{The zone ID}{The paper dialects have none: RFC 4291's grammar does
+#'     not admit one and the WHATWG parser rejects `%`. The reality dialects
+#'     accept a zone on any address and resolve nothing, so `%bogus0` parses.
+#'     The zone is stored beside the bits and read with [addr_zone()]; it never
+#'     enters the address and never affects equality.}
+#'   \item{`fe80::/10`}{`addr_getaddrinfo()` lifts the second hextet of a
+#'     link-local address out into the zone and clears it, zone ID or not, so
+#'     `fe80:abcd::1` is `fe80::1` with zone `43981` -- while `addr_pton()`
+#'     leaves it alone. One string, one machine, two different hosts.}
+#' }
+#'
+#' Apple `inet_pton()` also does the reverse, writing a resolved interface index
+#' *into* the second hextet. raddr deliberately does not reproduce that: the
+#' index comes from the host's interface table, so it is not a function of the
+#' input, and raddr is pure and offline.
 #'
 #' @section Compositions:
 #'
@@ -56,10 +85,8 @@
 #' These are shortcuts for a caller who has already chosen a dialect. They
 #' return a bare address, so a rejected input comes back as `NA` with no reason
 #' attached. The total, outcome-bearing form -- every reading at once, with the
-#' reason codes -- is `addr_parse()`, which is not written yet.
-#'
-#' IPv6 literals are also not written yet, and are currently rejected by all
-#' six. The package is unreleased.
+#' reason codes -- is `addr_parse()`, which is not written yet. The package is
+#' unreleased.
 #'
 #' @section Provenance:
 #'
@@ -85,31 +112,43 @@
 #' # inet_aton truncates a whole-host number instead of rejecting it
 #' addr_aton("4294967296")
 #'
+#' # Two libc entry points, one machine, two different IPv6 hosts
+#' addr_pton("fe80:abcd::1")
+#' addr_getaddrinfo("fe80:abcd::1")
+#'
+#' # The zone travels beside the bits, so it does not affect equality
+#' addr_pton("fe80::1%lo0") == addr_pton("fe80::1%en0")
+#' addr_zone(addr_pton("fe80::1%lo0"))
+#'
 #' @name dialects
 NULL
 
 #' @rdname dialects
 #' @export
 addr_strict <- function(x) {
-  parse_dialect(x, rules_strict)
+  parse_dialect(x, rules_strict, rules_v6_paper)
 }
 
 #' @rdname dialects
 #' @export
 addr_whatwg <- function(x) {
-  parse_dialect(x, rules_whatwg)
+  parse_dialect(x, rules_whatwg, rules_v6_paper)
 }
 
 #' @rdname dialects
 #' @export
 addr_pton <- function(x) {
-  parse_dialect(x, rules_pton)
+  parse_dialect(x, rules_pton, rules_v6_libc)
 }
 
+# `inet_aton` is AF_INET by signature and has no IPv6 reading at all, so its
+# IPv6 rule set is deliberately absent rather than empty. Measured rather than
+# assumed, because both compositions below depend on it: see the `aton` column
+# of tests/testthat/fixtures/ipv6-oracle.csv.
 #' @rdname dialects
 #' @export
 addr_aton <- function(x) {
-  parse_dialect(x, rules_aton)
+  parse_dialect(x, rules_aton, NULL)
 }
 
 # The compositions are written as compositions on purpose (section 3.2): if the
@@ -130,8 +169,49 @@ addr_getaddrinfo <- function(x) {
   # getaddrinfo() rejects an input containing whitespace before either
   # primitive sees it, which is where the composition stops being exactly
   # "pton then aton" [verified 2026-07-26].
-  x[grepl("[ \t\r\n\v\f]", x)] <- NA_character_
-  compose_dialects(addr_pton(x), addr_aton(x))
+  #
+  # The gate covers the address, not the zone ID: "fe80::1%lo0 " is accepted and
+  # "fe80::1 %lo0" is not [verified 2026-07-26]. An IPv4 literal carries no "%",
+  # so this is the same gate it always was for IPv4.
+  x[grepl("[ \t\r\n\v\f]", sub("%.*$", "", x))] <- NA_character_
+  gai_extract_scope(compose_dialects(addr_pton(x), addr_aton(x)))
+}
+
+# The second place the composition leaks, and it is IPv6-only.
+#
+# Apple's getaddrinfo runs the KAME embedding in reverse: for an address in
+# fe80::/10 it lifts the second hextet out into `sin6_scope_id` and clears it
+# from the bytes, whether or not a zone ID was written. So `fe80:abcd::1` is
+# `fe80::1` with zone 43981 to getaddrinfo and `fe80:abcd::1` with no zone to
+# `inet_pton` -- one string, one machine, two different hosts, which is the IPv6
+# counterpart of what `0177.0.0.1` does for IPv4 [verified 2026-07-26].
+#
+# raddr models this and does *not* model inet_pton's forward fold, and the
+# difference between the two is the point: this transform is a pure function of
+# the input, where the forward fold reads the host's interface table (section
+# 3.5). An explicit zone ID still wins; the hextet is cleared either way.
+gai_extract_scope <- function(a) {
+  family <- field(a, "family")
+  w1 <- widen_word(field(a, "w1"))
+  link_local <- !is.na(family) & family == "v6" &
+    w1 >= 4269801472 & w1 <= 4273995775
+  scope <- w1 %% 65536
+  at <- which(link_local & scope != 0)
+  if (!length(at)) {
+    return(a)
+  }
+  zone <- field(a, "zone")
+  zone[at] <- ifelse(is.na(zone[at]), as.character(scope[at]), zone[at])
+  w1[at] <- w1[at] - scope[at]
+
+  new_raddr_address(
+    w1 = ipv4_word(w1),
+    w2 = field(a, "w2"),
+    w3 = field(a, "w3"),
+    w4 = field(a, "w4"),
+    family = family,
+    zone = zone
+  )
 }
 
 #' @rdname dialects
