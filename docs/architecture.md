@@ -619,6 +619,42 @@ Memory target: **<= 30 MB per 1e6 addresses**, revised up from the draft's
 | `zone` character (pointers; all `NA` share one CHARSXP) | 8 MB |
 | **total** | **~28 MB** |
 
+### 11.1 Measured, 1e6 addresses **[verified 2026-07-26]**
+
+`bench/record.R`, same machine as §0. Both targets are met by the pure R
+record; nothing here argues for compiled code yet (O1).
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| memory, IPv4 | 26.7 MB | 19.1 MB | — | <= 30 MB |
+| memory, IPv6 | 26.7 MB | — | — | <= 30 MB |
+| memory, IPv6 + populated zone | 26.7 MB | — | — | <= 30 MB |
+| `==` | 0.007 s | 0.004 s | 1.75x | <= 3x |
+| `sort()` | 0.073 s | 0.052 s | 1.40x | <= 3x |
+| `unique()` | 0.037 s | 0.017 s | 2.18x | <= 3x |
+
+26.7 MB against the 28 MB estimate above, and it does not move when the zone is
+populated: the field is a pointer vector, so distinct zone strings cost only the
+CHARSXPs they share.
+
+Getting `==` under target took work and the shape of that work is worth
+recording. A first cut built both proxies as `data.frame()`s of five doubles and
+measured **19x**, not 1.75x. Three changes closed the gap, none of them
+algorithmic:
+
+- **`vctrs::new_data_frame()` instead of `data.frame()`**, which skips name
+  repair and row-name construction.
+- **Equality proxies in `integer`, not `double`.** Equality needs distinctness,
+  not magnitude, so it does not need the widening at all — it flattens each
+  word's `0x80000000` rows to `0` and records them as a bit in a `pattern`
+  column. Ordering still widens, because it does need magnitude.
+- **Guarding the whole collision path on `anyNA()`.** In the common case, no
+  word holds the pattern, so `pattern` is an allocated zero vector and not one
+  word is copied.
+
+The lesson generalizes to the parsers: at 1e6 rows the cost is allocation and
+copying, not arithmetic.
+
 `ipaddress`'s 19.1 MB is not a like-for-like comparison: it has no `zone` field
 and encodes family as a single `logical`. An R `logical` and a factor are both
 4 bytes per element, so `family` is not where the difference lies: the whole

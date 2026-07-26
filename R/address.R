@@ -192,69 +192,96 @@ check_raddr_address <- function(x, arg = "x") {
   invisible(x)
 }
 
-# --- The widening proxies (section 5.1.1) -----------------------------------
+# --- The comparison proxies (section 5.1.1) ----------------------------------
 #
 # A 32-bit word has 2^32 bit patterns; R's integer can distinguish 2^32 - 1 of
 # them, because it spends `0x80000000` on NA_integer_. Comparing the words as
 # integers therefore loses one address per word position, which is a live bug in
-# at least one CRAN package. Widening to double fixes it: doubles are exact to
-# 2^53, so every 32-bit value survives, and only the transient proxy is wide --
-# storage stays four bytes per word.
+# at least one CRAN package. Both proxies below recover that address, by
+# different routes, because equality and ordering want different things.
 #
-# The mapping is the unsigned reading of the signed pattern, uniformly:
-# a negative word gains 2^32, and `NA_integer_` is the pattern 0x80000000, whose
-# unsigned value is 2^31.
+# The proxies are transient; storage stays four bytes per word either way.
 
+# Ordering needs the *unsigned* reading of each word, so this widens to double:
+# doubles are exact to 2^53, so all 2^32 values survive. The mapping is uniform
+# -- a negative word gains 2^32 -- and `NA_integer_` is the pattern 0x80000000,
+# whose unsigned value is 2^31.
 widen_word <- function(w) {
   d <- as.double(w)
-  negative <- !is.na(d) & d < 0
-  d[negative] <- d[negative] + 2^32
-  d[is.na(w)] <- 2^31
-  d
+  if (anyNA(w)) {
+    d[is.na(w)] <- 2147483648
+  }
+  d + (d < 0) * 4294967296
 }
 
-# Both proxies share this. `rank` is prepended for ordering only, so that IPv4
-# sorts before IPv6 (O3); equality leads with the family code instead, so that
-# `0.0.0.0` and `::` -- identical bits, different families -- are not equal.
-#
-# Rows whose family is NA are the missing addresses, and every proxy column is
-# set NA for them so that is.na(), ==, and sort() all agree.
-addr_proxy <- function(x, ordered) {
-  family <- field(x, "family")
-  code <- as.integer(family)
-  missing <- is.na(code)
+# Equality does not need magnitudes, only distinctness, so it stays in integer
+# and lifts the collision into a separate column: each word's `0x80000000` rows
+# are flattened to 0 and recorded as a bit in `pattern`. Integers hash and
+# compare faster than doubles, and the common case -- no word holding the
+# pattern -- allocates `pattern` as a zero vector and copies no word at all.
+addr_proxy_equal <- function(x) {
+  w1 <- field(x, "w1")
+  w2 <- field(x, "w2")
+  w3 <- field(x, "w3")
+  w4 <- field(x, "w4")
+  code <- as.integer(field(x, "family"))
+  n <- length(code)
 
-  out <- data.frame(
-    w1 = widen_word(field(x, "w1")),
-    w2 = widen_word(field(x, "w2")),
-    w3 = widen_word(field(x, "w3")),
-    w4 = widen_word(field(x, "w4"))
-  )
-
-  if (ordered) {
-    # Ties on the full 128 bits break on the family code, so that ordering stays
-    # consistent with equality rather than calling two unequal addresses equal.
-    out <- data.frame(
-      rank = unname(addr_family_ranks[as.character(family)]),
-      out,
-      code = code
-    )
+  if (anyNA(w1) || anyNA(w2) || anyNA(w3) || anyNA(w4)) {
+    pattern <- is.na(w1) + 2L * is.na(w2) + 4L * is.na(w3) + 8L * is.na(w4)
+    w1[is.na(w1)] <- 0L
+    w2[is.na(w2)] <- 0L
+    w3[is.na(w3)] <- 0L
+    w4[is.na(w4)] <- 0L
   } else {
-    out <- data.frame(code = code, out)
+    pattern <- integer(n)
   }
 
-  out[missing, ] <- NA
-  out
+  # The family code leads, so that `0.0.0.0` and `::` -- identical bits,
+  # different families -- are not equal.
+  out <- vctrs::new_data_frame(
+    list(code = code, w1 = w1, w2 = w2, w3 = w3, w4 = w4, pattern = pattern),
+    n = n
+  )
+  blank_missing(out, code)
+}
+
+# Ordering leads with the family rank, so IPv4 sorts before IPv6 (O3), and
+# breaks ties on the family code, so ordering stays consistent with equality
+# rather than calling two unequal addresses equal.
+addr_proxy_compare <- function(x) {
+  code <- as.integer(field(x, "family"))
+  out <- vctrs::new_data_frame(
+    list(
+      rank = unname(addr_family_ranks[code]),
+      w1 = widen_word(field(x, "w1")),
+      w2 = widen_word(field(x, "w2")),
+      w3 = widen_word(field(x, "w3")),
+      w4 = widen_word(field(x, "w4")),
+      code = code
+    ),
+    n = length(code)
+  )
+  blank_missing(out, code)
+}
+
+# A missing address is one whose family is NA. Blanking every proxy column for
+# those rows is what makes is.na(), == and sort() agree about them.
+blank_missing <- function(proxy, code) {
+  if (anyNA(code)) {
+    proxy[is.na(code), ] <- NA
+  }
+  proxy
 }
 
 #' @export
 vec_proxy_equal.raddr_address <- function(x, ...) {
-  addr_proxy(x, ordered = FALSE)
+  addr_proxy_equal(x)
 }
 
 #' @export
 vec_proxy_compare.raddr_address <- function(x, ...) {
-  addr_proxy(x, ordered = TRUE)
+  addr_proxy_compare(x)
 }
 
 # --- Printing ----------------------------------------------------------------
