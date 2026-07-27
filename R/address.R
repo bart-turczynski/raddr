@@ -214,6 +214,23 @@ widen_word <- function(w) {
   d + (d < 0) * 4294967296
 }
 
+# And back. Extraction (section 8.1) computes a word arithmetically and has to
+# store it, so the widening needs an inverse -- and the inverse is where the
+# 0x80000000 problem reappears from the other side.
+#
+# `as.integer(-2147483648)` is NA with a warning, because R spends that pattern
+# on NA_integer_. That is exactly raddr's storage convention (section 5.1.1), so
+# the value is not lost -- but it must be written deliberately rather than
+# arrived at through a coercion warning, or a check that promotes warnings to
+# errors fails on the one address the whole convention exists for.
+narrow_word <- function(d) {
+  signed <- d - (d >= 2147483648) * 4294967296
+  out <- rep(NA_integer_, length(signed))
+  representable <- !is.na(signed) & signed != -2147483648
+  out[representable] <- as.integer(signed[representable])
+  out
+}
+
 # Equality does not need magnitudes, only distinctness, so it stays in integer
 # and lifts the collision into a separate column: each word's `0x80000000` rows
 # are flattened to 0 and recorded as a bit in `pattern`. Integers hash and

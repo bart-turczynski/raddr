@@ -363,7 +363,11 @@ Every documented way an implementation extracts the wrong embedded IPv4 address.
 9. **Reading 6to4's `V4ADDR` at the wrong offset.** RFC 3056 §2 puts it at bits **16..47** —
    immediately after the 16-bit `2002` prefix, *not* at bits 32..63 (which is where Teredo's
    server address lives) and not in the interface identifier. `2002:c000:0204::` embeds
-   `192.0.2.4`; reading bits 32..63 instead yields `0.0.0.0`.
+   `192.0.2.4`; reading bits 32..63 instead yields `2.4.0.0`. **[corrected
+   2026-07-27]** — this line said `0.0.0.0`. Bits 32..63 of `2002:a.b.c.d::` are
+   the low half of V4ADDR followed by the SLA ID, i.e. `c.d.0.0`, which is
+   `0.0.0.0` only when `c` and `d` are both zero. The gotcha stands and the
+   wrong read is still plausible-looking; only the number was wrong.
 10. **Treating `2002::/16` as deprecated because RFC 7526 deprecated 6to4 anycast.** RFC 7526
     deprecates only RFC 3068's anycast mechanism and `192.88.99.1`; it says explicitly "The
     basic unicast 6to4 mechanism defined in [RFC3056] and the associated 6to4 IPv6 prefix
