@@ -98,8 +98,9 @@ registry_index <- function() {
 #' @details
 #' The 4-in-6 family matches **IPv6** blocks, not IPv4 ones. `::ffff:127.0.0.1`
 #' is an IPv6 address in `::ffff:0:0/96`; that its embedded address is loopback
-#' is a separate fact, and `embedded_scope` is where it is reported (section
-#' 5.3). Answering `loopback` here would collapse the two facts raddr exists to
+#' is a separate fact, and `embeddings` is where it is reported -- each element
+#' carries the extracted address with its own `category` (section 5.3.5).
+#' Answering `loopback` here would collapse the two facts raddr exists to
 #' keep apart.
 #'
 #' @noRd

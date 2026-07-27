@@ -4,9 +4,22 @@
 # is `raddr_codes$code` rather than a second list that has to be kept in step,
 # because a vocabulary restated in two places is a vocabulary that drifts.
 #
-# The codes are a cross-repo contract: `ssrfr` reports raddr's codes rather than
-# inventing its own, so adding one is an API change and removing one is a
-# breaking change. That is what the `since` column is for.
+# The codes are a versioned vocabulary: adding one is an API change and removing
+# one is breaking. That is what the `since` column is for.
+#
+# They are NOT a vocabulary `ssrfr` echoes verbatim, and an earlier version of
+# this comment claimed they were. `ssrfr` ADR-001 section 7 assigns the
+# "reason-code vocabulary and result model" to `ssrfr`, and its spec section 5.2
+# fixes those as kebab-case, normative for `ssrfr` and constrained by its own
+# published consumers -- the case divergence is deliberate, not drift. Both
+# documents cannot be right, and the counterparty's own ADR wins.
+#
+# So the relationship is many-to-one and conditional, not an alias: raddr states
+# facts, `ssrfr` interprets them into a refusal reason. A raddr code may travel
+# in a detailed `ssrfr` result as evidence, but `ssrfr`'s public reason comes
+# from `ssrfr`. This is the same separation section 5.3.3 draws for `category`,
+# and for the same purpose -- a policy layer must not enumerate a descriptive
+# classifier's output as its deny list.
 
 # A row-major literal, so the registry reads as a table in the source too.
 raddr_codes_row <- function(code, layer, rfc, summary, since = "0.1.0") {

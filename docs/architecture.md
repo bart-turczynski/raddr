@@ -780,10 +780,22 @@ The consequence for `aton` and a colon literal is that it reports
 #### 5.2.2 The reason-code vocabulary **[implemented 2026-07-27]**
 
 One const registry in `R/codes.R`, exported as `addr_codes_registry()`, with the
-valid-value set derived from it rather than restated. The codes are a cross-repo
-contract — `ssrfr` reports raddr's rather than inventing a parallel set — so
-adding one is an API addition and removing one is breaking, which is what
-`since` records.
+valid-value set derived from it rather than restated. Adding a code is an API
+addition and removing one is breaking, which is what `since` records.
+
+**Correction: `ssrfr` does not report raddr's codes, and this section used to
+claim it did.** `ssrfr` ADR-001 §7 assigns the reason-code vocabulary and result
+model to `ssrfr`; its spec §5.2 fixes those codes as kebab-case, normative for
+`ssrfr` and constrained by its own published consumers, with the case divergence
+called *deliberate*. Both documents cannot be right, and the counterparty's own
+ADR wins. The relationship is many-to-one and conditional: raddr states facts,
+`ssrfr` interprets them into a refusal reason, and a raddr code may travel in a
+detailed `ssrfr` result as evidence without being its public reason.
+
+This matters beyond bookkeeping. It is the same separation §5.3.3 draws for
+`category`, and it means the deny-list-bypass worry is *smaller* than it looked
+when this contract was assumed — `ssrfr` was never going to enumerate raddr's
+vocabulary, because its own is fixed downstream.
 
 | code | layer | provenance | fires when |
 |---|---|---|---|
@@ -822,13 +834,217 @@ fails is its reason, at no extra cost.
 |---|---|---|
 | `block` | `character` | matched registry prefix |
 | `name`, `rfc` | `character` | registry columns; `rfc` is the provenance string |
-| `scope` | factor | raddr's vocabulary |
+| `category` | factor | raddr's vocabulary — 18 levels, enumerated below. **Not** `scope` |
 | `globally_reachable` | `logical` | the IANA column, **not** a derived `is_global` |
 | `forwardable`, `source`, `destination`, `reserved_by_protocol` | `logical` | the other four IANA columns |
-| `embedded` | `raddr_address` | the extracted inner IPv4, or `NA` |
-| `embedded_kind` | factor | `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
-| `embedded_scope` | factor | scope after recursive extraction |
+| `embedded_kind` | factor | the *mechanism*: `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
+| `embeddings` | `list_of<raddr_embedding>` | zero or more extracted inner addresses. One list element per row |
 | `registry_version` | `character` | snapshot stamp (P7) |
+
+Each element of `embeddings` is a `raddr_embedding` record of zero or more rows:
+
+| Field | Type | Notes |
+|---|---|---|
+| `kind` | factor | same vocabulary as `embedded_kind` |
+| `role` | factor | `embedded`, or `client` / `server` for Teredo |
+| `address` | `raddr_address` | the extracted address |
+| `category` | factor | classification of *that* address, not of the outer one |
+
+#### 5.3.1 Why `category` and not `scope`
+
+**`scope` is the wrong word and it is taken.** RFC 4007 §5 and RFC 7346 §2 both
+define "scope" for IPv6 as a specific, bit-derived value, and raddr already
+carries `zone` — RFC 4007's companion concept — inside the same record. The
+levels below also mix address scope (`link_local`), purpose (`documentation`),
+and architecture (`multicast`), so the word was never accurate for them anyway.
+
+The deciding factor is that raddr *will* want the real thing: the 4-bit
+multicast scope nibble is the one piece of IPv6 reachability semantics a pure
+offline classifier can state with full confidence, so `scope` must stay free to
+name it. Renaming is cheap now and breaking later.
+
+#### 5.3.2 The 18 `category` levels
+
+The criterion, which generates every call below:
+
+> **A level exists only when it answers a question that the registry's own
+> columns and the block's `name` cannot.**
+
+| Level | Covers |
+|---|---|
+| `unspecified` | `0.0.0.0/32`, `::/128` |
+| `this_network` | `0.0.0.0/8` — RFC 1122's own term, and *not* `unspecified`; only the `/32` is |
+| `loopback` | `127.0.0.0/8`, `::1/128` |
+| `link_local` | `169.254.0.0/16`, `fe80::/10` |
+| `multicast` | `224.0.0.0/4`, `ff00::/8` |
+| `broadcast` | `255.255.255.255/32` |
+| `private` | RFC 1918 ×3 **and** ULA `fc00::/7` |
+| `shared` | `100.64.0.0/10` (CGNAT) |
+| `documentation` | `192.0.2.0/24`, `2001:db8::/32`, `3fff::/20`, ... |
+| `benchmarking` | `198.18.0.0/15`, `2001:2::/48` |
+| `future_use` | `240.0.0.0/4` — RFC 1112 §4's own word |
+| `protocol` | IETF Protocol Assignments, service continuity, the translation prefixes |
+| `anycast` | well-known service addresses reached by anycast routing |
+| `discard` | `100::/64` |
+| `dummy` | `192.0.0.8/32`, `100:0:0:1::/64` |
+| `discovery` | `192.0.0.170/32`, `192.0.0.171/32` (NAT64/DNS64 discovery) |
+| `special` | in the special-purpose registry, and raddr has no shorter true word than its `name` |
+| `global` | no special-purpose block matched; answered from the address-space fallback (§7) |
+
+Five calls need their reasoning recorded, because each was contested:
+
+**`anycast` means addressing style, never reachability.** The tempting
+definition — "globally reachable service anycast" — is falsified by the registry
+itself: `192.88.99.2/32` (6a44-relay anycast) is `Globally Reachable = False`,
+and `192.88.99.0/24` has *no policy values at all*. The workable definition is
+"a well-known service address reached by anycast routing, whatever its
+reachability," which admits AS112, AMT, PCP/TURN/SRP, 6a44 and the deprecated
+6to4 relay anycast alike. `as112` and `amt` **fold into it**: `name` already
+says "AS112-v4" and "AMT" better than a level can.
+
+**`private` covers ULA.** Cross-family normalization is the level's whole job,
+and the consumer settles it — `ssrfr` ADR-001 §2.1 makes the unblocked
+`fc00::/7` its motivating defect and prescribes exactly this one word. The
+genuinely surprising fact that `fc00::/8` (L=0) has **no defining
+specification** — only `fd00::/8` is real, RFC 4193 §3.1 — lives in the classify
+codes at `strength = unspecified`. `category = private` therefore does **not**
+imply "valid ULA".
+
+**`reserved` is deleted, not renamed.** `is_reserved` means four different
+things across the ecosystem and IANA's `Reserved-by-Protocol` column is a fifth;
+the word carries no portable meaning. Shipping it as a level in the same record
+that carries a `reserved_by_protocol` column guarantees the two get confused.
+
+**The mechanisms leave the vocabulary.** `nat64`, `teredo`, `6to4` and
+`ipv4_mapped` are *not* categories — they are `embedded_kind` values, where the
+mechanism is stated precisely and independently of the outer block. So
+`64:ff9b::/96` is `category = protocol`, `embedded_kind = nat64_wk`,
+`globally_reachable = TRUE`, with the extracted IPv4 in `embeddings` — four
+simultaneously true facts, none compressed into the others. This also keeps
+`category` honest for a caller-supplied network-specific NAT64 prefix, whose
+outer category is whatever the ordinary lookup returns.
+
+**`special` is an assignment, not a fallthrough.** It covers SRv6 SIDs
+(`5f00::/16`), ORCHIDv2, DETs, and deprecated ORCHID — blocks with no question a
+short word answers. It is **not** a catch-all: a new IANA row nobody classified
+still fails the build (§5.3.3). `special` and `global` are different answers and
+must never be merged — one means "matched, and `name` is the best available
+description", the other means "no special-purpose block matched at all".
+
+A rejected level worth recording: **`identifier`**, proposed to cover ORCHIDv2,
+DETs and SRv6 SIDs together. It was rejected because it lumps cryptographic host
+identifiers (RFC 7343) with routing segment identifiers (RFC 8986). Those are
+not the same kind of thing, and grouping them would assert a similarity raddr
+cannot defend from any source — the collapse this package exists to refuse.
+
+#### 5.3.3 `category` is descriptive. It is not a policy input.
+
+**State this in the accessor documentation, not only here.** `ipaddr.js`
+demonstrates both failure modes: label names are unstable across versions
+(`deprecated` → `deprecatedOrchid`), and consumers deny by *named list*, so a
+newly added label becomes a bypass — `::ffff:127.0.0.1` passing under the
+`ipv4Mapped` label.
+
+raddr's answer is **not** a smaller vocabulary. A smaller deny-list merely
+postpones the bypass until the next level is added; the fix is to decouple
+description from policy entirely. Policy reads the five IANA columns, the
+classify codes, and `embeddings` — all three-valued and registry- or
+RFC-sourced. `ssrfr`'s own spec already requires exactly that shape (INV-13: a
+positive routability predicate, not an enumerated prohibition list), and **no
+`category` label appears in it**.
+
+Consequently raddr ships **no** "everything that is not `global`" helper. Such a
+helper is a verdict wearing a predicate's clothes, and it would be wrong on
+`64:ff9b::a00:1` — a block IANA marks `Globally Reachable = True` that embeds
+`10.0.0.1`. Whichever level that block gets, the helper loses one of two true
+facts. Answering "is this safe" is `ssrfr`'s job, over the columns. P8.
+
+`category` is a cross-repo vocabulary under `since` discipline: adding a level is
+an API addition, removing or re-pointing one is breaking.
+
+#### 5.3.4 Who maintains the block → level map
+
+**It cannot be derived from the policy columns.** Over the 50 upstream records
+there are only 14 distinct five-column signatures: 14 records share
+`True,True,True,True,False` (PCP/TURN/SRP anycast, AS112 ×4, AMT ×2, the NAT64
+well-known prefix, ORCHIDv2, DETs) and 11 share `True,True,True,False,False`
+(all three `Private-Use` blocks, Shared Address Space, service continuity, 6a44
+anycast, Benchmarking ×2, `64:ff9b:1::/48`, Discard-Only, SRv6 SIDs). Seven
+proposed levels collapse into that second signature alone. Columns are out.
+
+**The map is keyed on the canonical block, not on `Name`.** Name-keying is
+tempting — there are 40 distinct names over 50 records, 9 repeats, and no repeat
+today needs two levels — but it fails on the property the map exists for: a
+*new* IANA row reusing an existing name (a fourth `Private-Use`, another
+`Documentation`) would classify itself with nobody reading its policy columns.
+`Name` is a mutable display string — "DS-Lite [RFC6333]" became "IPv4 Service
+Continuity Prefix [RFC7335]" with no change of prefix — while the block is the
+row's identity. Canonicalizing a block is deterministic parsing; grouping by
+name asserts semantic equivalence, which is the classification judgment itself.
+
+So: **51 block-keyed entries in `data-raw/`**, joined into the vendored data at
+build time, with four tests.
+
+1. Every special-purpose block resolves to exactly one level.
+2. Every declared level is used by at least one block.
+3. Any two blocks sharing an IANA `Name` resolve to the *same* level, unless an
+   explicit `name_split` entry names the pair and says why. This keeps the whole
+   value of the name arithmetic as a mechanical check. The list is **empty**
+   today: `IPv4-IPv6 Translat.` was its only candidate, and both its blocks are
+   `protocol` now that the mechanisms live in `embedded_kind`.
+4. A new IANA row with no entry **fails the build** rather than landing in
+   `global`.
+
+**The map is raddr's, and its provenance stays visibly separate from IANA's.**
+It must not become a column of `addr_registry()`, whose promise is the IANA data
+*exactly as vendored*. It follows `R/transition.R`'s pattern instead —
+hand-authored, RFC-cited, and carrying its own version stamp, so neither stamp
+is evidence about the other. P9 permits this: P9 forbids hand-transcribing an
+upstream fact when an authoritative file exists, and `category` has no upstream
+value to preserve.
+
+#### 5.3.5 Embeddings are plural, and Teredo is why
+
+**`embeddings` is a `list_of` column with exactly one element per row.** The
+outer record stays `vctrs` size-stable — `vec_size()` is preserved by
+construction and `vec_ptype()` is one type across all 51 blocks. Rows multiply
+only when a caller explicitly unnests.
+
+RFC 4380 §4 puts **two** IPv4 addresses in a Teredo address: the server at bits
+32–63 in the clear, and the client at bits 96–127 bitwise-complemented. Both are
+reported, in the overlay's existing order — server, then client — and **both are
+classified**. raddr does not choose which one matters.
+
+An earlier design gave `raddr_class` a single `embedded` field meaning the
+client, on the reasoning that the server is tunnel infrastructure rather than
+what the address stands for. **That reasoning is falsified.** RFC 4380 §5.2.6
+directs a host to extract the server IPv4 *from a peer's address* and send a UDP
+bubble to it:
+
+> the bubble will be sent to that IPv4 address and the Teredo UDP port
+
+so the server field is a destination, not metadata. The asymmetry between the
+two fields runs the *opposite* way to the discarded rationale: RFC 4380 §5.2.3
+validates the **client** field against the packet's actual IPv4 source, and no
+equivalent check of the **server** field is specified anywhere. That per-`(kind,
+role)` fact belongs in the transition overlay (§7.2), not in per-row output.
+
+This is not a novel finding and raddr should not present it as one — Hoagland's
+Black Hat USA 2007 analysis describes the relay case, and Miredo has validated
+the server field since 2004 despite RFC 4380 not requiring it at the relay
+(§5.4.1). Its author's note is the same judgment raddr keeps making: *"This
+check is only specified for client case 4 & 5… As for the relay, I consider the
+check should also be done, even if it wasn't specified."* Teredo is disabled by
+default on Windows since 10 v1803 and the public servers shut down in June 2021,
+so this is a **classification-correctness** point, not a live vector.
+
+**`embedded_scope` is removed.** It was a scalar `factor` typed in this section
+and returned by `addr_embedded_scope()` in §6.3, and under a plural embeddings
+model it cannot return a length-`n` factor without a reduction — and *the
+reduction is the decision*. Rather than relocate the Teredo choice into an
+accessor contract where it would be answered under less scrutiny, the field
+goes. `addr_embeddings()` replaces it and always returns the typed list. This is
+an **API removal**, recorded here as one.
 
 **Vocabulary — one word, and it is the RFCs' word.** raddr says *embedded*
 throughout: field names, accessors, prose. RFC 6052 §2 speaks of "embedding an
@@ -840,10 +1056,12 @@ This governs **identifiers** — field names, accessor names, code names. Prose
 may still say "wrapper" for the outer IPv6 form that carries an inner address
 (§8.1's wrapper matrix), because that names the *container*, not the operation.
 
-`embedded_scope` was `effective_scope` in the draft. The computation is
-RFC 6052-derived and stays; the name goes, because "effective" asserts that one
-of three simultaneously-true fields is the real one. That is a judgment raddr no
-longer makes.
+That field's history is worth keeping, because the same objection killed it
+twice. It was `effective_scope` in the draft; the name went because "effective"
+asserts that one of three simultaneously-true fields is the real one. It became
+`embedded_scope`, and then went entirely (§5.3.5) because a *scalar* asserts
+that one of Teredo's two embedded addresses is the real one. Same judgment,
+refused at two different layers — first in a name, then in a cardinality.
 
 ---
 
@@ -909,8 +1127,9 @@ addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 
 ```r
 addr_classify(a)         # -> raddr_class
-addr_scope(a)            # factor
-addr_embedded_scope(a)   # factor, after recursive extraction
+addr_category(a)         # factor, 18 levels (section 5.3.2). Was addr_scope()
+addr_embeddings(a)       # list_of<raddr_embedding>, always. Replaces
+                         #   addr_embedded_scope(); see section 5.3.5
 addr_within(a, blocks)   addr_within_any(a, blocks)
 ```
 
@@ -963,7 +1182,8 @@ inside a non-global `192.0.0.0/24`.
 
 Table lookup is necessary but not sufficient. `64:ff9b::/96` is marked globally
 reachable *because it maps onto global IPv4*; the embedded address must be
-extracted and classified separately. Hence `scope` and `embedded_scope`.
+extracted and classified separately. Hence `category` *and* `embeddings`, with
+the inner address carrying its own `category` (§5.3.2, §5.3.5).
 
 One overlay remains, separately stamped from the IANA table: **transition
 prefixes needing sub-registry granularity** — 6to4 `2002::/16`, Teredo
@@ -1166,7 +1386,7 @@ half of their guards and keep the policy half. The mirrored-patch cost ends when
 - Four primitives, two compositions, `addr_parse()` with per-dialect outcomes.
 - Full IPv4 obfuscation handling; full IPv6 parse; RFC 5952 format and expand.
 - Embedded-IPv4 extraction for every wrapper in §8.1, **including ISATAP**.
-- Registry-driven `addr_classify()` with `scope` / `embedded_scope`.
+- Registry-driven `addr_classify()` with `category` and plural `embeddings`.
 - Versioned reason-code vocabulary shipped as data.
 - `addr_within` / `addr_within_any`, encoding round-trips, reverse pointer.
 - WPT + IANA vendored with upstream SHAs; the invariant suite.
