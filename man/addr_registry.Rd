@@ -29,9 +29,22 @@ declined to give one. Two cases produce it.
 \item{The block is deprecated}{\verb{192.88.99.0/24} and \verb{2001:10::/28} carry a
 \code{termination_date} and no policy values at all.}
 \item{The answer depends on something the table cannot express}{Teredo
-(\verb{2001::/32}) and 6to4 (\verb{2002::/16}) are recorded as \code{N/A} for
-\code{globally_reachable}, because reachability follows the \emph{embedded} IPv4
-address. That is what \code{addr_embedded_scope()} is for.}
+(\verb{2001::/32}) and 6to4 (\verb{2002::/16}) are both recorded as \code{N/A} for
+\code{globally_reachable} -- but for \strong{two different reasons}, carrying two
+different IANA footnotes. Do not merge them.}
+}
+
+The two \code{N/A} reasons, kept apart because a reader following either
+footnote must find the reason raddr states:
+
+\describe{
+\item{6to4 (\verb{2002::/16}), footnote \verb{[3]}, RFC 3056}{reachability follows
+the \emph{embedded} IPv4 address, which a prefix table cannot express.}
+\item{Teredo (\verb{2001::/32}), footnote \verb{[2]}, RFC 4380 section 5}{a
+different thing entirely: relay advertisement is \strong{voluntary and
+per-deployment}, so whether any given Teredo address is reachable
+depends on what its operator chose to advertise -- not on the embedded
+client address.}
 }
 
 Reading either as \code{FALSE} would assert a policy IANA specifically withheld,

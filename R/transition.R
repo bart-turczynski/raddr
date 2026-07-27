@@ -6,10 +6,17 @@
 # follows R/codes.R's const-registry shape rather than the build-script shape
 # the IANA registries use, and it carries its own version.
 #
-# It exists because IANA's table stops short. IANA marks Teredo and 6to4 `N/A`
-# for Globally Reachable (section 7.1) precisely because the answer follows the
+# It exists because IANA's table stops short -- but for two different reasons,
+# and only one of them is about embedding (section 7.1).
+#
+# 6to4 (`2002::/16`, footnote [3]) is `N/A` because the answer follows the
 # EMBEDDED IPv4 address, which a prefix table cannot express. The overlay says
-# where those embedded bits are; extracting and classifying them is Epic J.
+# where those bits are; extracting and classifying them is Epic J.
+#
+# Teredo (`2001::/32`, footnote [2]) is `N/A` for an unrelated reason: RFC 4380
+# section 5 makes relay advertisement voluntary and per-deployment, so no bits
+# in the address answer it. The overlay carries Teredo for its structure, not
+# to resolve its `N/A`. Do not restate these as one reason.
 
 #' The overlay's own version stamp
 #'
@@ -43,7 +50,12 @@ raddr_transition_prefixes <- local({
     ),
     transition_prefix_row(
       "::ffff:0:0:0/96", "ipv4_translated", "none",
-      "No RFC assigns this. Carried because the in-house guards recognize it."
+      paste(
+        "No CURRENT RFC assigns this. RFC 2765 section 2.1 defined it as the",
+        "IPv4-translated form; RFC 6145 obsoleted RFC 2765 and RFC 7915",
+        "obsoleted RFC 6145 without carrying it forward. Kept because the",
+        "in-house guards recognize it."
+      )
     ),
     # --- 6to4 and Teredo ----------------------------------------------------
     transition_prefix_row(
@@ -59,7 +71,12 @@ raddr_transition_prefixes <- local({
     ),
     transition_prefix_row(
       "192.88.99.0/24", "6to4_relay_anycast", "RFC 3068 section 2.3",
-      "IPv4, and classify-only: it embeds nothing. Deprecated by RFC 7526."
+      paste(
+        "IPv4, and classify-only: nothing is embedded IN it. The converse is",
+        "still a fact -- 192.88.99.1 has a defined 6to4 image at",
+        "2002:c058:6301:: -- but that is a mapping OUT, not an extraction.",
+        "Deprecated by RFC 7526."
+      )
     ),
     # --- NAT64, RFC 6052 ----------------------------------------------------
     transition_prefix_row(
@@ -67,8 +84,18 @@ raddr_transition_prefixes <- local({
       "The well-known prefix. Only ever used at /96."
     ),
     transition_prefix_row(
-      "64:ff9b:1::/48", "nat64_local", "RFC 8215 section 3",
-      "Local-use, and u-byte-aware: at /48 the embedded v4 is not contiguous."
+      "64:ff9b:1::/48", "nat64_local", "RFC 8215 sections 3 and 5",
+      paste(
+        "Local-use. Section 3 makes the allocation; section 5 is the one that",
+        "governs reading it, and it forbids the assumption this row's",
+        "geometry makes: nodes 'must not make any assumptions regarding the",
+        "syntax or properties of those addresses (e.g., the existence and",
+        "location of embedded IPv4 addresses)'. raddr still extracts, because",
+        "deployments do use RFC 6052 geometry here and the guards raddr",
+        "replaces decode it -- but the extraction is CONTESTED, not implied",
+        "by the prefix, and must be reported as such. At /48 the embedded v4",
+        "is also not contiguous."
+      )
     )
   )
 
@@ -90,6 +117,11 @@ raddr_transition_prefixes <- local({
 # `complement` marks a field stored as its bitwise complement. Teredo's client
 # address is obfuscated that way (RFC 4380 section 4) so that a NAT does not
 # rewrite it in transit.
+#
+# It is the only complemented ADDRESS, which is not the same as the only
+# complemented FIELD: RFC 4380 section 4 stores the mapped UDP port at bits
+# 80-95 as XOR 0xFFFF too. This table holds addresses only, so the port has no
+# row -- an absence of scope, not an absence of the fact.
 transition_embedding_row <- function(kind, role, prefix_len, offset, length,
                                      complement = FALSE) {
   list(
@@ -122,7 +154,8 @@ raddr_transition_embeddings <- local({
     transition_embedding_row("isatap", "embedded", NA_integer_, 96L, 32L),
 
     # RFC 6052 section 2.2, all six permitted prefix lengths. The u-byte at
-    # bits 64-71 is reserved and is skipped, so four of the six are split.
+    # bits 64-71 is reserved and is skipped, so THREE of the six -- /40, /48
+    # and /56 -- arrive in two segments. /32, /64 and /96 are contiguous.
     transition_embedding_row("nat64", "embedded", 32L, 32L, 32L),
     transition_embedding_row("nat64", "embedded", 40L, 40L, 24L),
     transition_embedding_row("nat64", "embedded", 40L, 72L, 8L),
@@ -189,7 +222,10 @@ isatap_iid <- list(
 #' \describe{
 #'   \item{Teredo carries two addresses}{a server, in the clear, and a client
 #'     stored bitwise-complemented so a NAT will not rewrite it
-#'     (`complement = TRUE`).}
+#'     (`complement = TRUE`). The client is the only complemented *address*,
+#'     not the only complemented *field* -- RFC 4380 section 4 also stores the
+#'     mapped UDP port at bits 80-95 as XOR `0xFFFF`. This table reports
+#'     addresses, so the port does not appear in it.}
 #'   \item{NAT64 geometry follows the prefix length, not a prefix}{RFC 6052
 #'     permits six lengths, and a network-specific prefix may be any prefix of
 #'     one of them -- so those rows carry a `prefix_len` and no block. At /40,

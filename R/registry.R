@@ -36,9 +36,22 @@ registry_public_columns <- c(
 #'   \item{The block is deprecated}{`192.88.99.0/24` and `2001:10::/28` carry a
 #'     `termination_date` and no policy values at all.}
 #'   \item{The answer depends on something the table cannot express}{Teredo
-#'     (`2001::/32`) and 6to4 (`2002::/16`) are recorded as `N/A` for
-#'     `globally_reachable`, because reachability follows the *embedded* IPv4
-#'     address. That is what `addr_embedded_scope()` is for.}
+#'     (`2001::/32`) and 6to4 (`2002::/16`) are both recorded as `N/A` for
+#'     `globally_reachable` -- but for **two different reasons**, carrying two
+#'     different IANA footnotes. Do not merge them.}
+#' }
+#'
+#' The two `N/A` reasons, kept apart because a reader following either
+#' footnote must find the reason raddr states:
+#'
+#' \describe{
+#'   \item{6to4 (`2002::/16`), footnote `[3]`, RFC 3056}{reachability follows
+#'     the *embedded* IPv4 address, which a prefix table cannot express.}
+#'   \item{Teredo (`2001::/32`), footnote `[2]`, RFC 4380 section 5}{a
+#'     different thing entirely: relay advertisement is **voluntary and
+#'     per-deployment**, so whether any given Teredo address is reachable
+#'     depends on what its operator chose to advertise -- not on the embedded
+#'     client address.}
 #' }
 #'
 #' Reading either as `FALSE` would assert a policy IANA specifically withheld,

@@ -193,6 +193,12 @@ addr_getaddrinfo <- function(x) {
 gai_extract_scope <- function(a) {
   family <- field(a, "family")
   w1 <- widen_word(field(a, "w1"))
+  # fe80::/10, RFC 4291 section 2.5.6, as the first 32 bits: 0xFE800000 through
+  # 0xFEBFFFFF inclusive. The /10 is what Apple's resolver tests, so the /10 is
+  # what this models -- RFC 4291 section 2.5.6 also fixes the conformant format
+  # at fe80::/64 with 54 zero bits between, but a stricter gate here would stop
+  # reproducing the behaviour this function exists to reproduce. The citation
+  # sources the BOUNDS; it is not a claim that the gate is conformance-checking.
   link_local <- !is.na(family) & family == "v6" &
     w1 >= 4269801472 & w1 <= 4273995775
   scope <- w1 %% 65536

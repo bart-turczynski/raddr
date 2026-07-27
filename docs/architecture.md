@@ -139,7 +139,7 @@ axes**, not one list: what a *standard* requires ("on paper") and what an
 | paper | `strict` | RFC dotted-quad grammar; Python `ipaddress`, Go, Rust | fixed |
 | paper | `whatwg` | WHATWG URL host parser; what browsers do | fixed, versioned spec |
 | reality | `pton` | POSIX `inet_pton` | **platform-varying** |
-| reality | `aton` | BSD `inet_aton` | stable in practice |
+| reality | `aton` | BSD `inet_aton` | **platform-varying** (see §3.3) |
 
 ### 3.2 The two compositions
 
@@ -201,8 +201,20 @@ Two rows carry most of the package's value:
 - **`192.0.048.1`** — curl reaches a host a browser refuses to dial.
 - **`4294967296`** — `aton` wraps modulo 2^32 to `0.0.0.0`; the standards reject.
 
-`pton` is the one dialect whose row is **platform-dependent**. Apple libc strips
-leading zeros and reads decimal. glibc and musl are **unverified** — see §10.
+**Both reality dialects are platform-dependent**, not just `pton`.
+
+- `pton` — Apple libc strips leading zeros and reads decimal. glibc and musl are
+  **unverified** — see §10.
+- `aton` — glibc's `inet_aton` ignores trailing garbage, so `1.2.3.4junk`
+  **succeeds** there; Apple and musl reject it. glibc ships a separate
+  `__inet_aton_exact` for callers that want the strict reading, which is the
+  clearest evidence the leniency is deliberate rather than a bug.
+
+The `aton` divergence is why §3.1's "stable in practice" was wrong. Note that
+**the oracle fixtures cannot currently show either divergence**: they carry the
+columns `input, pton, aton, getaddrinfo, whatwg` and no libc dimension, so every
+recorded row is Apple. Adding a per-libc column is `RADD-xrgomyhx` (O6), and
+until it lands raddr ships no dialect for which the glibc reading is true.
 
 ### 3.3.1 The rest of the measured surface **[verified 2026-07-26]**
 
@@ -228,6 +240,10 @@ spec or the scratch documents:
   VT, FF) and ignores the remainder, so `1.2.3.4 junk` parses. Leading
   whitespace still fails, because the truncation leaves nothing to parse, and
   glued-on non-whitespace (`1.2.3.4x`) fails too.
+  **[Apple libc only.]** This whole row is one of three answers, not the
+  answer: glibc accepts `1.2.3.4x` as well, since its `inet_aton` ignores
+  trailing garbage outright; musl agrees with Apple in rejecting it. Nothing
+  here is measured off Apple — see §3.3 and `RADD-xrgomyhx`.
 - **A digitless `0x` is tolerated by `inet_aton` in any part but the last.**
   `0x.1` and `0x.0x.0` parse; `0x`, `0x.0x` and `1.2.0x` do not. WHATWG has no
   such carve-out — a bare `0x` is simply zero.
@@ -349,9 +365,13 @@ Two consequences worth stating plainly:
   PHP are RFC-lineage and reject; ada is the only WHATWG entry among four
   rejecters. And there is no single RFC answer to appeal to — RFC 4291 §2.2's
   address grammar has no `%`, RFC 4007 §11 defines the syntax, and RFC 6874
-  defines it for URIs. ada rejects even the RFC 6874 spelling `%25lo0`
-  **[verified 2026-07-27]**, so the WHATWG URL parser has not adopted 6874;
-  that belongs to §3.4, not here.
+  *used to* define it for URIs — it was **obsoleted in August 2025 by RFC 9844**,
+  which drops the zone-in-URI syntax entirely because implementers found it
+  impracticable. ada rejects even the RFC 6874 spelling `%25lo0`
+  **[verified 2026-07-27]**, and that measurement now has a standards
+  explanation rather than being a bare observation: the WHATWG URL parser never
+  adopted 6874, and 6874 is no longer live to adopt. That belongs to §3.4, not
+  here.
 - **The two that accept without a slot are the two that lose data**, and both
   are also *more lenient* than a validator in their own library: R's
   `ipaddress` accepts a second `%` that Apple's `inet_pton` rejects, and Node's
@@ -930,8 +950,12 @@ encoding pairs. Collisions under `addr_`: zero.
 
 Source: the two IANA special-purpose registries (CC0, 4712 bytes, **51 blocks**
 — see §7.1, which corrects the "26 + 27 rows" this section used to claim). All
-five policy columns surfaced, never collapsed. `Globally Reachable` **is**
-`is_global`, authoritatively, per row, with an RFC citation.
+five policy columns surfaced, never collapsed. `globally_reachable` reports
+IANA's `Globally Reachable` column verbatim, per row, with an RFC citation — it
+is **not** a derived `is_global`, and §5.3 says the same. RFC 8190 §3 renamed
+this column *away from* "Global" precisely to stop that reading: `True` holds
+for AS112, AMT, PCP/TURN/SRP anycast, ORCHIDv2 and DETs, none of which is an
+ordinary public host, and ORCHIDs should not appear in IPv6 headers at all.
 
 Lookup is **longest-prefix-match**, not first-match-wins, because the registry
 contains carve-outs: `192.0.0.9/32` and `192.0.0.10/32` are globally reachable
@@ -976,12 +1000,16 @@ declining to answer*, which is not the same as answering `False`:
 | block | `Globally Reachable` | why |
 |---|---|---|
 | `192.88.99.0/24`, `2001:10::/28` | empty | deprecated; carries a `Termination Date` and no policy values at all |
-| `2001::/32` (Teredo), `2002::/16` (6to4) | `N/A` | reachability follows the **embedded** IPv4 address, which a prefix table cannot express |
+| `2002::/16` (6to4) | `N/A [3]` | reachability follows the **embedded** IPv4 address (RFC 3056), which a prefix table cannot express |
+| `2001::/32` (Teredo) | `N/A [2]` | relay advertisement is **voluntary and per-deployment** (RFC 4380 §5), so reachability depends on operator choice, not on any bits in the address |
 
-The second row is the strongest argument for the transition overlay: IANA
-itself marks the point where the table stops being sufficient. Collapsing `N/A`
-to `FALSE` would have raddr assert, in its own voice, a policy the registry
-specifically withheld.
+**The two `N/A`s are not one case.** They carry two different IANA footnotes
+pointing at two different RFCs, and a reader who follows `[2]` expecting 6to4's
+reason will not find it. raddr reported them merged until this was caught; the
+merged version was wrong about Teredo specifically.
+
+Collapsing either to `FALSE` would have raddr assert, in its own voice, a policy
+the registry specifically withheld.
 
 **Footnote markers are data; footnote text is not in the file.** Markers appear
 both in `Address Block` (`192.0.0.0/24 [2]`, `2002::/16 [3]`) and inside policy
@@ -1054,11 +1082,21 @@ rather than the build-script shape the IANA registries use. A `data-raw/` script
 that "builds" a table from a literal in its own source would be ceremony around
 a constant.
 
-**IANA marks the boundary itself.** §7.1 found that the only two non-deprecated
-blocks IANA leaves `N/A` for `Globally Reachable` are Teredo `2001::/32` and
-6to4 `2002::/16`, and the reason is that reachability follows the *embedded*
-IPv4 address. So the overlay is not raddr second-guessing the registry — the
-registry declines, in its own voice, exactly where the overlay picks up. The
+**IANA marks the boundary itself — but only half of it is about embedding.**
+§7.1 found that the only two non-deprecated blocks IANA leaves `N/A` for
+`Globally Reachable` are Teredo `2001::/32` and 6to4 `2002::/16`. For 6to4 the
+reason really is that reachability follows the *embedded* IPv4 address, so the
+registry declines in its own voice exactly where the overlay picks up.
+
+For Teredo it is not. RFC 4380 §5 makes relay advertisement voluntary and
+per-deployment, so IANA's `N/A` there says *nobody can answer this from the
+address at all* — including the overlay. The overlay still earns its Teredo row,
+but on a different ground: the address carries extractable structure (a server
+and a client, §7.2) that is worth reporting on its own terms. It does not
+resolve the `N/A`, and §7.2 must not be read as if it did.
+
+This distinction was merged in an earlier draft, which made the boundary
+argument look stronger and more uniform than the registry supports. The
 `::/96` and `::ffff:0:0:0/96` rows aside, the overlay mostly **annotates** the
 IANA table rather than extending it.
 
@@ -1079,7 +1117,8 @@ necessary:
   globally unique IPv4) that can sit under any `/64`.
 
 **The u-byte is why the segments exist.** RFC 6052 reserves bits 64–71, and the
-embedded address skips them, so four of the six lengths split it in two:
+embedded address skips them, so three of the six lengths — /40, /48 and /56 —
+split it in two. /32, /64 and /96 are contiguous:
 
 | prefix length | segments (offset, bits) |
 |---|---|

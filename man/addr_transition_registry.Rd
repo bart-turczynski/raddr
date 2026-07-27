@@ -53,7 +53,10 @@ is not always one row per form:
 \describe{
 \item{Teredo carries two addresses}{a server, in the clear, and a client
 stored bitwise-complemented so a NAT will not rewrite it
-(\code{complement = TRUE}).}
+(\code{complement = TRUE}). The client is the only complemented \emph{address},
+not the only complemented \emph{field} -- RFC 4380 section 4 also stores the
+mapped UDP port at bits 80-95 as XOR \code{0xFFFF}. This table reports
+addresses, so the port does not appear in it.}
 \item{NAT64 geometry follows the prefix length, not a prefix}{RFC 6052
 permits six lengths, and a network-specific prefix may be any prefix of
 one of them -- so those rows carry a \code{prefix_len} and no block. At /40,
