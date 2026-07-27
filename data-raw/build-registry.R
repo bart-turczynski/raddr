@@ -531,6 +531,27 @@ build_space_blocks <- function(paths) {
   tbl
 }
 
+# Section 5.3.4's fourth test, applied at the earliest possible moment. The
+# test suite enforces it too, but a maintainer regenerating the registry should
+# find out HERE -- at the point the new row arrives -- rather than later. The
+# whole point is that an unclassified block fails loudly instead of landing in
+# `global`.
+check_category_coverage <- function(blocks, space) {
+  unmapped <- setdiff(
+    c(blocks$block, space$block), names(raddr_category_map)
+  )
+  if (length(unmapped)) {
+    stop(
+      "registry block(s) with no category entry: ",
+      paste(unmapped, collapse = ", "),
+      "\nadd them to R/category.R -- an unclassified block must not default ",
+      "to `global`",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 # "Thu, 09 Oct 2025 21:51:16 GMT" -> "2025-10-09". Done here, once, with an
 # explicit month map rather than strptime's %b, so the stored stamp does not
 # depend on the locale of the machine that built it -- and so the package needs
@@ -583,6 +604,7 @@ if (check_only) {
 
   paths <- lapply(sources, function(s) s$path)
   committed <- env$raddr_registry_data$blocks
+  check_category_coverage(committed, env$raddr_registry_data$space)
 
   problems <- character()
   if (!identical(build_blocks(paths), committed)) {
@@ -660,6 +682,7 @@ for (key in all_keys) {
 paths <- lapply(sources, function(s) s$path)
 blocks <- build_blocks(paths)
 space <- build_space_blocks(paths)
+check_category_coverage(blocks, space)
 
 row_counts <- c(
   v4 = sum(blocks$space == "v4"),

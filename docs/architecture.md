@@ -834,7 +834,7 @@ fails is its reason, at no extra cost.
 |---|---|---|
 | `block` | `character` | matched registry prefix |
 | `name`, `rfc` | `character` | registry columns; `rfc` is the provenance string |
-| `category` | factor | raddr's vocabulary — 18 levels, enumerated below. **Not** `scope` |
+| `category` | factor | raddr's vocabulary — 19 levels, enumerated below. **Not** `scope` |
 | `globally_reachable` | `logical` | the IANA column, **not** a derived `is_global` |
 | `forwardable`, `source`, `destination`, `reserved_by_protocol` | `logical` | the other four IANA columns |
 | `embedded_kind` | factor | the *mechanism*: `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
@@ -863,7 +863,7 @@ multicast scope nibble is the one piece of IPv6 reachability semantics a pure
 offline classifier can state with full confidence, so `scope` must stay free to
 name it. Renaming is cheap now and breaking later.
 
-#### 5.3.2 The 18 `category` levels
+#### 5.3.2 The 19 `category` levels
 
 The criterion, which generates every call below:
 
@@ -889,7 +889,8 @@ The criterion, which generates every call below:
 | `dummy` | `192.0.0.8/32`, `100:0:0:1::/64` |
 | `discovery` | `192.0.0.170/32`, `192.0.0.171/32` (NAT64/DNS64 discovery) |
 | `special` | in the special-purpose registry, and raddr has no shorter true word than its `name` |
-| `global` | no special-purpose block matched; answered from the address-space fallback (§7) |
+| `unallocated` | IANA holds it and has neither purposed nor delegated it — the 16 IPv6 `Reserved by IETF` rows |
+| `global` | delegated to an RIR (IPv4) or the one block IANA assigns unicast from, `2000::/3` |
 
 Five calls need their reasoning recorded, because each was contested:
 
@@ -930,6 +931,45 @@ short word answers. It is **not** a catch-all: a new IANA row nobody classified
 still fails the build (§5.3.3). `special` and `global` are different answers and
 must never be merged — one means "matched, and `name` is the best available
 description", the other means "no special-purpose block matched at all".
+
+**`unallocated` is the nineteenth, and the eighteen were never total**
+**[verified 2026-07-27].** This section asserted totality; measuring it while
+building the map falsified the claim twice. `multicast` and `global` have **no
+special-purpose block at all**, so "every declared level is used" was
+unsatisfiable over 51 blocks — the address-space pair (§7.3) supplies both. And
+16 IPv6 address-space rows named `Reserved by IETF` match none of the eighteen.
+
+Every near-miss is wrong for a stated reason. `global` is false: IANA's own note
+on `2000::/3` limits unicast assignment to `2000::/3`, so calling the other
+seven eighths globally reachable asserts reachability for space nobody may use.
+`special` is definitionally "in the special-purpose registry", and these are
+not — and §5.3.2 already says `special` is an assignment, not a fallthrough, so
+widening it to cover *unassigned* space would turn it into exactly the
+fallthrough that sentence forbids. `future_use` is RFC 1112 §4's word for
+`240/4`, and two of these rows are *deprecated*, which is the opposite of
+future. `reserved` stays deleted.
+
+**The survey settles the name, and it settles it against `reserved`**
+**[measured 2026-07-27].** Two of three comparable implementations do name this
+space, and both call it `reserved` while simultaneously asserting the thing that
+is false about it:
+
+| Tool | Its name for `4000::1` | Also reports |
+|---|---|---|
+| CPython `ipaddress` | `is_reserved` (15 rows — `fec0::/10` omitted) | `is_global == True` |
+| R `ipaddress` | `is_reserved` (coarse `::/3`, `4000::/2`, `8000::/2`) | `is_global == True` |
+| `ipaddr.js` | `unicast` — the default fallthrough | same label as real global unicast |
+
+Three tools, three answers, all three wrong. `ipaddr.js`'s `reserved` is
+`2001::/23` + `2001:db8::/32` + `3fff::/20` — a set **disjoint** from CPython's
+`reserved`, which is the sharpest possible evidence for the ecosystem-ambiguity
+finding that deleted the word. `unallocated` is unattested in the survey, and
+that is a point in its favour: it cannot inherit four incompatible meanings.
+
+R `ipaddress` is also the P9 case study in the flesh — its `::/3`-style
+aggregates lose `fec0::/10`'s RFC 3879 and `200::/7`'s RFC 4048 exactly as §2
+predicted. raddr keeps all 16 rows and leaves both citations in the
+address-space `notes` column rather than in the level.
 
 A rejected level worth recording: **`identifier`**, proposed to cover ORCHIDv2,
 DETs and SRv6 SIDs together. It was rejected because it lumps cryptographic host
@@ -982,8 +1022,27 @@ Continuity Prefix [RFC7335]" with no change of prefix — while the block is the
 row's identity. Canonicalizing a block is deterministic parsing; grouping by
 name asserts semantic equivalence, which is the classification judgment itself.
 
-So: **51 block-keyed entries in `data-raw/`**, joined into the vendored data at
-build time, with four tests.
+So: **322 block-keyed entries**, with four tests. **[implemented 2026-07-27]**
+
+Two corrections to this subsection as first written. The count was 51 because
+the address-space pair was not yet vendored; the map must cover both pairs, and
+it is 322 rather than 327 because five blocks appear in both and are mapped
+once — which is also what makes it impossible for the two layers to disagree
+about them. And the map lives in **`R/category.R`**, not `data-raw/`: §7.2's
+rule is that "a `data-raw/` script that builds a table from a literal in its own
+source is ceremony around a constant", and this subsection's own next sentence
+already says it follows `R/transition.R`'s pattern. The pattern was the
+load-bearing half; the location was not.
+
+Every block is listed explicitly, **including the 221 IPv4 `/8`s delegated to an
+RIR**, which could have been derived from the `status` column. Deriving them
+would mean a `/8` changing hands silently becomes `global`; listed, it fails the
+build and gets read. Test 4 is precisely that requirement, so the verbosity is
+the feature.
+
+Test 4 fires in two places: the test suite, and `data-raw/build-registry.R`
+itself, so a maintainer regenerating the registry learns of an unclassified
+block at the moment it arrives rather than one gate later.
 
 1. Every special-purpose block resolves to exactly one level.
 2. Every declared level is used by at least one block.
@@ -1127,7 +1186,7 @@ addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 
 ```r
 addr_classify(a)         # -> raddr_class
-addr_category(a)         # factor, 18 levels (section 5.3.2). Was addr_scope()
+addr_category(a)         # factor, 19 levels (section 5.3.2). Was addr_scope()
 addr_embeddings(a)       # list_of<raddr_embedding>, always. Replaces
                          #   addr_embedded_scope(); see section 5.3.5
 addr_within(a, blocks)   addr_within_any(a, blocks)
@@ -1141,6 +1200,7 @@ addr_registry_version()  addr_registry_outdated(max_age = 365)
 addr_transition_registry(what = c("prefixes", "embeddings"))
 addr_transition_version()
 addr_address_space()  addr_address_space_version()
+addr_category_map()  addr_category_version()
 ```
 
 `addr_transition_*` were added in Epic H. The overlay is stamped separately from
