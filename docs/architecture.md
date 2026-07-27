@@ -1140,12 +1140,23 @@ addr_registry()  addr_codes_registry()
 addr_registry_version()  addr_registry_outdated(max_age = 365)
 addr_transition_registry(what = c("prefixes", "embeddings"))
 addr_transition_version()
+addr_address_space()  addr_address_space_version()
 ```
 
-The last two were added in Epic H. The overlay is stamped separately from the
-IANA snapshot (§7.2), so it needs its own version accessor; folding it into
+`addr_transition_*` were added in Epic H. The overlay is stamped separately from
+the IANA snapshot (§7.2), so it needs its own version accessor; folding it into
 `addr_registry_version()` would make one date imply something about a table it
 says nothing about.
+
+`addr_address_space*` were added in Epic I and follow the same rule for the same
+reason (§7.3). They are a **separate accessor**, not a `which =` argument on
+`addr_registry()`: the two pairs have different columns, so one function would
+return a different shape per argument and `addr_registry()`'s documented
+promise of 51 rows with five policy columns would stop being true.
+
+There is deliberately no `addr_address_space_outdated()`, matching
+`addr_transition_version()`, which also ships without one. Adding it later is an
+API addition; removing it would be breaking.
 
 ### 6.5 Encoding round-trips
 
@@ -1167,9 +1178,19 @@ encoding pairs. Collisions under `addr_`: zero.
 
 ## 7. Classification data
 
-Source: the two IANA special-purpose registries (CC0, 4712 bytes, **51 blocks**
-— see §7.1, which corrects the "26 + 27 rows" this section used to claim). All
-five policy columns surfaced, never collapsed. `globally_reachable` reports
+Source: **four** IANA registries (CC0, 29 777 bytes), vendored as two pairs
+that answer two different questions.
+
+| Pair | Rows | Answers | Accessor |
+|---|---|---|---|
+| special-purpose v4 + v6 | **51 blocks** | policy — the five IANA logicals | `addr_registry()` |
+| address space v4 + v6 | **276 rows** | identity — what a range is for, who holds it | `addr_address_space()` |
+
+The special-purpose figure corrects the "26 + 27 rows" this section used to
+claim; see §7.1. The address-space pair is §7.3, and IANA states the precedence
+between them itself.
+
+All five policy columns surfaced, never collapsed. `globally_reachable` reports
 IANA's `Globally Reachable` column verbatim, per row, with an RFC citation — it
 is **not** a derived `is_global`, and §5.3 says the same. RFC 8190 §3 renamed
 this column *away from* "Global" precisely to stop that reading: `True` holds
@@ -1195,8 +1216,8 @@ docs and partly from memory. Removing it deletes the package's only data table
 with no upstream authority.
 
 No network refresh in v0.1. The registries change on a multi-year cadence, the
-whole file is 4.7 KB, and "zero network code" is a cleaner claim than "network
-code that defaults off".
+whole vendored payload is 29 KB, and "zero network code" is a cleaner claim
+than "network code that defaults off".
 
 ### 7.1 What the CSVs actually contain **[implemented 2026-07-27]**
 
@@ -1368,6 +1389,67 @@ silently, and every ISATAP address would have failed to match. It is spelled
 `bitwNot(0x02000000L)` instead. This is the §12 signed-integer constraint
 reappearing in `bitwAnd`'s *operand* rather than in a shift, which is the form
 the constraint as written does not obviously cover.
+
+### 7.3 The address-space fallback **[implemented 2026-07-27]**
+
+**Why a second pair at all.** Each of these two registries is an *exact
+partition* of its space — 256 IPv4 `/8`s, and 20 IPv6 blocks that tile `::/0`.
+With them, classification is **total**: every address matches some row, so
+`global` is a statement backed by a registry row rather than an inference from
+an absence.
+
+The failure mode this closes is not hypothetical, and the clearest case is
+**multicast**: `224.0.0.0/4` and `ff00::/8` appear in *neither* special-purpose
+registry. A classifier derived from that pair alone therefore has no multicast
+handling at all, which is how `ssrfcheck` shipped CVE-2025-8267. P9.
+
+**Precedence is stated by the source, not chosen by raddr.** The address-space
+registries carry "For authoritative registration, see [Special-Purpose Address
+Space]", so special-purpose outranks address space on IANA's own instruction.
+Because the address-space pair is a partition, *every* special-purpose block
+falls inside one of its rows — precedence decides every doubly-matched lookup,
+not an edge case. **Five prefixes appear in both pairs identically**
+[verified 2026-07-27]: `0.0.0.0/8`, `10.0.0.0/8`, `127.0.0.0/8`, `fc00::/7`,
+`fe80::/10`. (`RADD-pekbpche` predicted "seven IPv6 and eleven IPv4"; measuring
+it gave five, and the measurement stands.)
+
+**Identity, and no invented policy.** The five policy logicals do not exist in
+these registries, so they are absent from the table rather than filled in. What
+these carry instead is `status` (IPv4: `ALLOCATED` / `LEGACY` / `RESERVED`),
+`date` (IPv4), and `notes` (IPv6 — free prose, and the only record that
+`200::/7` and `fec0::/10` are deprecated). `rfc` is `NA` for **every** IPv4 row,
+because that registry has no reference column; its citations live in numeric
+footnotes whose text is on the HTML page and not in the CSV.
+
+**The IPv6 Global Unicast Assignments registry is deliberately not vendored.**
+It is not a partition — sub-ranges of `2000::/3` appear in no row — so absence
+there would mean "unallocated", a different answer from "not found".
+
+**Every documented parsing trap reproduced** [verified 2026-07-27]. The IPv4
+`Prefix` column is `000/8`…`255/8` and **not CIDR** — it is read as a number and
+the block rebuilt canonically, because raddr's own strict dialect rejects `000`
+as a leading-zero octet, which is exactly the ambiguity behind the `inet_aton`
+CVE class. The IPv4 header literally reads `Status [1]`, so matching on
+`Status` finds nothing. The IPv6 export at `ipv6-address-space.csv` 404s into a
+4216-byte HTML body and the real file is `ipv6-address-space-1.csv`. The `RDAP`
+column is corrupted by the export itself on every ARIN and AFRINIC row, two
+URLs run together with no separator — dropped here, but the general lesson is
+that **an IANA CSV export does not guarantee per-column fidelity**.
+
+**§5.1.1 recurs, and the stakes are larger.** `8000::/3` stores `w1` as
+`0x80000000` — R's `NA_integer_` bit pattern — so the AS112 `/48` was not a
+one-off. The partition check tiles the space through the unsigned proxy for
+this reason; on a naive numeric read the check does not merely mis-report, it
+silently loses an eighth of the IPv6 address space.
+
+**Two stamps, and here the "older half" rule does real work.** The pair is
+stamped separately from the special-purpose pair, for §7.2's reason. Unlike
+that pair — whose halves share a deploy second, making the rule a no-op — these
+four files are **not** served with one timestamp: three carry
+`Thu, 09 Oct 2025 21:51:16 GMT` and the IPv6 address-space export carries
+`Sat, 11 Oct 2025 00:06:16 GMT`. The `Last-Modified`-is-a-deploy-timestamp
+caveat (§7.1) applies more strongly here, since these two registries' editorial
+dates are known to differ from what they are served with (`RADD-lfgkjvfv`).
 
 ---
 

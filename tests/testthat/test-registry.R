@@ -143,7 +143,7 @@ test_that("the exported table hides the matcher's storage", {
 })
 
 test_that("the vendored CSVs ship, and match the recorded provenance", {
-  for (key in c("v4", "v6")) {
+  for (key in c("v4", "v6", "v4_space", "v6_space")) {
     meta <- raddr_registry_data$meta[[key]]
     path <- system.file(
       "extdata", basename(meta$path),
@@ -212,4 +212,154 @@ test_that("raddr still reaches no network", {
   expect_false(any(grepl(
     "download\\.file|url\\(|curlGetHeaders|httr|curl::", code
   )))
+})
+
+# --- the address-space fallback layer ---------------------------------------
+#
+# These tests pin the one property the whole fallback rests on: each registry
+# is an EXACT partition of its space. Everything else about this layer is a
+# convenience; that property is what turns "no special-purpose block matched"
+# from an absence into an answer.
+
+test_that("the address-space snapshot is 276 rows, 256 v4 and 20 v6", {
+  space <- addr_address_space()
+
+  expect_s3_class(space, "data.frame")
+  expect_equal(nrow(space), 276L)
+  expect_equal(sum(space$space == "v4"), 256L)
+  expect_equal(sum(space$space == "v6"), 20L)
+  expect_equal(anyDuplicated(space$block), 0L)
+  expect_false(any(c("w1", "w2", "w3", "w4") %in% names(space)))
+})
+
+test_that("the IPv4 address space is an exact partition into 256 /8s", {
+  space <- addr_address_space()
+  v4 <- space[space$space == "v4", ]
+
+  expect_true(all(v4$prefix_len == 8L))
+  octets <- as.integer(sub("[.].*$", "", v4$block))
+  expect_equal(sort(octets), 0:255)
+
+  # Upstream writes "000/8", not CIDR. The leading zeros must be gone: raddr's
+  # own strict dialect rejects "000" as an octet, which is the ambiguity behind
+  # the inet_aton CVE class.
+  expect_false(any(grepl("/8$", v4$block) & grepl("^0[0-9]", v4$block)))
+  expect_true("0.0.0.0/8" %in% v4$block)
+  expect_true("255.0.0.0/8" %in% v4$block)
+})
+
+test_that("the IPv6 address space tiles ::/0 with no gap and no overlap", {
+  blocks <- raddr_registry_data$space
+  v6 <- blocks[blocks$space == "v6", ]
+
+  expect_equal(nrow(v6), 20L)
+  expect_true(all(v6$prefix_len <= 16L))
+
+  # Every row is /10 or shorter, so the tiling is exact in 16-bit space. The
+  # widening matters: 8000::/3 stores w1 as R's NA_integer_ bit pattern.
+  w1 <- as.numeric(v6$w1)
+  w1[is.na(v6$w1)] <- 2147483648
+  w1[!is.na(v6$w1) & v6$w1 < 0] <- w1[!is.na(v6$w1) & v6$w1 < 0] + 4294967296
+  start <- w1 %/% 65536
+  size <- 2^(16L - v6$prefix_len)
+
+  ord <- order(start)
+  start <- start[ord]
+  size <- size[ord]
+
+  expect_equal(start[1], 0)
+  expect_equal(sum(size), 65536)
+  expect_equal(start[-1], (start + size)[-length(start)])
+})
+
+test_that("0x80000000 appears a second time, and survives", {
+  # Section 5.1.1 is load-bearing for the vendored data. It was already true of
+  # 2620:4f:8000::/48 in the special-purpose registry; 8000::/3 is a second
+  # instance covering an eighth of the IPv6 address space, so a table built on
+  # "words are numbers" now loses far more than one AS112 prefix.
+  blocks <- raddr_registry_data$space
+  row <- blocks[blocks$block == "8000::/3", ]
+
+  expect_equal(nrow(row), 1L)
+  expect_true(is.na(row$w1))
+  expect_equal(row$w2, 0L)
+  expect_equal(row$name, "Reserved by IETF")
+})
+
+test_that("multicast exists here and in no special-purpose registry", {
+  # This is the CVE-2025-8267 shape: a classifier derived from the
+  # special-purpose registries alone has no multicast handling at all.
+  reg <- addr_registry()
+  space <- addr_address_space()
+
+  expect_false(any(grepl("^224[.]|^ff00::", reg$block)))
+  expect_true("ff00::/8" %in% space$block)
+  expect_equal(sum(space$name == "Multicast", na.rm = TRUE), 17L)
+})
+
+test_that("the address-space layer states identity and invents no policy", {
+  space <- addr_address_space()
+
+  # The five policy logicals do not exist upstream here, so they must not exist
+  # here either. Absence is the honest answer, not FALSE.
+  expect_false(any(
+    c(
+      "source", "destination", "forwardable", "globally_reachable",
+      "reserved_by_protocol"
+    ) %in% names(space)
+  ))
+
+  v4 <- space[space$space == "v4", ]
+  v6 <- space[space$space == "v6", ]
+
+  # IPv4 carries status and date, and has no reference column at all upstream.
+  expect_setequal(unique(v4$status), c("ALLOCATED", "LEGACY", "RESERVED"))
+  expect_true(all(is.na(v4$rfc)))
+  expect_true(all(is.na(v4$notes)))
+
+  # IPv6 carries a reference and prose, and has no status column upstream.
+  expect_true(all(is.na(v6$status)))
+  expect_true(all(nzchar(v6$rfc)))
+  expect_match(
+    v6$notes[v6$block == "200::/7"], "Deprecated as of December 2004"
+  )
+})
+
+test_that("the two layers are stamped separately", {
+  # Different files from different registries: one date across both would make
+  # each half assert something about a table it says nothing about.
+  version <- addr_address_space_version()
+
+  expect_type(version, "character")
+  expect_length(version, 1L)
+  if (!is.na(version)) {
+    expect_match(version, "^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+    expect_equal(
+      version,
+      min(
+        raddr_registry_data$meta$v4_space$last_modified_date,
+        raddr_registry_data$meta$v6_space$last_modified_date
+      )
+    )
+  }
+
+  # And the halves genuinely differ here, unlike the special-purpose pair, so
+  # the "older of the two" rule is doing real work.
+  expect_false(identical(
+    raddr_registry_data$meta$v4_space$last_modified,
+    raddr_registry_data$meta$v6_space$last_modified
+  ))
+})
+
+test_that("special-purpose outranks address space where both match", {
+  # IANA states the precedence itself; these five prefixes appear in both pairs
+  # identically, and the special-purpose row is the authoritative one.
+  reg <- addr_registry()
+  space <- addr_address_space()
+
+  both <- intersect(reg$block, space$block)
+  expect_setequal(
+    both,
+    c("0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "fc00::/7", "fe80::/10")
+  )
 })

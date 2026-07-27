@@ -96,11 +96,91 @@ addr_registry <- function() {
   raddr_registry_data$blocks[registry_public_columns]
 }
 
-#' Provenance of the bundled registry snapshot
+address_space_public_columns <- c(
+  "block", "space", "prefix_len", "name", "rfc",
+  "status", "date", "notes", "footnotes"
+)
+
+#' The bundled IANA address-space registries
 #'
-#' `addr_registry_version()` reports the date the vendored registry files were
-#' last **served** with. `addr_registry_outdated()` says whether that is longer
-#' ago than `max_age` days.
+#' Returns the IANA IPv4 and IPv6 Address Space registries as one data frame,
+#' exactly as vendored. This is the **fallback** layer: it answers what a range
+#' is for and who holds it, for every address, including the ranges the
+#' special-purpose registries never mention.
+#'
+#' @section Why a second pair of registries:
+#'
+#' Each of these two registries is an **exact partition** of its address space
+#' -- 256 IPv4 `/8`s and 20 IPv6 blocks that tile `::/0` with no gap and no
+#' overlap, asserted at build time. Together with [addr_registry()] that makes
+#' classification total: every address matches some row, so "globally
+#' reachable ordinary unicast" becomes a statement backed by a registry row
+#' rather than an inference from an absence.
+#'
+#' Classifying from the special-purpose registries alone is a known
+#' CVE-producing pattern, and the clearest case is **multicast**: neither
+#' special-purpose registry contains `224.0.0.0/4` or `ff00::/8` at all. A
+#' table derived from them therefore has no multicast handling, which is how
+#' `ssrfcheck` shipped CVE-2025-8267.
+#'
+#' @section Precedence, stated by the source:
+#'
+#' The special-purpose registries **outrank** these. That is not raddr's
+#' judgment: the address-space registries themselves carry "For authoritative
+#' registration, see \[Special-Purpose Address Space\]".
+#'
+#' Because these two are exact partitions, *every* special-purpose block falls
+#' inside one of their rows, so precedence is not an edge case -- it decides
+#' every lookup that matches both layers. Five prefixes appear in both pairs
+#' **identically** (`0.0.0.0/8`, `10.0.0.0/8`, `127.0.0.0/8`, `fc00::/7`,
+#' `fe80::/10`); for those the two layers agree and only the columns differ.
+#'
+#' @section No policy columns, and none invented:
+#'
+#' The five IANA policy logicals do not exist in these registries, so they are
+#' absent here rather than filled in. The special-purpose registry answers
+#' policy; the address-space registry answers identity; neither invents the
+#' other's answer.
+#'
+#' What these carry instead is `status` (IPv4: `ALLOCATED`, `LEGACY` or
+#' `RESERVED`; `NA` for IPv6, which has no such column), `date` (IPv4 only) and
+#' `notes` (IPv6 only -- free prose, and the only record that `200::/7` and
+#' `fec0::/10` are deprecated).
+#'
+#' `rfc` is `NA` for **every** IPv4 row, because that registry has no reference
+#' column. The RFCs behind its rows live in numeric footnotes whose text is on
+#' the registry page and not in the CSV, so raddr reports the marker in
+#' `footnotes` and does not transcribe the citation.
+#'
+#' @return A data frame of 276 rows: 256 IPv4 and 20 IPv6.
+#'
+#' @seealso [addr_registry()] for the authoritative special-purpose layer, and
+#'   [addr_address_space_version()] for this snapshot's own provenance.
+#'
+#' @examples
+#' space <- addr_address_space()
+#' nrow(space)
+#'
+#' # The multicast ranges that appear in no special-purpose registry
+#' space[space$name == "Multicast", c("block", "status")]
+#'
+#' # The IPv6 side is 20 rows that tile the whole space
+#' space[space$space == "v6", c("block", "name")]
+#'
+#' @export
+addr_address_space <- function() {
+  raddr_registry_data$space[address_space_public_columns]
+}
+
+#' Provenance of the bundled special-purpose registry snapshot
+#'
+#' `addr_registry_version()` reports the date the vendored **special-purpose**
+#' registry files were last **served** with. `addr_registry_outdated()` says
+#' whether that is longer ago than `max_age` days.
+#'
+#' These two answer for [addr_registry()] only. The address-space pair is
+#' vendored from different files and stamped separately; see
+#' [addr_address_space_version()].
 #'
 #' @section What the stamp is, and is not:
 #'
@@ -139,7 +219,7 @@ addr_registry <- function() {
 #'
 #' There is no `addr_registry_refresh()`. raddr performs no network access at
 #' all: the registries change on a multi-year cadence and the whole vendored
-#' payload is 4.7 KB, so shipping it outright is a cleaner claim than network
+#' payload is 29 KB, so shipping it outright is a cleaner claim than network
 #' code that defaults to off. A stale snapshot is fixed by upgrading the
 #' package.
 #'
@@ -186,4 +266,44 @@ addr_registry_outdated <- function(max_age = 365) {
   }
 
   as.numeric(Sys.Date() - stamped) > max_age
+}
+
+#' Provenance of the bundled address-space snapshot
+#'
+#' Reports the date the vendored IANA address-space files were last **served**
+#' with, normalized to ISO at build time. This is [addr_registry_version()]'s
+#' counterpart for [addr_address_space()].
+#'
+#' @section Why this is stamped separately:
+#'
+#' The two pairs are different files from different registries, and one date
+#' across both would make each half assert something about a table it says
+#' nothing about -- the same reason the transition overlay carries its own
+#' stamp (`addr_transition_version()`).
+#'
+#' The separation is not theoretical here. The four vendored files are **not**
+#' served with one timestamp: three carry `Thu, 09 Oct 2025 21:51:16 GMT` and
+#' the IPv6 address-space export carries `Sat, 11 Oct 2025 00:06:16 GMT`. So
+#' the "older of the two halves" rule, which is a no-op for the special-purpose
+#' pair, actually does work for this one.
+#'
+#' The same caveat applies as to [addr_registry_version()], and more strongly:
+#' `Last-Modified` is a site **deploy** timestamp, not an editorial one. For
+#' the special-purpose pair the served date happens to match IANA's own page
+#' level `Last Updated`. For these two it does not, so this stamp answers
+#' "when was this file written to the server" and nothing more. Content
+#' identity is tracked exactly and separately, by a sha256 per file.
+#'
+#' @return A length-1 `character` `"YYYY-MM-DD"` date, or `NA_character_` when
+#'   either half of the snapshot is undated.
+#'
+#' @seealso [addr_address_space()] for the data itself.
+#'
+#' @examples
+#' addr_address_space_version()
+#'
+#' @export
+addr_address_space_version <- function() {
+  version <- raddr_registry_data$meta$space_version
+  if (is.null(version)) NA_character_ else as.character(version)
 }

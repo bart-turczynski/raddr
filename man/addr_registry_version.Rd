@@ -3,7 +3,7 @@
 \name{addr_registry_version}
 \alias{addr_registry_version}
 \alias{addr_registry_outdated}
-\title{Provenance of the bundled registry snapshot}
+\title{Provenance of the bundled special-purpose registry snapshot}
 \usage{
 addr_registry_version()
 
@@ -19,9 +19,14 @@ addr_registry_outdated(max_age = 365)
 snapshot is older than \code{max_age} days \strong{or} undated.
 }
 \description{
-\code{addr_registry_version()} reports the date the vendored registry files were
-last \strong{served} with. \code{addr_registry_outdated()} says whether that is longer
-ago than \code{max_age} days.
+\code{addr_registry_version()} reports the date the vendored \strong{special-purpose}
+registry files were last \strong{served} with. \code{addr_registry_outdated()} says
+whether that is longer ago than \code{max_age} days.
+}
+\details{
+These two answer for \code{\link[=addr_registry]{addr_registry()}} only. The address-space pair is
+vendored from different files and stamped separately; see
+\code{\link[=addr_address_space_version]{addr_address_space_version()}}.
 }
 \section{What the stamp is, and is not}{
 
@@ -65,7 +70,7 @@ the right rule if they ever diverge, not because it is doing work today.
 
 There is no \code{addr_registry_refresh()}. raddr performs no network access at
 all: the registries change on a multi-year cadence and the whole vendored
-payload is 4.7 KB, so shipping it outright is a cleaner claim than network
+payload is 29 KB, so shipping it outright is a cleaner claim than network
 code that defaults to off. A stale snapshot is fixed by upgrading the
 package.
 }
