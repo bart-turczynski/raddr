@@ -889,8 +889,9 @@ encoding pairs. Collisions under `addr_`: zero.
 
 ## 7. Classification data
 
-Source: the two IANA special-purpose registries (CC0, 4.7 KB, 26 + 27 rows).
-All five policy columns surfaced, never collapsed. `Globally Reachable` **is**
+Source: the two IANA special-purpose registries (CC0, 4712 bytes, **51 blocks**
+— see §7.1, which corrects the "26 + 27 rows" this section used to claim). All
+five policy columns surfaced, never collapsed. `Globally Reachable` **is**
 `is_global`, authoritatively, per row, with an RFC citation.
 
 Lookup is **longest-prefix-match**, not first-match-wins, because the registry
@@ -913,6 +914,71 @@ with no upstream authority.
 No network refresh in v0.1. The registries change on a multi-year cadence, the
 whole file is 4.7 KB, and "zero network code" is a cleaner claim than "network
 code that defaults off".
+
+### 7.1 What the CSVs actually contain **[implemented 2026-07-27]**
+
+Vendored from the two `-1.csv` endpoints, `Last-Modified: 2025-10-09`, 4712
+bytes. Everything below was found by parsing the real bytes, and each item is
+something a naive read of the files gets wrong.
+
+**The row count in §7 was a line count.** Three records wrap across lines,
+because they cite more than one RFC in a quoted field
+(`255.255.255.255/32`, `2001::/32`, `fc00::/7`). The files hold 26 and 27
+*lines* but **25 and 25 records**. One v4 record then names two prefixes in a
+single field — `"192.0.0.170/32, 192.0.0.171/32"` — and is split, because a
+composite block matches nothing. The result is **26 + 25 = 51 blocks**, and a
+block is the unit raddr stores and matches.
+
+**The policy columns are three-valued, not boolean.** Four spellings occur:
+`True`, `False`, `N/A`, and empty. They map to `TRUE` / `FALSE` / `NA` / `NA`,
+and the two `NA` cases mean different things — both of which are *IANA
+declining to answer*, which is not the same as answering `False`:
+
+| block | `Globally Reachable` | why |
+|---|---|---|
+| `192.88.99.0/24`, `2001:10::/28` | empty | deprecated; carries a `Termination Date` and no policy values at all |
+| `2001::/32` (Teredo), `2002::/16` (6to4) | `N/A` | reachability follows the **embedded** IPv4 address, which a prefix table cannot express |
+
+The second row is the strongest argument for the transition overlay: IANA
+itself marks the point where the table stops being sufficient. Collapsing `N/A`
+to `FALSE` would have raddr assert, in its own voice, a policy the registry
+specifically withheld.
+
+**Footnote markers are data; footnote text is not in the file.** Markers appear
+both in `Address Block` (`192.0.0.0/24 [2]`, `2002::/16 [3]`) and inside policy
+values (`False [1]`). They are stripped from the values and recorded in a
+`footnotes` column, because their *text* lives only on the HTML registry page.
+raddr reports that a caveat exists and does not invent its wording.
+
+**§5.1.1 is load-bearing for the vendored data, not just for user input.**
+`2620:4f:8000::/48`, the AS112 direct-delegation prefix, has second word
+`0x80000000` — the exact pattern R reserves for `NA_integer_`. A registry
+built on "words are numbers" either loses this block or corrupts it. Storing
+words as raw bits is what makes the vendored table representable at all, and
+`as.integer(-2147483648)` is an out-of-range `NA` plus a warning, so the fold
+is assigned rather than coerced.
+
+**`--check` compares content, never dates.** The staleness guard rebuilds the
+table from the committed `inst/extdata` bytes and diffs it against the
+committed `R/sysdata.rda`. A rebuild on a different day, or on a machine that
+got no `Last-Modified` header, must not fail the guard — provenance is not
+content.
+
+**The repo's own hygiene tried to rewrite the vendored bytes.** The CSVs
+terminate rows with CRLF but use bare LF inside their wrapped quoted fields —
+genuinely mixed, upstream. `.gitattributes`' `* text=auto eol=lf` and the
+`mixed-line-ending` / `end-of-file-fixer` pre-commit hooks all normalize that,
+which changes the file and therefore falsifies the sha256 the build script just
+recorded. `inst/extdata/*.csv` is now `-text` in `.gitattributes` and excluded
+from the three whitespace hooks. **A vendoring pattern needs an exemption from
+the repo's formatting, or the formatting silently invalidates the provenance.**
+
+**An undated snapshot is outdated.** The CSVs carry no version field, so the
+stamp is the served `Last-Modified`, normalized to ISO at build time with an
+explicit month map (never `strptime`'s locale-dependent `%b`). The stamp is the
+**older** of the two halves, and is `NA` if either half is undated;
+`addr_registry_outdated()` then returns `TRUE`. Treating absence of evidence as
+evidence of freshness is the one failure a staleness check exists to prevent.
 
 ---
 

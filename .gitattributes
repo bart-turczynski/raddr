@@ -1,2 +1,7 @@
 * text=auto eol=lf
 
+
+# Vendored upstream bytes. Byte-exact or the recorded sha256 is a lie: the IANA
+# CSVs terminate rows with CRLF but use bare LF inside their wrapped quoted
+# fields, so any eol normalization rewrites them.
+inst/extdata/*.csv -text
