@@ -1541,6 +1541,59 @@ addr_to_hex   / hex_to_addr          addr_to_integer / integer_to_addr
 `addr_to_integer()` returns `character` decimal by default so it always works,
 and `bignum` output only when that package is present. Degrade, never error.
 
+#### 6.5.1 The first three pairs **[implemented 2026-07-28]**
+
+Bytes, hex and binary ship together in `R/encoding.R`; the integer pair is
+`RADD-qqmsvpzr` and is not built yet. `docs/research/08-encoding-reverse.md` is
+organized as a numbered list of *round-trip failures*, and
+`tests/testthat/test-encoding.R` is organized the same way — one section per
+failure, asserting it happens where the document says and nowhere else.
+
+**The width is the family, and that is the whole design.** 4 octets for IPv4, 16
+for both IPv6 families. Nothing inspects the bits to choose a width. Research 08
+round-trip failure 2 is the reason: `192.0.2.1`, `::ffff:192.0.2.1` and the
+deprecated `::192.0.2.1` share their low 32 bits (RFC 4291 §2.5.5), so one
+integer names three distinct objects and the family must travel alongside the
+number. Here the length carries it, and the three decode back to three different
+addresses in three different families.
+
+The 4-in-6 form therefore encodes to **16** octets. Research 08 gotcha 23 warns
+that this surprises people; demoting it to 4 is the collapse raddr exists to
+refuse, and it is the same refusal as §5.3's on the classification side.
+
+**Leading zeros are load-bearing, which is the opposite of RFC 5952 §4.1.** That
+rule suppresses them in *text*; these are not text forms. Every output is fixed
+width and zero padded — `::1` is 32 hex digits, 31 of them `0`. Research 08 §3
+names mixing the two rules as a common bug, so both directions are pinned.
+
+**A short string is a guess, and raddr does not guess.** Seven hex digits is an
+IPv4 address missing one zero or an IPv6 address missing twenty-five. Any width
+other than the two the family fixes decodes to `NA`; nothing is padded to reach
+one. This is research 08 round-trip failure 5 read as a rule rather than as a
+caution.
+
+**The zone does not survive, and "it round-trips" is not "nothing was lost."**
+Both claims are true at once and the tests keep them apart.
+`bytes_to_addr(addr_to_bytes(x)) == x` holds, because §5.1.2 keeps the zone out
+of equality — but `addr_zone()` on the result is `NA`, because RFC 4007 §6 says
+zone indices are strictly local to a node and nothing in the octets can carry
+one (research 08 round-trip failure 1).
+
+**Input leniency is three named things and no others.** Uppercase hex, because
+RFC 3596 §2.5 and RFC 2874 §2.2.1 print their own examples in uppercase; an
+optional `0x`, which is a presentation convention with no RFC behind it, read
+and never written; and whitespace grouping, which research 08 §4 calls cosmetic.
+Nothing else is normalized away.
+
+**`bytes_to_addr()` refuses a bare `raw` vector.** Eight octets are one
+malformed address or two IPv4 addresses, and the caller knows which. The list is
+the vectorized form, and `list()` around a single address is the fix the error
+names.
+
+The decoders return a missing address rather than signalling, matching the
+single-dialect parsers of §6.1 — P2 is a promise about `addr_parse()`, not about
+every shortcut.
+
 ### 6.6 Prefix
 
 `addr_` throughout. Measured **[verified 2026-07-26]**: `ipaddress` exports 29
@@ -2080,6 +2133,68 @@ IPv4. The error was in the *baseline*: one dialect over clean dotted quads takes
 about a second, so a single noisy sample inflates it and flatters the ratio.
 Anything divided by a sub-second measurement needs `bench/record.R`'s
 best-of-seven, not one shot.
+
+### 11.1.2 Encoding round-trips, 1e6 addresses **[verified 2026-07-28]**
+
+`bench/record.R`, best of seven after a warm-up. Twelve operations, and
+`ipaddress` implements all twelve in C++, so this is the one part of the package
+where every number has a like-for-like baseline.
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_to_bytes()`, IPv4 | 0.177 s | 0.047 s | **3.77x** | <= 3x |
+| `addr_to_bytes()`, IPv6 | 0.197 s | 0.049 s | **4.02x** | <= 3x |
+| `addr_to_hex()`, IPv4 | 0.275 s | 0.229 s | 1.20x | <= 3x |
+| `addr_to_hex()`, IPv6 | 0.903 s | 0.427 s | 2.12x | <= 3x |
+| `addr_to_binary()`, IPv4 | 0.524 s | 0.261 s | 2.01x | <= 3x |
+| `addr_to_binary()`, IPv6 | 1.238 s | 0.418 s | 2.96x | <= 3x |
+| `bytes_to_addr()`, IPv4 | 0.360 s | 0.503 s | **0.72x** | <= 3x |
+| `bytes_to_addr()`, IPv6 | 0.464 s | 0.507 s | **0.92x** | <= 3x |
+| `hex_to_addr()`, IPv4 | 0.330 s | 0.136 s | 2.43x | <= 3x |
+| `hex_to_addr()`, IPv6 | 0.792 s | 0.300 s | 2.64x | <= 3x |
+| `binary_to_addr()`, IPv4 | 0.313 s | 0.071 s | **4.41x** | <= 3x |
+| `binary_to_addr()`, IPv6 | 0.797 s | 0.191 s | **4.17x** | <= 3x |
+
+Eight of twelve meet the target, two beat the C++ baseline outright, and four
+miss. Three things are worth recording.
+
+**The `list_of<raw>` shape is the cost, and it is symmetric.** `addr_to_bytes()`
+is the worst ratio in the table and `bytes_to_addr()` is the best — the only
+operation anywhere in raddr that is *faster* than `ipaddress`. Both facts have
+one cause. A million small raw vectors is a million R allocations, and reading
+them back is a million R-level element visits that a C++ implementation cannot
+skip either. `ipaddress` pays that cost only on the way in, where raddr pays it
+on the way out; on the way in the two are level and raddr's arithmetic-over-a-
+matrix decode wins. Nothing about the 0.72x is cleverness, and nothing about the
+3.77x is a defect in the encoder — it is the same allocation bound seen twice.
+
+Two rewrites of `addr_to_bytes()` were measured before this number was accepted.
+The obvious one — `as.raw()` once per address — runs at 0.95 s, five times
+slower than the `vec_chop()` of one flat vector that shipped. §11.1's lesson
+holds a third time: at 1e6 rows the cost is allocation, not arithmetic.
+
+**`binary_to_addr()` is the one real miss**, and it is regex-bound rather than
+allocation-bound. The validity scan is the single largest line item in either
+string decoder, and it cannot be skipped: `strtoi()` returns `NA` for a digit
+outside its base, which is most of a validity check, but it also *accepts*
+leading whitespace, a sign and a `0x` prefix, so `"0x0000c0"` would decode to a
+real address instead of to `NA`. The scan is what makes the width check mean
+what it says. Moving it from the TRE default to `perl = TRUE` took it from
+0.99 s to 0.13 s on 1e6 rows of 128 characters — a 7x win from one argument, and
+without it the decoders were at 13x rather than 4x. What remains is PCRE plus
+`strtoi()`, and closing the rest would mean a hand-rolled character-code decoder
+whose fast path is exactly the kind of "tiny edge case" this package exists to
+get right. Not worth it in pure R; it is O1's problem.
+
+**`addr_to_binary()`, IPv6 passes at 2.96x, which is not a pass to rely on.**
+It is inside the target by four hundredths and will read differently on another
+machine. Treat it as a fourth miss when deciding whether §8's deferred compiled
+path is worth building.
+
+Nothing here changes the v0.1 decision. §8 defers `src/` with the API frozen,
+and four operations at 4x on a pure-R implementation of a C++ baseline is the
+same evidence §11.2 already records, one epic later and an order of magnitude
+smaller.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**

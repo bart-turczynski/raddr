@@ -175,4 +175,51 @@ report("ratio, parse / one dialect, IPv6", parse_v6 / one_v6, "x")
 bad <- rep(c("1.2.3.4.5", "0177.0.0.1", "example.com", "g::1"), length(canonical) / 4)
 report("addr_parse, every row rejected", timing(addr_parse(bad)), "s")
 
+cat("\n== encoding round-trips ==\n")
+
+# Twelve operations, and `ipaddress` implements all twelve in C++, so this is
+# the one place in the file where every raddr number has a like-for-like
+# baseline. Both families are measured because the width is the family
+# (section 6.5) and the IPv6 side moves four times the bytes.
+encodings <- list(
+  bytes = list(to = addr_to_bytes, from = bytes_to_addr),
+  hex = list(to = addr_to_hex, from = hex_to_addr),
+  binary = list(to = addr_to_binary, from = binary_to_addr)
+)
+if (!is.null(ip)) {
+  encodings$bytes$their_to <- ipaddress::ip_to_bytes
+  encodings$bytes$their_from <- ipaddress::bytes_to_ip
+  encodings$hex$their_to <- ipaddress::ip_to_hex
+  encodings$hex$their_from <- ipaddress::hex_to_ip
+  encodings$binary$their_to <- ipaddress::ip_to_binary
+  encodings$binary$their_from <- ipaddress::binary_to_ip
+  ip6 <- ipaddress::ip_address(v6_plain)
+}
+
+for (name in names(encodings)) {
+  pair <- encodings[[name]]
+  for (family in c("v4", "v6")) {
+    ours_addr <- if (family == "v4") v4 else v6
+    encoded <- pair$to(ours_addr)
+    forward <- timing(pair$to(ours_addr))
+    backward <- timing(pair$from(encoded))
+    report(sprintf("addr_to_%s, %s", name, family), forward, "s")
+    report(sprintf("%s_to_addr, %s", name, family), backward, "s")
+
+    if (is.null(ip)) {
+      next
+    }
+    theirs_addr <- if (family == "v4") ip else ip6
+    theirs_encoded <- pair$their_to(theirs_addr)
+    report(
+      sprintf("ratio, to_%s / ipaddress, %s", name, family),
+      forward / timing(pair$their_to(theirs_addr)), "x"
+    )
+    report(
+      sprintf("ratio, %s_to / ipaddress, %s", name, family),
+      backward / timing(pair$their_from(theirs_encoded)), "x"
+    )
+  }
+}
+
 cat("\n")
