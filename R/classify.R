@@ -108,7 +108,8 @@ prefix_index <- function(which) {
     which,
     special = raddr_registry_data$blocks,
     space = raddr_registry_data$space,
-    transition = parse_blocks(raddr_transition_prefixes$block)
+    transition = parse_blocks(raddr_transition_prefixes$block),
+    codes = parse_blocks(classify_code_blocks$block)
   )
   index <- build_prefix_index(
     table$space, table$prefix_len,
@@ -123,7 +124,8 @@ prefix_index <- function(which) {
 #'
 #' @param x A `raddr_address` vector.
 #' @param which Which table: `"special"` (the IANA special-purpose pair),
-#'   `"space"` (the IANA address-space pair) or `"transition"` (the overlay).
+#'   `"space"` (the IANA address-space pair), `"transition"` (the overlay) or
+#'   `"codes"` (the classify-layer rule blocks).
 #'
 #' @return An integer vector, one element per address, giving the row of that
 #'   table which matched, or `NA_integer_` where no block contains the address.
@@ -237,6 +239,70 @@ embedded_kind_of <- function(x) {
   kinds[isatap] <- "isatap"
 
   factor(kinds, levels = levels)
+}
+
+# --- the classify-layer codes (section 5.2.2) --------------------------------
+#
+# The vocabulary, the rule blocks and the strength grading all live in
+# R/codes.R, which is where the parse layer's bits live too and for the same
+# reason: R/ is sourced alphabetically, so a table this file defines at load
+# time could not be cross-checked against the vocabulary. codes.R defines and
+# the engines consume, exactly as R/ipv4.R and R/ipv6.R consume `code_bit()`.
+#
+# The classify codes for each address, as the `list_of<character>` the record
+# stores.
+#
+# `kind` is passed in rather than recomputed: two of the rules are conditional
+# on the mechanism, and `addr_classify()` has already paid for that lookup.
+#
+# Three codes are absent by necessity, not by omission -- the two MUST-drop
+# rules and Teredo's conditional MUST all need the embedded IPv4 extracted and
+# classified, which is Epic J's. Their vocabulary, grading and provenance land
+# here so that adding the extractor is not also a re-versioning of the API.
+classify_codes_of <- function(x, kind) {
+  n <- vec_size(x)
+  if (n == 0L) {
+    return(new_list_of(list(), ptype = character()))
+  }
+
+  mask <- integer(n)
+
+  hit <- prefix_match(x, "codes")
+  matched <- !is.na(hit)
+  by_block <- rep(NA_character_, n)
+  by_block[matched] <- classify_code_blocks$code[hit[matched]]
+
+  # Two blocks share `link_local_reserved_range`, so the loop is over the
+  # distinct codes rather than over the rows.
+  named <- classify_code_blocks$code[!is.na(classify_code_blocks$code)]
+  for (code in unique(named)) {
+    mask <- add_classify_code(mask, code, !is.na(by_block) & by_block == code)
+  }
+
+  kind <- as.character(kind)
+  mask <- add_classify_code(
+    mask, "nat64_local_layout_unspecified",
+    !is.na(kind) & kind == "nat64_local"
+  )
+
+  # Only where the carve-out already let the form through: `::` and `::1` have
+  # no kind at all (section 5.3.7), so this reports the tails between them and
+  # 1.0.0.0 rather than re-deciding the threshold. Both shipped in-house guards
+  # use `tail32 > 1`, and changing it would change their behaviour; the fact
+  # that the tail is nonetheless unroutable is reported instead, at `may`.
+  compatible <- !is.na(kind) & kind == "ipv4_compatible"
+  if (any(compatible)) {
+    tail32 <- widen_word(field(x, "w4"))
+    mask <- add_classify_code(
+      mask, "ipv4_compatible_low_tail",
+      compatible & tail32 < ipv4_this_network_end
+    )
+  }
+
+  new_list_of(
+    codes_from_mask(mask, classify_code_levels, classify_code_bits),
+    ptype = character()
+  )
 }
 
 # --- the record (section 5.3) ------------------------------------------------
@@ -368,8 +434,41 @@ new_raddr_class <- function(block, name, rfc, footnotes, category,
 #'     extractor that fills this is not written yet, so every element currently
 #'     has zero rows.}
 #'   \item{`codes`}{Classify-layer reason codes, from the same vocabulary as
-#'     [addr_codes_registry()]. None are emitted yet.}
+#'     [addr_codes_registry()] and graded by that registry's `strength`
+#'     column. See below.}
 #' }
+#'
+#' @section The codes are graded, and all of them are reported:
+#'
+#' `codes` carries what the RFCs say about an address that the registry row
+#' alone does not. Each one is graded in [addr_codes_registry()] by the force
+#' of the rule it reports, because reporting only the MUST rules would collapse
+#' a spectrum into a binary:
+#'
+#' \describe{
+#'   \item{`link_local_outside_fe80_64` (`must`)}{`febf::1` matches the
+#'     `fe80::/10` registry row but is not a link-local address -- RFC 4291
+#'     section 2.5.6 fixes the next 54 bits to zero. Both CPython's
+#'     `ipaddress` and R's `ipaddress` report it as link-local with nothing
+#'     attached to say otherwise.}
+#'   \item{`link_local_reserved_range` (`must`)}{`169.254.0.0/24` and
+#'     `169.254.255.0/24` MUST NOT be selected by IPv4 autoconfiguration
+#'     (RFC 3927 section 2.1). Neither has a registry row of its own.}
+#'   \item{`ipv4_compatible_low_tail` (`may`)}{the deprecated `::a.b.c.d` tail
+#'     lands in `0.0.0.0/8`, so it is not a host address.}
+#'   \item{`nat64_local_layout_unspecified` (`unspecified`)}{RFC 8215 section 5
+#'     leaves the syntax under `64:ff9b:1::/48` deliberately undefined, so the
+#'     RFC 6052 geometry raddr reads there is contested rather than implied.}
+#'   \item{`ula_l_bit_unset` (`unspecified`)}{`fc00::/8` is the L = 0 half of
+#'     the ULA prefix, for which RFC 4193 section 3.1 defines nothing at all.
+#'     Only `fd00::/8` is a specified ULA.}
+#' }
+#'
+#' Three further classify codes are registered and are not emitted yet:
+#' `nat64_wk_embedded_not_global`, `sixtofour_embedded_not_global` and
+#' `teredo_client_not_global` each need the embedded IPv4 extracted and
+#' classified. They are registered now so that filling `embeddings` later adds
+#' no code to the vocabulary.
 #'
 #' @section A string may never be classified:
 #'
@@ -443,6 +542,7 @@ addr_classify <- function(x) {
   version[from_space] <- addr_address_space_version()
 
   empty <- empty_raddr_embedding()
+  kind <- embedded_kind_of(x)
   new_raddr_class(
     block = block,
     name = take(blocks$name, spaces$name),
@@ -458,9 +558,9 @@ addr_classify <- function(x) {
     destination = policy("destination"),
     reserved_by_protocol = policy("reserved_by_protocol"),
     termination_date = only_special("termination_date", NA_character_),
-    embedded_kind = embedded_kind_of(x),
+    embedded_kind = kind,
     embeddings = new_list_of(rep(list(empty), n), ptype = empty),
-    codes = new_list_of(rep(list(character()), n), ptype = character()),
+    codes = classify_codes_of(x, kind),
     registry = factor(registry, levels = raddr_class_registries),
     registry_version = version
   )

@@ -5,7 +5,10 @@
 test_that("the registry has the documented columns", {
   registry <- addr_codes_registry()
   expect_s3_class(registry, "data.frame")
-  expect_named(registry, c("code", "layer", "rfc", "summary", "since"))
+  expect_named(
+    registry,
+    c("code", "layer", "rfc", "summary", "strength", "since")
+  )
   expect_true(nrow(registry) > 0L)
 })
 
@@ -30,6 +33,54 @@ test_that("the valid-value set is derived from the registry, not restated", {
     parse_code_levels,
     registry$code[registry$layer == "parse"]
   )
+  expect_identical(
+    classify_code_levels,
+    registry$code[registry$layer == "classify"]
+  )
+})
+
+# --- The strength scale (RADD-wglsdrmu) --------------------------------------
+
+test_that("every strength is from the scale", {
+  strength <- addr_codes_registry()$strength
+  expect_true(all(is.na(strength) | strength %in% raddr_code_strengths))
+  expect_identical(raddr_code_strengths, c("must", "should", "may",
+                                           "unspecified"))
+})
+
+test_that("a parse code is never graded and a classify code always is", {
+  registry <- addr_codes_registry()
+  expect_true(all(is.na(registry$strength[registry$layer == "parse"])))
+  expect_true(all(!is.na(registry$strength[registry$layer == "classify"])))
+})
+
+# The grading is a claim about the RFCs, so it is pinned rather than left to
+# drift. RFC 4291 and RFC 8215 invoke RFC 2119 nowhere -- verified 2026-07-27
+# against the RFC texts -- so their two `must`-substance rules are graded on the
+# format definition, not on a keyword, and `nat64_local_layout_unspecified` is
+# `unspecified` twice over.
+test_that("each classify code carries the strength its RFC actually states", {
+  registry <- addr_codes_registry()
+  strength <- stats::setNames(registry$strength, registry$code)
+  expect_identical(
+    strength[classify_code_levels],
+    c(
+      nat64_wk_embedded_not_global = "must",
+      sixtofour_embedded_not_global = "must",
+      teredo_client_not_global = "must",
+      link_local_outside_fe80_64 = "must",
+      link_local_reserved_range = "must",
+      ipv4_compatible_low_tail = "may",
+      nat64_local_layout_unspecified = "unspecified",
+      ula_l_bit_unset = "unspecified"
+    )
+  )
+})
+
+test_that("the classify layer reports strongest first", {
+  registry <- addr_codes_registry()
+  strength <- registry$strength[registry$layer == "classify"]
+  expect_false(is.unsorted(match(strength, raddr_code_strengths)))
 })
 
 # --- The mask that carries codes through the engines -------------------------
@@ -48,6 +99,32 @@ test_that("codes_from_mask() is vectorized and order-preserving", {
   expect_identical(
     codes_from_mask(mask),
     list(character(), "out_of_range", character(), "empty_part")
+  )
+})
+
+test_that("the classify vocabulary has its own distinct bits", {
+  expect_identical(anyDuplicated(classify_code_bits), 0L)
+  expect_identical(
+    codes_from_mask(
+      sum(classify_code_bits), classify_code_levels, classify_code_bits
+    )[[1L]],
+    classify_code_levels
+  )
+})
+
+test_that("add_classify_code() accumulates rather than replacing", {
+  mask <- integer(3L)
+  mask <- add_classify_code(mask, "ula_l_bit_unset", c(TRUE, TRUE, FALSE))
+  mask <- add_classify_code(
+    mask, "link_local_reserved_range", c(TRUE, FALSE, NA)
+  )
+  expect_identical(
+    codes_from_mask(mask, classify_code_levels, classify_code_bits),
+    list(
+      c("link_local_reserved_range", "ula_l_bit_unset"),
+      "ula_l_bit_unset",
+      character()
+    )
   )
 })
 
@@ -102,6 +179,47 @@ test_that("no code outside the registry ever escapes", {
   expect_true(all(observed_codes(code_corpus) %in% parse_code_levels))
 })
 
+# --- Coverage: the classify layer, and its one honest gap --------------------
+#
+# Same discipline, one difference: three codes cannot be emitted yet, because
+# each needs the embedded IPv4 extracted and classified and the extractor is
+# Epic J's. The pending set is written out so the gap is a recorded fact rather
+# than a silently thinner corpus -- when the extractor lands, both halves of
+# this fail until the list shrinks.
+
+classify_codes_pending <- c(
+  "nat64_wk_embedded_not_global",  # RFC 6052 section 3.1, needs the embedding
+  "sixtofour_embedded_not_global", # RFC 3056 section 9, needs the embedding
+  "teredo_client_not_global"       # RFC 4380 section 4, needs the embedding
+)
+
+classify_corpus <- c(
+  "febf::1",             # link_local_outside_fe80_64
+  "169.254.255.5",       # link_local_reserved_range
+  "::2",                 # ipv4_compatible_low_tail
+  "64:ff9b:1::c000:201", # nat64_local_layout_unspecified
+  "fc00::1"              # ula_l_bit_unset
+)
+
+observed_classify_codes <- function(x) {
+  codes <- field(addr_classify(addr_pton(x)), "codes")
+  sort(unique(unlist(codes, use.names = FALSE)))
+}
+
+test_that("every classify code not blocked on Epic J is produced", {
+  expect_setequal(
+    observed_classify_codes(classify_corpus),
+    setdiff(classify_code_levels, classify_codes_pending)
+  )
+})
+
+test_that("exactly the three embedding-dependent codes are still pending", {
+  expect_true(all(classify_codes_pending %in% classify_code_levels))
+  expect_length(classify_codes_pending, 3L)
+  expect_false(any(classify_codes_pending %in%
+                     observed_classify_codes(classify_corpus)))
+})
+
 # --- Bidirectional docs validation (RADD-srqvttwe) ---------------------------
 #
 # The design record and the registry must agree in both directions: no
@@ -119,7 +237,7 @@ architecture_codes <- function() {
 }
 
 test_that("no code is undocumented", {
-  expect_true(all(parse_code_levels %in% architecture_codes()))
+  expect_true(all(addr_codes_registry()$code %in% architecture_codes()))
 })
 
 test_that("no documented code is an orphan", {

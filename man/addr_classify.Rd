@@ -114,8 +114,43 @@ table, so raddr states a NAT64 kind only affirmatively.}
 extractor that fills this is not written yet, so every element currently
 has zero rows.}
 \item{\code{codes}}{Classify-layer reason codes, from the same vocabulary as
-\code{\link[=addr_codes_registry]{addr_codes_registry()}}. None are emitted yet.}
+\code{\link[=addr_codes_registry]{addr_codes_registry()}} and graded by that registry's \code{strength}
+column. See below.}
 }
+}
+
+\section{The codes are graded, and all of them are reported}{
+
+
+\code{codes} carries what the RFCs say about an address that the registry row
+alone does not. Each one is graded in \code{\link[=addr_codes_registry]{addr_codes_registry()}} by the force
+of the rule it reports, because reporting only the MUST rules would collapse
+a spectrum into a binary:
+
+\describe{
+\item{\code{link_local_outside_fe80_64} (\code{must})}{\verb{febf::1} matches the
+\verb{fe80::/10} registry row but is not a link-local address -- RFC 4291
+section 2.5.6 fixes the next 54 bits to zero. Both CPython's
+\code{ipaddress} and R's \code{ipaddress} report it as link-local with nothing
+attached to say otherwise.}
+\item{\code{link_local_reserved_range} (\code{must})}{\verb{169.254.0.0/24} and
+\verb{169.254.255.0/24} MUST NOT be selected by IPv4 autoconfiguration
+(RFC 3927 section 2.1). Neither has a registry row of its own.}
+\item{\code{ipv4_compatible_low_tail} (\code{may})}{the deprecated \verb{::a.b.c.d} tail
+lands in \verb{0.0.0.0/8}, so it is not a host address.}
+\item{\code{nat64_local_layout_unspecified} (\code{unspecified})}{RFC 8215 section 5
+leaves the syntax under \verb{64:ff9b:1::/48} deliberately undefined, so the
+RFC 6052 geometry raddr reads there is contested rather than implied.}
+\item{\code{ula_l_bit_unset} (\code{unspecified})}{\verb{fc00::/8} is the L = 0 half of
+the ULA prefix, for which RFC 4193 section 3.1 defines nothing at all.
+Only \verb{fd00::/8} is a specified ULA.}
+}
+
+Three further classify codes are registered and are not emitted yet:
+\code{nat64_wk_embedded_not_global}, \code{sixtofour_embedded_not_global} and
+\code{teredo_client_not_global} each need the embedded IPv4 extracted and
+classified. They are registered now so that filling \code{embeddings} later adds
+no code to the vocabulary.
 }
 
 \section{A string may never be classified}{

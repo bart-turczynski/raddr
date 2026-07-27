@@ -8,7 +8,7 @@ addr_codes_registry()
 }
 \value{
 A data frame with one row per code and the columns \code{code}, \code{layer},
-\code{rfc}, \code{summary} and \code{since}.
+\code{rfc}, \code{summary}, \code{strength} and \code{since}.
 }
 \description{
 Every reason code raddr can attach to a reading, with its layer, its
@@ -34,9 +34,10 @@ what the \code{since} column records.
 
 
 \describe{
-\item{\code{parse}}{Why a dialect declined to read a literal as an address.}
-\item{\code{classify}}{Facts about a parsed address noted during classification.
-None yet; classification is not written.}
+\item{\code{parse}}{Why a dialect declined to read a literal as an address.
+Reported by \code{\link[=addr_codes]{addr_codes()}}.}
+\item{\code{classify}}{Facts about a parsed address noted during
+classification. Reported in the \code{codes} field of \code{\link[=addr_classify]{addr_classify()}}.}
 }
 }
 
@@ -45,5 +46,9 @@ registry <- addr_codes_registry()
 registry$code
 
 registry[registry$code == "out_of_range", ]
+
+# The classify layer, graded by normative force
+classify <- registry[registry$layer == "classify", ]
+classify[c("code", "rfc", "strength")]
 
 }

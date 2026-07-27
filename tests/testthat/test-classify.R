@@ -560,3 +560,112 @@ test_that("an embedding formats as its kind, role, address and category", {
   expect_equal(format(e), "teredo/server 192.0.2.45 global")
   expect_equal(format(empty_raddr_embedding()), character())
 })
+
+# --- The classify-layer codes (RADD-wglsdrmu) --------------------------------
+#
+# All eight rules are graded in R/codes.R; these pin the five that need nothing
+# but the address. See docs/architecture.md section 5.2.3.
+
+codes_of <- function(x) {
+  field(addr_classify(addr_pton(x)), "codes")
+}
+
+test_that("the record carries codes for every row, empty where none fire", {
+  cl <- addr_classify(addr_pton(c("8.8.8.8", "febf::1", "not an address")))
+  codes <- field(cl, "codes")
+  expect_s3_class(codes, "vctrs_list_of")
+  expect_length(codes, 3L)
+  expect_identical(codes[[1L]], character())
+  expect_identical(codes[[3L]], character())
+})
+
+test_that("fe80::/10 outside fe80::/64 is not a link-local address", {
+  # RFC 4291 section 2.5.6 fixes the 54 bits after the prefix to zero, so the
+  # registry row and the format disagree. Both CPython's `ipaddress` and R's
+  # `ipaddress` answer `is_link_local = TRUE` here with nothing attached
+  # [measured 2026-07-27], which is the divergence this code exists to state.
+  expect_identical(codes_of("febf::1")[[1L]], "link_local_outside_fe80_64")
+  expect_identical(codes_of("fe80::1")[[1L]], character())
+
+  # The boundary in both directions, and the /64 shadow row emits nothing.
+  expect_identical(codes_of("fe80:0:0:1::")[[1L]], "link_local_outside_fe80_64")
+  expect_identical(codes_of("fe80::ffff:ffff:ffff:ffff")[[1L]], character())
+  expect_identical(codes_of("febf:ffff::1")[[1L]], "link_local_outside_fe80_64")
+
+  # Just outside the reservation on either side: no rule, and no code.
+  expect_identical(codes_of("fe7f::1")[[1L]], character())
+  expect_identical(codes_of("fec0::1")[[1L]], character())
+})
+
+test_that("the two reserved IPv4 link-local /24s are reported", {
+  # RFC 3927 section 2.1. Neither has a registry row, so without the code they
+  # are indistinguishable from any other 169.254.0.0/16 address.
+  expect_identical(codes_of("169.254.0.5")[[1L]], "link_local_reserved_range")
+  expect_identical(codes_of("169.254.255.5")[[1L]], "link_local_reserved_range")
+  expect_identical(codes_of("169.254.1.0")[[1L]], character())
+  expect_identical(codes_of("169.254.254.255")[[1L]], character())
+
+  # It is still a 169.254.0.0/16 address: the code adds a fact, it does not
+  # replace the classification.
+  expect_identical(addr_category(addr_pton("169.254.0.5")), addr_category(
+    addr_pton("169.254.1.5")
+  ))
+})
+
+test_that("fc00::/8 is the undefined half of the ULA prefix", {
+  # RFC 4193 section 3.1 defines only L = 1. raddr stores the /7, so this is
+  # the only place the two halves are told apart.
+  expect_identical(codes_of("fc00::1")[[1L]], "ula_l_bit_unset")
+  expect_identical(codes_of("fcff:ffff::1")[[1L]], "ula_l_bit_unset")
+  expect_identical(codes_of("fd00::1")[[1L]], character())
+  expect_identical(codes_of("fdff:ffff::1")[[1L]], character())
+})
+
+test_that("the 64:ff9b:1::/48 layout is reported as contested", {
+  # RFC 8215 section 5 leaves the syntax unspecified and tells nodes not to
+  # assume one; raddr reads RFC 6052 /48 geometry anyway, so it says so.
+  expect_identical(
+    codes_of("64:ff9b:1::c000:201")[[1L]],
+    "nat64_local_layout_unspecified"
+  )
+  # The rule is about the local-use prefix only. RFC 8215 section 5 says the
+  # well-known prefix's own restrictions do not reach it, and the converse
+  # holds too -- the WKP's geometry is not contested.
+  expect_identical(codes_of("64:ff9b::c000:201")[[1L]], character())
+})
+
+test_that("an IPv4-compatible tail below 1.0.0.0 is flagged, not suppressed", {
+  # The `tail32 > 1` carve-out is a registry fact and is unchanged; this is the
+  # `may`-strength report layered on top of it, so a consumer can apply the
+  # heuristic without raddr having applied it first.
+  expect_identical(codes_of("::2")[[1L]], "ipv4_compatible_low_tail")
+  expect_identical(codes_of("::ffff")[[1L]], "ipv4_compatible_low_tail")
+  expect_identical(
+    codes_of("::0.255.255.255")[[1L]], "ipv4_compatible_low_tail"
+  )
+  expect_identical(codes_of("::1.0.0.0")[[1L]], character())
+  expect_identical(codes_of("::1.2.3.4")[[1L]], character())
+
+  # `::` and `::1` have no kind at all, so no code either -- the carve-out
+  # comes first and this rule never re-decides it.
+  expect_identical(codes_of("::")[[1L]], character())
+  expect_identical(codes_of("::1")[[1L]], character())
+  expect_true(all(is.na(addr_embedded_kind(addr_pton(c("::", "::1"))))))
+})
+
+test_that("codes accumulate and are reported strongest first", {
+  # A Teredo-format link-local address sits in fe80::/64, so the /10 rule does
+  # not fire on it; the ordering guarantee is exercised on the vocabulary.
+  expect_identical(
+    codes_from_mask(
+      sum(classify_code_bits), classify_code_levels, classify_code_bits
+    )[[1L]],
+    classify_code_levels
+  )
+})
+
+test_that("classifying nothing produces a typed, empty codes column", {
+  codes <- field(addr_classify(addr_pton(character())), "codes")
+  expect_s3_class(codes, "vctrs_list_of")
+  expect_length(codes, 0L)
+})

@@ -814,6 +814,14 @@ vocabulary, because its own is fixed downstream.
 | `wrong_group_count` | `parse` | RFC 4291 §2.2 | the literal does not resolve to exactly eight groups |
 | `bad_embedded_ipv4` | `parse` | RFC 4291 §2.2 | the dotted-quad tail fails the dialect's own IPv4 rules |
 | `whitespace` | `parse` | POSIX `getaddrinfo(3)` | whitespace in the address, which `getaddrinfo` refuses outright (§3.2) |
+| `nat64_wk_embedded_not_global` | `classify` | RFC 6052 §3.1 | the NAT64 well-known prefix carries a non-global embedded IPv4 |
+| `sixtofour_embedded_not_global` | `classify` | RFC 3056 §9 | a 6to4 `V4ADDR` is not in the format of a global unicast address |
+| `teredo_client_not_global` | `classify` | RFC 4380 §4 | a global Teredo address embeds a non-global client IPv4 |
+| `link_local_outside_fe80_64` | `classify` | RFC 4291 §2.5.6 | the address is in `fe80::/10` but outside `fe80::/64` |
+| `link_local_reserved_range` | `classify` | RFC 3927 §2.1 | the address is in `169.254.0.0/24` or `169.254.255.0/24` |
+| `ipv4_compatible_low_tail` | `classify` | RFC 4291 §2.5.5.1 | the deprecated `::a.b.c.d` tail is below `1.0.0.0` |
+| `nat64_local_layout_unspecified` | `classify` | RFC 8215 §5 | raddr read RFC 6052 geometry under `64:ff9b:1::/48`, whose syntax is undefined |
+| `ula_l_bit_unset` | `classify` | RFC 4193 §3.1 | the address is in `fc00::/8`, the ULA half that was never specified |
 
 **This table is machine-checked in both directions** — `test-codes.R` fails on an
 undocumented code and on an orphan entry left by a rename — and every code is
@@ -827,6 +835,77 @@ does not also report the range its garbage value happened to land outside of. A
 row still collects every code its parts raised. On the IPv6 side the engine
 already narrows row by row through one gate at a time, so the first gate a row
 fails is its reason, at no extra cost.
+
+The **classify** layer accumulates instead, because its rules are independent
+facts about one address rather than competing readings of one part. It reuses
+the same integer mask for the same reason — unpacking by distinct mask is what
+keeps a per-row loop out of the middle of a vectorized lookup.
+
+#### 5.2.3 `strength`, and why every rule is reported **[implemented 2026-07-27]**
+
+Each code records the normative force of the rule it reports: `must`, `should`,
+`may` or `unspecified`. The user's framing, which corrected an earlier proposal
+to ship only the MUST rules:
+
+> **must is must; other language should be reported, but no consequences are
+> needed.**
+
+Shipping only the MUSTs would collapse a spectrum into a binary — the move raddr
+exists to refuse. So a weaker rule is still reported, and the *grade* is what
+says not to act on it as though it were a MUST. It is `NA` for all 15 parse
+codes, and that is the honest value rather than a filler: those describe what a
+parser **did** with a literal, not what a specification mandates about an
+address. A `stopifnot` in `R/codes.R` makes the two layers divide exactly on it.
+
+**The grade follows the rule's substance, not the presence of a keyword, because
+the sources do not agree about keywords [verified 2026-07-27 against the RFC
+texts]:**
+
+| Invokes RFC 2119 | Does not invoke it anywhere |
+|---|---|
+| RFC 3056, 3927, 4193, 4380, 6052 | **RFC 4291, RFC 8215** |
+
+So `link_local_outside_fe80_64` is `must` because RFC 4291 §2.5.6's 54 zero bits
+**are the definition** of the link-local format, not because 4291 spells a
+keyword — it never does, and its only nearby requirement ("Routers must not
+forward…") is lowercase. Grading it `unspecified` would be plainly false, and
+grading it silently alongside RFC 3927's uppercase `MUST NOT` would merge two
+different facts, so each `summary` says which case it is. The same measurement
+makes `nat64_local_layout_unspecified` right twice over: RFC 8215 §5 both leaves
+the syntax undefined *and* states its prohibition in lowercase.
+
+Conversely `ula_l_bit_unset` is `unspecified` even though RFC 4193 **does**
+invoke 2119 — §3.1's "Set to 0 may be defined in the future" is lowercase, and
+no allocation mechanism was ever defined. Keyword presence in a document says
+nothing about the sentence that matters.
+
+**`should` has no member yet**, and the level is kept anyway so a consumer does
+not read `must` and `may` as the whole scale. The nearest candidate, RFC 6052
+§3.1's "the Well-Known Prefix SHOULD NOT be used to construct IPv4-translatable
+IPv6 addresses", is not decidable from an address.
+
+Three codes are registered and **not emitted yet** — the two MUST-drop rules and
+Teredo's conditional MUST each need the embedded IPv4 extracted and classified
+(Epic J). They are registered now because adding a code is an API addition, so
+landing the extractor later must not also be a re-versioning. `test-codes.R`
+writes the pending set out explicitly and fails when it stops being accurate,
+rather than quietly checking a thinner corpus.
+
+Five rules need nothing but the address, and three of those are decided by
+prefix alone — one longest-prefix-match pass over a five-row table in
+`R/codes.R` answers all three. `fe80::/64` is in that table carrying **no code**:
+it exists only to shadow `fe80::/10`, so that longest-prefix-match lands on the
+/10 exactly when the address is inside the reservation and outside the format.
+Encoding "in A but not in B" as a second row is cheaper than a second pass.
+
+The survey is what makes two of these worth having at all **[measured
+2026-07-27]**. CPython's `ipaddress` and R's `ipaddress` both answer
+`is_link_local = TRUE` for `febf::1`, and both answer `is_private = TRUE` for
+`fc00::1` — in each case a single predicate covering two states the RFC keeps
+apart, with nothing attached that a caller could use to tell them apart.
+`sixtofour_embedded_not_global` also takes its spelling from that survey: a code
+may not begin with a digit, and `ipaddress` solved the identical problem the
+identical way with its `sixtofour` property.
 
 ### 5.3 `raddr_class`
 
