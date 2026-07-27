@@ -92,6 +92,38 @@ from an implementation rather than a standard.
 
 **P8 — raddr states facts; consumers make decisions.**
 
+**P9 — Precise beats general, and the specific document beats the summary.**
+Where a precise reading and a more general one are both available, take the
+precise one — especially where the "tiny edge case" the general reading swallows
+has already caused a real-world failure. Three consequences follow, and each has
+already been paid for:
+
+- **Vendor the authoritative file; do not hand-transcribe a summary of it.**
+  Hand-transcription is reserved for facts with no upstream file at all, which
+  is why `R/transition.R` is hand-written and the registries are not. The
+  `0xfdffffff` mask that was silently `NA` (§7.2) and the "four of the six
+  lengths" that is three (§7.2) were both transcription errors caught late.
+- **Keep the source's own granularity.** IANA's IPv6 address-space registry
+  spells sixteen reserved rows with distinct citations; collapsing them to
+  `::/3`-style aggregates loses `fec0::/10`'s deprecating RFC and `200::/7`'s
+  entirely.
+- **Cite the document that governs the value, not the one that describes the
+  framework.** RFC 6890 defines the special-purpose framework; IANA's registry
+  holds the data, and RFC 6890's own tables are a stale 2013 snapshot missing
+  about ten current entries. Likewise RFC 2544 §C.2.2.2 contains a typo in the
+  benchmarking range and RFC 5180 §8 prints the wrong benchmarking prefix
+  (Errata 1752). Cite RFCs for meaning; take values from the registry.
+
+The deciding evidence for P9 **[verified 2026-07-27]**: deriving a classification
+table from the special-purpose registry *alone* is a known CVE-producing pattern.
+Multicast is not in that registry — it has its own — so PHP's registry-derived
+rewrite has no multicast handling at all, and `ssrfcheck` shipped the identical
+omission as CVE-2025-8267. Every implementation that gets multicast right does so
+by hardcoding it, because the registry they would naturally parse does not
+contain it. raddr's answer is to vendor the address-space registries as a
+fallback layer under the special-purpose ones (`RADD-pekbpche`), so that the
+multicast space is answered from a registry rather than from a literal.
+
 ---
 
 ## 3. The dialect model
