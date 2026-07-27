@@ -1028,6 +1028,7 @@ the decisions are not relitigated.
 | O13 | The `curl` = aton-then-pton composition for **IPv6** | **Unverified against real curl.** The IPv4 composition was measured; the IPv6 half is derived, and since `aton` rejects every IPv6 literal it reduces to a claim that curl reaches `inet_pton` rather than `getaddrinfo` for a bracketed literal. Those two now disagree (§3.5.3), so the claim is testable and worth testing |
 | O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
 | O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
+| O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | 5.7 s against 2.5 s per 1e6 **[verified 2026-07-27, §11.1.1]**, which the flat-per-row theory does not explain. The suspicion, unmeasured, is `derive_status()`: for an IPv6 vector `aton`'s reading is missing on every row, so `readings_agree()` runs `vec_equal()` against an all-missing address and enters `blank_missing()`'s `proxy[is.na(code), ] <- NA` over a million rows and six columns — a path an all-accepted IPv4 vector never takes. If that is it, the fix is to skip dialects that accepted nothing, and it is small. Profile before touching anything |
 | O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
 
 ---
@@ -1085,27 +1086,64 @@ copying, not arithmetic.
 
 ### 11.1.1 `addr_parse()`, 1e6 addresses **[verified 2026-07-27]**
 
-Measured standalone rather than through `bench/record.R`, which now carries the
-same section.
+`bench/record.R`, best of seven runs after a warm-up, same as every other number
+in §11.1.
 
 | | one dialect | `addr_parse()` | ratio |
 |---|---|---|---|
-| IPv4 | 1.92 s | 8.03 s | **4.2x** |
-| IPv6 | 2.39 s | 12.59 s | **5.3x** |
-| every row rejected | — | 9.68 s | — |
+| IPv4 | 1.22 s | 9.53 s | **7.8x** |
+| IPv6 | 3.92 s | 20.11 s | **5.1x** |
+| mixed, every row rejected | — | 10.99 s | — |
 
 `addr_parse()` runs four engines over one input, so **4x is the floor** and the
-ratio is the number to read, not the wall clock. IPv4 is essentially at that
-floor; IPv6 costs a further 1.1x because `pton` and `strict` disagree about the
-grammar (§3.5), so the two paper dialects share a rule set but the libc one does
-not, and its rows cannot be shared.
+ratio is the number to read rather than the wall clock.
 
-The all-rejected row is the one worth noting: **rejecting a million addresses
-with reason codes is cheaper than accepting a million**, because a rejected row
-exits at the first gate that fails it and never reaches the arithmetic. The
-codes themselves are close to free — the mask is one integer per row per
-dialect, and the unpacking runs over the distinct masks, of which a million bad
-rows have four.
+**Read the ratio, and read it loosely.** A second run of the same measurement
+put IPv4 at 6.7x and IPv6 at 4.5x. The decomposition below is stable across both
+runs; the totals are not, and no decimal place here is meaningful.
+
+Decomposed against one dialect, so the parts are comparable across families:
+
+| | IPv4 | IPv6 |
+|---|---|---|
+| four engines, codes off | 4.19x | 3.23x |
+| \+ the reason codes | +0.41x | +0.13x |
+| \+ the record | +2.07x | +1.17x |
+| **`addr_parse()`** | **6.67x** | **4.53x** |
+
+Three things fall out of that, and only the first was expected.
+
+**The engines are at the floor, and IPv6 is below it.** Four engines cost four
+parses, as they must. IPv6 comes in under 4x because `aton` has no IPv6 grammar
+at all (§3.2), so the fourth engine sees a colon literal and bails without ever
+reaching the arithmetic.
+
+**The reason codes are close to free** — under half a second either way, well
+under a tenth of the call. That is the mask design paying off: one integer per
+row per dialect, unpacked over the *distinct* masks rather than row by row. It
+is also the answer to whether Epic G should have been a separate opt-in pass. It
+should not.
+
+**The record is the expensive part, at roughly a third of the call**, and this
+is the one that was measured wrong before it was measured right. The obvious
+theory — that the record is a flat per-row price and therefore looms largest
+where parsing is cheapest — is **false**: it costs 2.5 s on IPv4 and 5.7 s on
+IPv6. The ratio is nonetheless worse for IPv4, because IPv4 parsing is four
+times cheaper and the ratio's denominator is what moves. Both halves of that are
+measured; the *mechanism* behind the IPv6 record cost is not, and is O17.
+
+The last row of the first table is **not comparable to the two above it** — its
+corpus mixes IPv4 and IPv6 literals, so it sits between the families for reasons
+that have nothing to do with rejection. It is recorded only to show that
+rejecting a million literals with codes attached stays in the same range as
+accepting them.
+
+**A caution, because it already cost a wrong number once.** A first pass
+measured this with a single `system.time()` per expression and reported 4.2x for
+IPv4. The error was in the *baseline*: one dialect over clean dotted quads takes
+about a second, so a single noisy sample inflates it and flatters the ratio.
+Anything divided by a sub-second measurement needs `bench/record.R`'s
+best-of-seven, not one shot.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**
