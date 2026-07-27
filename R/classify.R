@@ -1,5 +1,6 @@
-# Longest-prefix-match lookup over the vendored IANA registries.
-# See docs/architecture.md sections 7, 7.1 and 5.3.
+# The classification layer: longest-prefix-match lookup over the vendored IANA
+# registries, and the `raddr_class` record built from it.
+# See docs/architecture.md sections 5.3, 7, 7.1 and 7.3.
 #
 # Flat first-match-wins is wrong here, and the registry says so itself:
 # 192.0.0.9/32 and 192.0.0.10/32 are globally reachable inside a 192.0.0.0/24
@@ -48,30 +49,15 @@ prefix_word_plan <- function(len, space) {
   plan
 }
 
-# The matcher's view of the registry: for each block, the word/divisor/target
+# The matcher's view of a prefix table: for each block, the word/divisor/target
 # triples that decide containment. Sorted by DESCENDING prefix length, so
 # walking it in order and keeping the first hit is longest-prefix-match.
-#
-# Memoized rather than built at load, because top-level code in R/ runs while
-# the package is being installed and the order in which `R/sysdata.rda` becomes
-# visible is not something to depend on.
-registry_index_cache <- new.env(parent = emptyenv())
+build_prefix_index <- function(space, prefix_len, w1, w2, w3, w4) {
+  ord <- order(prefix_len, decreasing = TRUE)
+  words <- lapply(list(w1, w2, w3, w4), function(w) widen_word(w[ord]))
 
-registry_index <- function() {
-  cached <- registry_index_cache$index
-  if (!is.null(cached)) {
-    return(cached)
-  }
-
-  blocks <- raddr_registry_data$blocks
-  ord <- order(blocks$prefix_len, decreasing = TRUE)
-  words <- lapply(
-    c("w1", "w2", "w3", "w4"),
-    function(nm) widen_word(blocks[[nm]][ord])
-  )
-
-  prefix_len <- blocks$prefix_len[ord]
-  space <- blocks$space[ord]
+  prefix_len <- prefix_len[ord]
+  space <- space[ord]
 
   checks <- lapply(seq_along(ord), function(i) {
     plan <- prefix_word_plan(prefix_len[[i]], space[[i]])
@@ -81,19 +67,66 @@ registry_index <- function() {
     })
   })
 
-  index <- list(row = ord, space = space, checks = checks)
+  list(row = ord, space = space, checks = checks)
+}
 
-  registry_index_cache$index <- index
+# The overlay stores its prefixes as text, because R/transition.R is
+# hand-authored from the RFCs rather than built by a script (section 7.2). They
+# are parsed here rather than carried as four more hand-typed columns: the words
+# of `2002::/16` are a mechanical consequence of the block, and P9 forbids
+# hand-transcribing what can be derived.
+#
+# `addr_pton()` gives `::ffff:0:0` the `v6_4in6` family, which is right for an
+# address and irrelevant here -- only the bits are read, and the space a block
+# is matched in follows its notation.
+parse_blocks <- function(block) {
+  at <- regexpr("/", block, fixed = TRUE)
+  address <- substr(block, 1L, at - 1L)
+  parsed <- addr_pton(address)
+  list(
+    space = ifelse(grepl(":", address, fixed = TRUE), "v6", "v4"),
+    prefix_len = as.integer(substring(block, at + 1L)),
+    w1 = field(parsed, "w1"),
+    w2 = field(parsed, "w2"),
+    w3 = field(parsed, "w3"),
+    w4 = field(parsed, "w4")
+  )
+}
+
+# Memoized rather than built at load, because top-level code in R/ runs while
+# the package is being installed and the order in which `R/sysdata.rda` becomes
+# visible is not something to depend on.
+prefix_index_cache <- new.env(parent = emptyenv())
+
+prefix_index <- function(which) {
+  cached <- prefix_index_cache[[which]]
+  if (!is.null(cached)) {
+    return(cached)
+  }
+
+  table <- switch(
+    which,
+    special = raddr_registry_data$blocks,
+    space = raddr_registry_data$space,
+    transition = parse_blocks(raddr_transition_prefixes$block)
+  )
+  index <- build_prefix_index(
+    table$space, table$prefix_len,
+    table$w1, table$w2, table$w3, table$w4
+  )
+
+  prefix_index_cache[[which]] <- index
   index
 }
 
-#' Match addresses against the registry, longest prefix wins
+#' Match addresses against a prefix table, longest prefix wins
 #'
 #' @param x A `raddr_address` vector.
+#' @param which Which table: `"special"` (the IANA special-purpose pair),
+#'   `"space"` (the IANA address-space pair) or `"transition"` (the overlay).
 #'
-#' @return An integer vector, one element per address, giving the row of
-#'   `raddr_registry_data$blocks` that matched, or `NA_integer_` where no
-#'   special-purpose block contains the address.
+#' @return An integer vector, one element per address, giving the row of that
+#'   table which matched, or `NA_integer_` where no block contains the address.
 #'
 #' @details
 #' The 4-in-6 family matches **IPv6** blocks, not IPv4 ones. `::ffff:127.0.0.1`
@@ -104,7 +137,7 @@ registry_index <- function() {
 #' keep apart.
 #'
 #' @noRd
-registry_match <- function(x) {
+prefix_match <- function(x, which) {
   family <- field(x, "family")
   n <- length(family)
   out <- rep(NA_integer_, n)
@@ -124,7 +157,7 @@ registry_match <- function(x) {
     function(nm) widen_word(field(x, nm))
   )
 
-  index <- registry_index()
+  index <- prefix_index(which)
 
   for (i in seq_along(index$row)) {
     hit <- in_space[[index$space[[i]]]] & is.na(out)
@@ -143,4 +176,451 @@ registry_match <- function(x) {
   }
 
   out
+}
+
+# The special-purpose pair, which is what "the registry" means unqualified.
+#' @noRd
+registry_match <- function(x) {
+  prefix_match(x, "special")
+}
+
+# --- the transition mechanism (sections 5.3 and 8.1) -------------------------
+
+# `embedded_kind` names the mechanism an address belongs to and nothing else.
+#
+# NA MEANS "NO MECHANISM PREFIX MATCHED". It does not mean "this is not NAT64",
+# and no field of the record may be read that way: RFC 6052 permits a
+# network-specific NAT64 prefix at any of six lengths, and a caller-supplied
+# prefix is invisible to a prefix table. raddr may only ever say `nat64_wk` or
+# `nat64_local` AFFIRMATIVELY.
+embedded_kind_of <- function(x) {
+  n <- vec_size(x)
+  levels <- raddr_embedded_kinds
+  if (n == 0L) {
+    return(factor(character(), levels = levels))
+  }
+
+  kinds <- rep(NA_character_, n)
+  hit <- prefix_match(x, "transition")
+  matched <- !is.na(hit)
+  kinds[matched] <- raddr_transition_prefixes$kind[hit[matched]]
+
+  # A prefix with no geometry is not a kind. NA propagates through the lookup,
+  # so this drops `6to4_relay_anycast` and leaves an unmatched row alone.
+  kinds[is.na(transition_geometry_kind[kinds])] <- NA_character_
+
+  # RFC 4291 section 2.5.5.1's form is deprecated, and its low 32 bits are an
+  # embedded address only above 1: `::` is the unspecified address and `::1` is
+  # loopback, and both are separate, higher-priority IANA rows. Reading either
+  # as an embedded 0.0.0.0 or 0.0.0.1 misclassifies both. The threshold is a
+  # registry fact rather than a heuristic, and it is what both of the shipped
+  # in-house guards raddr replaces already use.
+  compatible <- !is.na(kinds) & kinds == "ipv4_compatible"
+  if (any(compatible)) {
+    tail32 <- widen_word(field(x, "w4"))
+    kinds[compatible & tail32 <= 1] <- NA_character_
+  }
+
+  # RFC 5214 section 6.1 makes ISATAP an interface-identifier PATTERN rather
+  # than a prefix, so it can sit under any /64 -- including one already assigned
+  # to another mechanism. A prefix is an assignment and an interface identifier
+  # is a convention within it, so the prefix wins and ISATAP fills in only where
+  # no mechanism prefix matched.
+  #
+  # Compared against `permitted`, not re-derived, and with no bitwise operator:
+  # section 5.1.1 forbids `bitwAnd()` on a word, which reads 0x80000000 as NA.
+  # `%in%` is exact on the raw pattern, and that pattern is not a permitted
+  # interface identifier, so it correctly does not match.
+  family <- field(x, "family")
+  isatap <- is.na(kinds) & !is.na(family) & family != "v4" &
+    field(x, "w3") %in% isatap_iid$permitted
+  kinds[isatap] <- "isatap"
+
+  factor(kinds, levels = levels)
+}
+
+# --- the record (section 5.3) ------------------------------------------------
+
+# Which vendored pair answered. The two are stamped separately and carry
+# different columns, so the record says which one a row came from rather than
+# leaving a caller to infer it from the block.
+raddr_class_registries <- c("special_purpose", "address_space")
+
+new_raddr_class <- function(block, name, rfc, category,
+                            globally_reachable, forwardable, source,
+                            destination, reserved_by_protocol,
+                            embedded_kind, embeddings, codes,
+                            registry, registry_version) {
+  new_rcrd(
+    list(
+      block = block, name = name, rfc = rfc, category = category,
+      globally_reachable = globally_reachable,
+      forwardable = forwardable,
+      source = source,
+      destination = destination,
+      reserved_by_protocol = reserved_by_protocol,
+      embedded_kind = embedded_kind,
+      embeddings = embeddings,
+      codes = codes,
+      registry = registry,
+      registry_version = registry_version
+    ),
+    class = "raddr_class"
+  )
+}
+
+#' Classify addresses against the IANA registries
+#'
+#' Reports what the IANA registries say about each address: the block that
+#' matched, its name and RFC, raddr's own one-word `category`, all five IANA
+#' policy columns, the transition mechanism the address belongs to, and the
+#' snapshot the answer came from.
+#'
+#' `addr_classify()` returns facts. It returns no verdict, no risk score and no
+#' allow-or-deny decision, and it ships no "everything that is not `global`"
+#' helper. Policy belongs to the consumer (P8).
+#'
+#' @section Two registries, and which one answered:
+#'
+#' Classification is **total**: every non-missing address matches some row.
+#' That takes two layers, because the IANA special-purpose registries do not
+#' cover the whole address space -- `224.0.0.0/4` and `ff00::/8` appear in
+#' neither, which is how `ssrfcheck` shipped CVE-2025-8267.
+#'
+#' \describe{
+#'   \item{[addr_registry()], the special-purpose pair}{Answers **policy**: the
+#'     five logical columns. Matched first, and it outranks the other layer on
+#'     IANA's own instruction -- the address-space registries carry "For
+#'     authoritative registration, see \[Special-Purpose Address Space\]".}
+#'   \item{[addr_address_space()], the address-space pair}{Answers
+#'     **identity**: what a range is for and who holds it. Each half is an exact
+#'     partition, which is what makes the lookup total.}
+#' }
+#'
+#' `registry` says which one answered, and `registry_version` carries that
+#' layer's own stamp (P7). The distinction is load-bearing, because it is what
+#' keeps the two meanings of `NA` apart in the five policy columns:
+#'
+#' \describe{
+#'   \item{`registry = "special_purpose"`}{`NA` is IANA's own `N/A` -- a policy
+#'     it specifically declined to state. Reading it as `FALSE` asserts
+#'     something the registry withheld.}
+#'   \item{`registry = "address_space"`}{`NA` means the question was never
+#'     asked: that registry has no policy columns at all. raddr leaves them
+#'     absent rather than inventing them.}
+#' }
+#'
+#' @section What the fields are:
+#'
+#' \describe{
+#'   \item{`block`, `name`, `rfc`}{The matched row, as vendored. `rfc` is `NA`
+#'     for every IPv4 address-space row, because that registry has no reference
+#'     column.}
+#'   \item{`category`}{raddr's own one-word vocabulary, 19 levels. It is
+#'     **descriptive, not a policy input** -- see [addr_category_map()], and do
+#'     not build a deny-list of level names on it.}
+#'   \item{`globally_reachable`, `forwardable`, `source`, `destination`,
+#'     `reserved_by_protocol`}{IANA's five policy columns, per row and never
+#'     collapsed. `globally_reachable` **is** the column, not a derived
+#'     `is_global`.}
+#'   \item{`embedded_kind`}{The transition mechanism, when a mechanism prefix
+#'     matched. `NA` means no prefix matched -- it never means "not NAT64". A
+#'     caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
+#'     table, so raddr states a NAT64 kind only affirmatively.}
+#'   \item{`embeddings`}{Zero or more extracted inner addresses, one
+#'     `raddr_embedding` per element. Plural because a Teredo address carries
+#'     **two** IPv4 addresses and raddr does not choose between them. The
+#'     extractor that fills this is not written yet, so every element currently
+#'     has zero rows.}
+#'   \item{`codes`}{Classify-layer reason codes, from the same vocabulary as
+#'     [addr_codes_registry()]. None are emitted yet.}
+#' }
+#'
+#' @section A string may never be classified:
+#'
+#' `addr_classify()` takes a parsed address and nothing else (P1). It also
+#' declines a `raddr_parse`, which holds four readings that may be four
+#' different addresses: choosing one is a decision, and raddr makes it by
+#' function name rather than silently. Pick a reading with
+#' [addr_reading()], or parse with [addr_strict()], [addr_whatwg()],
+#' [addr_pton()] or [addr_aton()].
+#'
+#' @param x A `raddr_address` vector.
+#'
+#' @return A `raddr_class` vector, one element per address. Every field is `NA`
+#'   for a missing address.
+#'
+#' @seealso [addr_category()] and [addr_embeddings()] for single fields,
+#'   [addr_registry()] and [addr_address_space()] for the data behind the
+#'   answer.
+#'
+#' @examples
+#' addr_classify(addr_pton(c("127.0.0.1", "8.8.8.8", "224.0.0.1", "4000::1")))
+#'
+#' # All four facts about the NAT64 well-known prefix, none collapsed
+#' cl <- addr_classify(addr_pton("64:ff9b::a9fe:a9fe"))
+#' as.data.frame(cl)[c("block", "category", "globally_reachable")]
+#'
+#' # The carve-out that forces longest-prefix matching
+#' as.data.frame(addr_classify(addr_pton(c("192.0.0.9", "192.0.0.100"))))
+#'
+#' @export
+addr_classify <- function(x) {
+  check_classify_input(x)
+  n <- vec_size(x)
+
+  blocks <- raddr_registry_data$blocks
+  spaces <- raddr_registry_data$space
+
+  # Special-purpose outranks address space, on IANA's own instruction. Because
+  # the address-space pair is an exact partition, every special-purpose block
+  # falls inside one of its rows, so this decides every doubly-matched lookup
+  # rather than an edge case.
+  special <- prefix_match(x, "special")
+  space <- prefix_match(x, "space")
+  from_special <- !is.na(special)
+  from_space <- !from_special & !is.na(space)
+
+  take <- function(special_column, space_column) {
+    out <- rep(NA_character_, n)
+    out[from_special] <- special_column[special[from_special]]
+    out[from_space] <- space_column[space[from_space]]
+    out
+  }
+
+  # The five policy columns exist in the special-purpose registry only. Where
+  # the address-space layer answered they stay NA, because that registry does
+  # not have them -- see the two meanings of NA above.
+  policy <- function(column) {
+    out <- rep(NA, n)
+    out[from_special] <- blocks[[column]][special[from_special]]
+    out
+  }
+
+  block <- take(blocks$block, spaces$block)
+  registry <- rep(NA_character_, n)
+  registry[from_special] <- "special_purpose"
+  registry[from_space] <- "address_space"
+
+  version <- rep(NA_character_, n)
+  version[from_special] <- addr_registry_version()
+  version[from_space] <- addr_address_space_version()
+
+  empty <- empty_raddr_embedding()
+  new_raddr_class(
+    block = block,
+    name = take(blocks$name, spaces$name),
+    rfc = take(blocks$rfc, spaces$rfc),
+    category = factor(
+      unname(raddr_category_map[block]),
+      levels = raddr_category_levels
+    ),
+    globally_reachable = policy("globally_reachable"),
+    forwardable = policy("forwardable"),
+    source = policy("source"),
+    destination = policy("destination"),
+    reserved_by_protocol = policy("reserved_by_protocol"),
+    embedded_kind = embedded_kind_of(x),
+    embeddings = new_list_of(rep(list(empty), n), ptype = empty),
+    codes = new_list_of(rep(list(character()), n), ptype = character()),
+    registry = factor(registry, levels = raddr_class_registries),
+    registry_version = version
+  )
+}
+
+# P1 in one place. A `raddr_parse` is refused rather than reduced: reducing four
+# readings to one is the decision section 4 says raddr makes by function name.
+check_classify_input <- function(x, arg = "x") {
+  if (is_raddr_parse(x)) {
+    abort(
+      c(
+        sprintf(
+          "`%s` must be a <raddr_address> vector, not a <raddr_parse>.",
+          arg
+        ),
+        i = paste(
+          "A <raddr_parse> holds four readings, which may be four different",
+          "addresses. raddr does not choose which one gets classified."
+        ),
+        i = paste(
+          "Take one with `addr_reading()`, or parse with `addr_strict()`,",
+          "`addr_whatwg()`, `addr_pton()` or `addr_aton()`."
+        )
+      ),
+      class = "raddr_error_type"
+    )
+  }
+  check_raddr_address(x, arg)
+}
+
+#' Test whether an object is a `raddr_class`
+#'
+#' @param x An object.
+#'
+#' @return A single `TRUE` or `FALSE`.
+#'
+#' @examples
+#' is_raddr_class(addr_classify(addr_pton("127.0.0.1")))
+#' is_raddr_class("127.0.0.1")
+#'
+#' @export
+is_raddr_class <- function(x) {
+  inherits(x, "raddr_class")
+}
+
+# One accessor shape for all three: classify an address, or read the field
+# straight off a classification the caller already has.
+class_field <- function(x, field_name, arg = "x") {
+  if (is_raddr_class(x)) {
+    return(field(x, field_name))
+  }
+  field(addr_classify(x), field_name)
+}
+
+#' Read single fields of a classification
+#'
+#' Each takes either a `raddr_address`, which it classifies, or a `raddr_class`
+#' that [addr_classify()] already produced.
+#'
+#' @section `category` describes; it does not decide:
+#'
+#' `addr_category()` returns raddr's one-word vocabulary, and a policy layer
+#' must not enumerate it. Label vocabularies drift -- `ipaddr.js` renamed
+#' `deprecated` to `deprecatedOrchid` -- and a consumer that denies by named
+#' list turns every newly added level into a bypass. Policy belongs on the five
+#' IANA columns, the classify codes and the embeddings, all of which are
+#' three-valued and registry- or RFC-sourced (P8). See [addr_category_map()].
+#'
+#' @section Embeddings are plural, and Teredo is why:
+#'
+#' `addr_embeddings()` always returns the typed list, never a single address.
+#' RFC 4380 section 4 puts two IPv4 addresses in a Teredo address -- a server in
+#' the clear and a bitwise-complemented client -- and section 5.2.6 makes the
+#' server a destination a host actually sends to, so neither is metadata for the
+#' other. There is deliberately no scalar accessor: reducing the pair to one
+#' address *is* the Teredo decision, and it is the consumer's to make.
+#'
+#' The extractor that fills these is not written yet, so every element currently
+#' has zero rows.
+#'
+#' @section `embedded_kind` is affirmative only:
+#'
+#' `NA` from `addr_embedded_kind()` means no mechanism prefix matched. It does
+#' **not** mean the address is not NAT64: RFC 6052 permits a network-specific
+#' prefix at six lengths, and a prefix table cannot see one.
+#'
+#' @param x A `raddr_address` or `raddr_class` vector.
+#'
+#' @return `addr_category()` and `addr_embedded_kind()` return factors;
+#'   `addr_embeddings()` returns a `list_of<raddr_embedding>`. All are the same
+#'   length as `x`.
+#'
+#' @seealso [addr_classify()] for the whole record.
+#'
+#' @examples
+#' addr_category(addr_pton(c("127.0.0.1", "224.0.0.1", "8.8.8.8", "4000::1")))
+#'
+#' # The mechanism is a separate fact from the category: this block is
+#' # `protocol` AND `nat64_wk` AND globally reachable, all at once.
+#' a <- addr_pton("64:ff9b::a9fe:a9fe")
+#' addr_category(a)
+#' addr_embedded_kind(a)
+#'
+#' # `::` and `::1` are not IPv4-compatible addresses carrying an embedded
+#' # 0.0.0.0 or 0.0.0.1, and are not reported as though they were
+#' addr_embedded_kind(addr_pton(c("::", "::1", "::2")))
+#'
+#' @export
+addr_category <- function(x) {
+  class_field(x, "category")
+}
+
+#' @rdname addr_category
+#' @export
+addr_embedded_kind <- function(x) {
+  class_field(x, "embedded_kind")
+}
+
+#' @rdname addr_category
+#' @export
+addr_embeddings <- function(x) {
+  class_field(x, "embeddings")
+}
+
+# --- Printing ----------------------------------------------------------------
+
+# The category leads because it is the answer; the block follows because it is
+# the evidence. Neither is useful without the other, so the one-line form
+# carries both.
+#' @export
+format.raddr_class <- function(x, ...) {
+  block <- field(x, "block")
+  out <- rep(NA_character_, length(block))
+  known <- !is.na(block)
+  out[known] <- paste(
+    as.character(field(x, "category"))[known],
+    block[known]
+  )
+  out
+}
+
+#' @export
+as.character.raddr_class <- function(x, ...) {
+  format(x, ...)
+}
+
+#' @export
+obj_print_data.raddr_class <- function(x, ...) {
+  if (vec_size(x) == 0L) {
+    return(invisible(x))
+  }
+  print(format(x), quote = FALSE)
+  invisible(x)
+}
+
+# P7: provenance travels with the verdict. Which snapshot answered is part of
+# the answer, and the two layers are stamped separately, so the footer names
+# every layer that actually contributed rather than printing one date that
+# would imply something about a table it says nothing about.
+registry_labels <- c(
+  special_purpose = "special-purpose",
+  address_space = "address space"
+)
+
+#' @export
+obj_print_footer.raddr_class <- function(x, ...) {
+  registry <- field(x, "registry")
+  if (!length(registry) || all(is.na(registry))) {
+    return(invisible(x))
+  }
+  version <- field(x, "registry_version")
+
+  used <- names(registry_labels)[names(registry_labels) %in% registry]
+  parts <- vapply(used, function(level) {
+    at <- !is.na(registry) & registry == level
+    count <- if (length(used) > 1L) sprintf(" (%d)", sum(at)) else ""
+    sprintf("%s %s%s", registry_labels[[level]], version[at][[1L]], count)
+  }, character(1L))
+
+  cat(sprintf("Registry: %s\n", paste(parts, collapse = ", ")))
+  invisible(x)
+}
+
+# Every field, as columns. A record is one column under vctrs' default, which is
+# the right answer inside a data frame and the wrong one for a caller who wants
+# to read `globally_reachable` -- and nine more accessors to reach nine fields
+# would be API surface standing in for a coercion R already has a name for.
+#' @export
+as.data.frame.raddr_class <- function(x, ...) {
+  vec_data(x)
+}
+
+#' @export
+vec_ptype_abbr.raddr_class <- function(x, ...) {
+  "class"
+}
+
+#' @export
+vec_ptype_full.raddr_class <- function(x, ...) {
+  "raddr_class"
 }

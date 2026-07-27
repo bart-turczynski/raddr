@@ -839,7 +839,9 @@ fails is its reason, at no extra cost.
 | `forwardable`, `source`, `destination`, `reserved_by_protocol` | `logical` | the other four IANA columns |
 | `embedded_kind` | factor | the *mechanism*: `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
 | `embeddings` | `list_of<raddr_embedding>` | zero or more extracted inner addresses. One list element per row |
-| `registry_version` | `character` | snapshot stamp (P7) |
+| `codes` | `list_of<character>` | classify-layer codes (`RADD-wglsdrmu`) |
+| `registry` | factor | which vendored pair answered: `special_purpose` or `address_space` **[added 2026-07-27]** |
+| `registry_version` | `character` | snapshot stamp of *that* pair (P7) |
 
 Each element of `embeddings` is a `raddr_embedding` record of zero or more rows:
 
@@ -1122,6 +1124,78 @@ asserts that one of three simultaneously-true fields is the real one. It became
 that one of Teredo's two embedded addresses is the real one. Same judgment,
 refused at two different layers — first in a name, then in a cardinality.
 
+#### 5.3.6 `registry`, and the two meanings of `NA` **[added 2026-07-27]**
+
+**This field is an addition to the settled list, made while building the
+record.** The reason is that without it the five policy logicals carry two
+different `NA`s that a caller cannot tell apart:
+
+| `registry` | What `globally_reachable = NA` means |
+|---|---|
+| `special_purpose` | IANA's own `N/A` — a policy it **declined to state**. §7.1 keeps two distinct reasons for it |
+| `address_space` | the question was **never asked**: that registry has no policy columns at all |
+
+`192.88.99.1` and `8.8.8.8` both classify with all five logicals `NA`, and the
+two facts are not the same fact. Merging them is the identical mistake as
+reading IANA's `N/A` as `FALSE`, one level up — so the record says which
+registry answered rather than leaving a caller to re-derive it by looking the
+block up in both accessors.
+
+It also makes `registry_version` honest. §7.3 fixed the two pairs' stamps
+separately *because* one date across both would assert something about a table
+it says nothing about; a per-row version with no per-row registry reintroduces
+exactly that ambiguity. So the two travel together, and P7 is satisfied per row
+rather than per call.
+
+**The survey supports the shape, and it is the only one that does**
+**[measured 2026-07-27].** Of the comparable implementations, one consults more
+than one registry, and it carries provenance the same way:
+
+| Tool | `192.0.0.9` (a globally reachable carve-out) | Provenance |
+|---|---|---|
+| Python `netaddr` | `192/8`, `Administered by ARIN`, `Legacy` | `.info` is **keyed by registry** — `IPv4`, `IPv6`, `Multicast`, `IPv6_unicast` |
+| CPython `ipaddress` | `is_global=True`, `is_reserved=False` | none |
+| R `ipaddress` | `is_global=True`, `is_reserved=False` | none — no block, RFC or registry accessor exists |
+
+Two findings, and both point the same way. `netaddr` labels every answer with
+the registry it came from, which is the field proposed here arriving at the same
+place by a different route. And `netaddr` has **no special-purpose registry at
+all**, so it answers `192.0.0.9` from the `/8` and the carve-out disappears, and
+answers `64:ff9b::a9fe:a9fe` as `::/8 Reserved by IETF` — losing both the
+`Globally Reachable = True` and the embedded `169.254.169.254`. That is P9's
+CVE-producing pattern in a fourth library, and it is why the two layers are
+ordered rather than merged.
+
+The two that carry no provenance also emit `is_global` and `is_reserved` as
+simultaneously `True` for `64:ff9b::a9fe:a9fe` — contradictory predicates with
+nothing to check them against. Provenance is what makes a contradiction
+inspectable instead of merely present.
+
+#### 5.3.7 `embedded_kind` is affirmative only **[implemented 2026-07-27]**
+
+`NA` means **no mechanism prefix matched**. It never means "not NAT64": RFC 6052
+permits a network-specific prefix at six lengths, so a caller-supplied prefix is
+invisible to a prefix table and raddr may only ever say `nat64_wk` or
+`nat64_local` affirmatively. Three rules follow, each mechanical:
+
+1. **A prefix with no geometry is not a kind.** `192.88.99.0/24` is in the
+   overlay, but nothing is embedded *in* it — the 6to4 image of `192.88.99.1` is
+   a mapping *out*. Naming a kind there would assert an extraction that does not
+   exist, and the fact is already carried by `name` and `category = anycast`. So
+   the vocabulary is **derived** from the geometry table rather than restated,
+   and `6to4_relay_anycast` falls out of it.
+2. **`::/96` keeps the `tail32 > 1` carve-out.** `::` and `::1` are separate,
+   higher-priority IANA rows; reading their low 32 bits would report an embedded
+   `0.0.0.0` or `0.0.0.1`. The threshold is a registry fact, not a heuristic, and
+   both shipped in-house guards already use it.
+3. **A prefix outranks the ISATAP interface identifier.** RFC 5214 §6.1 makes
+   ISATAP a pattern that can sit under *any* `/64`, including one already
+   assigned to another mechanism, so `2002:c000:201:0:0:5efe:1.2.3.4` is `6to4`.
+   A prefix is an assignment; an interface identifier is a convention inside one.
+
+The IID is matched by comparison against both permitted forms, never by
+`bitwAnd` — §5.1.1 again, since `w3` could hold `0x80000000`.
+
 ---
 
 ## 6. Public API
@@ -1187,10 +1261,28 @@ addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 ```r
 addr_classify(a)         # -> raddr_class
 addr_category(a)         # factor, 19 levels (section 5.3.2). Was addr_scope()
+addr_embedded_kind(a)    # factor, affirmative only (section 5.3.7)
 addr_embeddings(a)       # list_of<raddr_embedding>, always. Replaces
                          #   addr_embedded_scope(); see section 5.3.5
 addr_within(a, blocks)   addr_within_any(a, blocks)
 ```
+
+The three field accessors each take **either** a `raddr_address`, which they
+classify, **or** a `raddr_class` a caller already holds. Everything else on the
+record is reached with `as.data.frame()` rather than nine more accessors: a
+record is one column under `vctrs`' default, which is right inside a data frame
+and wrong for someone who wants to read `globally_reachable`.
+
+`is_raddr_class()` and `is_raddr_embedding()` ship alongside, matching
+`is_raddr_address()` and `is_raddr_parse()`. There is no public
+`raddr_embedding()` constructor: they come out of classification and are not
+built by hand.
+
+`addr_classify()` also refuses a `raddr_parse`, which is P1 one step further in.
+Four readings may be four different addresses, and §4 puts the choice in a
+function name — so the error names `addr_reading()` and the four primitives
+rather than silently taking `whatwg`. `format()` may default because R
+structurally forces one value out of it; `addr_classify()` is not forced.
 
 ### 6.4 Data and metadata
 

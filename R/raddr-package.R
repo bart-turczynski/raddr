@@ -18,6 +18,7 @@
 #' @importFrom vctrs vec_proxy_compare
 #' @importFrom vctrs vec_proxy_equal
 #' @importFrom vctrs vec_assign
+#' @importFrom vctrs vec_data
 #' @importFrom vctrs vec_recycle_common
 #' @importFrom vctrs vec_slice
 #' @importFrom vctrs vec_size

@@ -191,6 +191,51 @@ isatap_iid <- list(
   permitted = c(0x00005efeL, 0x02005efeL)
 )
 
+# --- which prefixes can be an `embedded_kind` -------------------------------
+#
+# A prefix `kind` maps to the geometry row that says where its embedded bits
+# live. Two prefixes share one geometry -- RFC 6052 keys NAT64 on prefix LENGTH,
+# so `nat64_wk` and `nat64_local` both read the `nat64` rows -- and one prefix
+# has no geometry at all: nothing is embedded IN 192.88.99.0/24, which is why
+# `6to4_relay_anycast` is NA here and can never be an `embedded_kind`. That the
+# /24 is the 6to4 relay anycast prefix is carried by the registry `name` and by
+# `category = anycast`, so naming a kind there would add nothing and would
+# assert an extraction that does not exist.
+#
+# ISATAP has the opposite shape: a geometry with no prefix. RFC 5214 section 6.1
+# makes it an interface-identifier pattern that can sit under any /64, so it has
+# no row in the prefix table and is matched by `isatap_iid` instead.
+transition_geometry_kind <- c(
+  ipv4_mapped = "ipv4_mapped",
+  ipv4_compatible = "ipv4_compatible",
+  ipv4_translated = "ipv4_translated",
+  "6to4" = "6to4",
+  teredo = "teredo",
+  "6to4_relay_anycast" = NA_character_,
+  nat64_wk = "nat64",
+  nat64_local = "nat64",
+  isatap = "isatap"
+)
+
+# Both halves of that claim are checked rather than trusted: every prefix kind
+# is accounted for, and every geometry named actually exists.
+stopifnot(
+  setequal(
+    names(transition_geometry_kind),
+    c(raddr_transition_prefixes$kind, "isatap")
+  ),
+  all(
+    transition_geometry_kind[!is.na(transition_geometry_kind)] %in%
+      raddr_transition_embeddings$kind
+  )
+)
+
+# The `embedded_kind` vocabulary, derived rather than restated: a mechanism can
+# be named only if raddr knows where its bits are.
+raddr_embedded_kinds <- names(
+  transition_geometry_kind[!is.na(transition_geometry_kind)]
+)
+
 #' The transition-prefix overlay
 #'
 #' The prefixes whose classification needs more granularity than the IANA
