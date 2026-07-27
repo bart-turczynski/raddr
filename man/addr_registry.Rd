@@ -11,7 +11,8 @@ A data frame of 51 rows. See the sections above for the columns.
 }
 \description{
 Returns the two IANA special-purpose address registries as one data frame,
-exactly as vendored. This is the table \code{\link[=addr_classify]{addr_classify()}} matches against.
+exactly as vendored. This is the table \code{addr_classify()} will match against.
+(Not a link: \code{addr_classify()} arrives with the classification layer.)
 }
 \section{All five policy columns, never collapsed}{
 

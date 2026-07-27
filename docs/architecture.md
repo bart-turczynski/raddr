@@ -867,7 +867,14 @@ addr_within(a, blocks)   addr_within_any(a, blocks)
 ```r
 addr_registry()  addr_codes_registry()
 addr_registry_version()  addr_registry_outdated(max_age = 365)
+addr_transition_registry(what = c("prefixes", "embeddings"))
+addr_transition_version()
 ```
+
+The last two were added in Epic H. The overlay is stamped separately from the
+IANA snapshot (§7.2), so it needs its own version accessor; folding it into
+`addr_registry_version()` would make one date imply something about a table it
+says nothing about.
 
 ### 6.5 Encoding round-trips
 
@@ -973,12 +980,76 @@ recorded. `inst/extdata/*.csv` is now `-text` in `.gitattributes` and excluded
 from the three whitespace hooks. **A vendoring pattern needs an exemption from
 the repo's formatting, or the formatting silently invalidates the provenance.**
 
-**An undated snapshot is outdated.** The CSVs carry no version field, so the
+**An undated snapshot is outdated (see §7.2 for the overlay's own stamp).** The CSVs carry no version field, so the
 stamp is the served `Last-Modified`, normalized to ISO at build time with an
 explicit month map (never `strptime`'s locale-dependent `%b`). The stamp is the
 **older** of the two halves, and is `NA` if either half is undated;
 `addr_registry_outdated()` then returns `TRUE`. Treating absence of evidence as
 evidence of freshness is the one failure a staleness check exists to prevent.
+
+### 7.2 The transition overlay **[implemented 2026-07-27]**
+
+**It is not vendored, because there is nothing to vendor.** The overlay is
+transcribed from RFCs by hand, so it follows `R/codes.R`'s const-registry shape
+rather than the build-script shape the IANA registries use. A `data-raw/` script
+that "builds" a table from a literal in its own source would be ceremony around
+a constant.
+
+**IANA marks the boundary itself.** §7.1 found that the only two non-deprecated
+blocks IANA leaves `N/A` for `Globally Reachable` are Teredo `2001::/32` and
+6to4 `2002::/16`, and the reason is that reachability follows the *embedded*
+IPv4 address. So the overlay is not raddr second-guessing the registry — the
+registry declines, in its own voice, exactly where the overlay picks up. The
+`::/96` and `::ffff:0:0:0/96` rows aside, the overlay mostly **annotates** the
+IANA table rather than extending it.
+
+**Two shapes, because prefixes and geometry are different facts.**
+`addr_transition_registry("prefixes")` lists fixed prefixes with a `kind`;
+`addr_transition_registry("embeddings")` gives one row per **contiguous
+segment** of an embedded IPv4 address. Three forms make the second table
+necessary:
+
+- **Teredo carries two addresses**, not one: a server in the clear at bit 32,
+  and a client at bit 96 stored **bitwise-complemented** so a NAT will not
+  rewrite it in transit (RFC 4380 §4). It is the only complemented field.
+- **NAT64 geometry is a function of the prefix length, not of a prefix.** A
+  network-specific prefix may be *any* prefix of the six lengths RFC 6052 §2.2
+  permits, so those rows carry a `prefix_len` and no block.
+- **ISATAP has an embedding but no prefix at all** — it is an
+  interface-identifier pattern (`0000:5efe`, or `0200:5efe` when built from a
+  globally unique IPv4) that can sit under any `/64`.
+
+**The u-byte is why the segments exist.** RFC 6052 reserves bits 64–71, and the
+embedded address skips them, so four of the six lengths split it in two:
+
+| prefix length | segments (offset, bits) |
+|---|---|
+| /32 | (32, 32) |
+| /40 | (40, 24) + (72, 8) |
+| /48 | (48, 16) + (72, 16) |
+| /56 | (56, 8) + (72, 24) |
+| /64 | (72, 32) |
+| /96 | (96, 32) |
+
+The embedded address begins immediately after the prefix at every length
+**except `/64`**, where the u-byte sits between them. That single exception is
+the whole reason the geometry cannot be computed from the prefix length and has
+to be tabulated. The tests check the RFC's rules — segments totalling 32 bits,
+ordered, disjoint, and clear of bits 64–71 — rather than only restating the
+numbers a second time, because hand-transcribed offsets are wrong in ways
+re-reading does not catch.
+
+**A second stamp, and no expiry.** `addr_transition_version()` is independent of
+`addr_registry_version()`: the two change for unrelated reasons, so neither is
+evidence about the other. There is deliberately no
+`addr_transition_outdated()` — the RFCs this is drawn from do not expire.
+
+**`0xfdffffff` is not a mask.** The ISATAP identifier mask was first written as
+that literal, which is a double above 2^31; `bitwAnd()` returns `NA` for it
+silently, and every ISATAP address would have failed to match. It is spelled
+`bitwNot(0x02000000L)` instead. This is the §12 signed-integer constraint
+reappearing in `bitwAnd`'s *operand* rather than in a shift, which is the form
+the constraint as written does not obviously cover.
 
 ---
 

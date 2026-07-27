@@ -19,7 +19,8 @@ registry_public_columns <- c(
 #' The bundled IANA special-purpose address registries
 #'
 #' Returns the two IANA special-purpose address registries as one data frame,
-#' exactly as vendored. This is the table [addr_classify()] matches against.
+#' exactly as vendored. This is the table `addr_classify()` will match against.
+#' (Not a link: `addr_classify()` arrives with the classification layer.)
 #'
 #' @section All five policy columns, never collapsed:
 #'
