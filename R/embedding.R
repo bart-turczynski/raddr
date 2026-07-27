@@ -204,3 +204,152 @@ read_embedded <- function(words, segments, at) {
 
   value
 }
+
+# --- the extractor (sections 5.3.5 and 8.1) ----------------------------------
+#
+# One element per address, holding zero, one or two rows. The outer record stays
+# `vctrs` size-stable: rows multiply only when a caller unnests.
+#
+# TWO ROWS IS TEREDO AND ONLY TEREDO, and they are not a ranking. RFC 4380
+# section 4 puts the server in the clear at bits 32-63 and the client
+# complemented at bits 96-127, and section 5.2.6 makes the server a destination
+# a host actually sends a UDP bubble to -- so neither is metadata for the other.
+# They are reported in the overlay's order, server then client, which is the
+# RFC's, and raddr does not choose between them (P8).
+#
+# `category` is the classification of the EXTRACTED address, not of the outer
+# one, so filling it is one level of `addr_classify()` on what came out. That
+# recursion is one level deep by construction rather than by a depth guard: an
+# extracted address is IPv4, the only IPv4 row in the overlay is
+# `192.88.99.0/24`, and that prefix has no geometry (section 5.3.7) -- so the
+# inner call finds no kind, extracts nothing, and stops.
+#
+# Returns the column and, separately, whether each role's extracted address is
+# global. The three MUST rules of section 5.2.2 are stated about the embedded
+# address rather than the outer one, so the code layer needs an answer the
+# `raddr_embedding` record does not carry -- see `embedded_is_global()`.
+extract_embeddings <- function(x, kind) {
+  n <- vec_size(x)
+  empty <- empty_raddr_embedding()
+  out <- list(
+    embeddings = new_list_of(rep(list(empty), n), ptype = empty),
+    global = stats::setNames(
+      rep(list(rep(NA, n)), length(raddr_embedding_roles)),
+      raddr_embedding_roles
+    )
+  )
+
+  kind <- as.character(kind)
+  mechanisms <- unique(kind[!is.na(kind)])
+  if (length(mechanisms) == 0L) {
+    return(out)
+  }
+
+  words <- lapply(
+    c("w1", "w2", "w3", "w4"),
+    function(nm) widen_word(field(x, nm))
+  )
+
+  # One block per (mechanism, role), each covering every address of that
+  # mechanism at once. `rank` is the role's position in the geometry table, and
+  # it is what puts an element's rows in the RFC's order once they are sorted.
+  blocks <- list()
+  for (mechanism in mechanisms) {
+    at <- which(!is.na(kind) & kind == mechanism)
+    geometry <- embedding_geometry(mechanism)
+    roles <- unique(geometry$role)
+
+    for (rank in seq_along(roles)) {
+      segments <- geometry[geometry$role == roles[[rank]], , drop = FALSE]
+      blocks[[length(blocks) + 1L]] <- list(
+        at = at,
+        kind = mechanism,
+        role = roles[[rank]],
+        rank = rank,
+        w4 = narrow_word(read_embedded(words, segments, at))
+      )
+    }
+  }
+
+  sizes <- vapply(blocks, function(block) length(block$at), integer(1L))
+  column <- function(name, ptype) {
+    rep(vapply(blocks, `[[`, ptype, name), sizes)
+  }
+  at <- unlist(lapply(blocks, `[[`, "at"), use.names = FALSE)
+  w4 <- unlist(lapply(blocks, `[[`, "w4"), use.names = FALSE)
+  order_in_element <- order(at, column("rank", integer(1L)))
+
+  at <- at[order_in_element]
+  address <- new_raddr_address(
+    w1 = rep(0L, length(at)),
+    w2 = rep(0L, length(at)),
+    w3 = rep(0L, length(at)),
+    w4 = w4[order_in_element],
+    family = factor(rep("v4", length(at)), levels = addr_families),
+    zone = rep(NA_character_, length(at))
+  )
+  role <- column("role", character(1L))[order_in_element]
+
+  inner <- addr_classify(address)
+  rows <- new_raddr_embedding(
+    kind = factor(
+      column("kind", character(1L))[order_in_element],
+      levels = raddr_embedded_kinds
+    ),
+    role = factor(role, levels = raddr_embedding_roles),
+    address = address,
+    category = field(inner, "category")
+  )
+
+  # Back into one element per outer address. A level per address rather than a
+  # size per address, so the rows that extracted nothing get their empty.
+  out$embeddings <- new_list_of(
+    unname(vec_chop(rows, indices = split(
+      seq_along(at),
+      factor(at, levels = seq_len(n))
+    ))),
+    ptype = empty
+  )
+
+  global <- embedded_is_global(inner)
+  for (name in unique(role)) {
+    out$global[[name]][at[role == name]] <- global[role == name]
+  }
+
+  out
+}
+
+# Whether an extracted address is a global IPv4 address, which is the antecedent
+# of all three of the MUST rules in section 5.2.2 and is worded three ways:
+#
+#   RFC 6052 section 3.1  "non-global IPv4 addresses, such as those defined in
+#                          [RFC1918] or listed in Section 3 of [RFC5735]"
+#   RFC 3056 section 9    "not in the format of a global unicast address"
+#   RFC 4380 section 4    "a global scope unicast IPv4 address"
+#
+# One predicate serves all three, because over IPv4 the three sets coincide:
+# RFC 5735 section 3 enumerates exactly the special-use blocks, and RFC 3056
+# section 9 names "[RFC1918], broadcast, subnet broadcast, multicast and
+# loopback" -- every one of which is in that enumeration.
+#
+# TWO POSITIVE TESTS, NOT ONE NEGATIVE ONE, because neither layer answers alone
+# and neither absence may be read as an answer:
+#
+#   - `globally_reachable == TRUE` is IANA saying so. It settles the five
+#     special-purpose blocks that ARE globally reachable -- PCP and TURN
+#     anycast, AS112 twice, AMT -- which a category test would wrongly report.
+#   - `category == "global"` is the address-space layer, where a delegated /8
+#     lives and IANA publishes no policy column at all. A `globally_reachable`
+#     test alone would call 8.8.8.8 non-global, and would also miss
+#     `224.0.0.0/4` and the other blocks that have no special-purpose row at
+#     all -- CVE-2025-8267's shape.
+#
+# Section 5.3.3 forbids a policy layer from enumerating `category` as a deny
+# list, and this is not that: it is one POSITIVE level, the one documented to
+# mean "an ordinary host may live here", and a level added later falls on the
+# non-global side, which is the direction that fails safe.
+embedded_is_global <- function(class) {
+  reachable <- field(class, "globally_reachable")
+  category <- field(class, "category")
+  (!is.na(reachable) & reachable) | (!is.na(category) & category == "global")
+}

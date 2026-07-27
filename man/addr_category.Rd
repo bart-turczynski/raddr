@@ -45,8 +45,10 @@ server a destination a host actually sends to, so neither is metadata for the
 other. There is deliberately no scalar accessor: reducing the pair to one
 address \emph{is} the Teredo decision, and it is the consumer's to make.
 
-The extractor that fills these is not written yet, so every element currently
-has zero rows.
+Each row carries the \code{category} of the \strong{extracted} address, not of the one
+it came out of. \code{addr_classify(addr_pton("::ffff:127.0.0.1"))} therefore
+reports an IPv6 address in \verb{::ffff:0:0/96} \emph{and} an embedded \verb{127.0.0.1}
+that is \code{loopback}, with neither fact collapsed into the other.
 }
 
 \section{\code{embedded_kind} is affirmative only}{

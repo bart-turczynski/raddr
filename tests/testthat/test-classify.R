@@ -441,6 +441,182 @@ test_that("every embedded_kind level has a geometry to extract with", {
   expect_true("6to4_relay_anycast" %in% addr_transition_registry()$kind)
 })
 
+# --- extraction, the wrapper matrix of section 8.1 ---------------------------
+#
+# The mechanisms end to end, through the record. The bit machinery underneath
+# is tested on its own in test-embedding.R.
+
+embedded_of <- function(literal) {
+  field(addr_classify(addr_pton(literal)), "embeddings")[[1L]]
+}
+
+test_that("the three /96 wrapper forms carry their address verbatim", {
+  # RADD-wslnuhwa. RFC 4291 sections 2.5.5.1 and 2.5.5.2, and the historic
+  # RFC 2765 form. All three put the address at bits 96-127 and differ only in
+  # which hextet holds `ffff` -- which is why an extractor keyed on the trailing
+  # 32 bits alone gets the right address and the wrong mechanism.
+  expect_equal(format(embedded_of("::ffff:127.0.0.1")),
+               "ipv4_mapped/embedded 127.0.0.1 loopback")
+  expect_equal(format(embedded_of("::1.2.3.4")),
+               "ipv4_compatible/embedded 1.2.3.4 global")
+  expect_equal(format(embedded_of("::ffff:0:c000:221")),
+               "ipv4_translated/embedded 192.0.2.33 documentation")
+
+  # Two textual spellings of one 128-bit value take one code path. Node's URL
+  # parser normalising `::ffff:169.254.169.254` to the hex form while the range
+  # check only read the dotted one is the root cause docs/research/04 records
+  # behind CVE-2024-29415 and six others.
+  expect_equal(embedded_of("::ffff:7f00:1"), embedded_of("::ffff:127.0.0.1"))
+})
+
+test_that("`::` and `::1` extract nothing, and `::2` does", {
+  # The `tail32 > 1` carve-out, which both shipped in-house guards use: reading
+  # the low bits of the unspecified or loopback address would report an
+  # embedded 0.0.0.0 or 0.0.0.1 and misclassify two higher-priority IANA rows.
+  expect_equal(vec_size(embedded_of("::")), 0L)
+  expect_equal(vec_size(embedded_of("::1")), 0L)
+  expect_equal(format(embedded_of("::2")),
+               "ipv4_compatible/embedded 0.0.0.2 this_network")
+})
+
+test_that("6to4 reads V4ADDR at bits 16-47, not from the interface id", {
+  # RADD-upovkbfc. RFC 3056 section 2's diagram: FP | TLA | V4ADDR | SLA | IID.
+  expect_equal(format(embedded_of("2002:c000:204::")),
+               "6to4/embedded 192.0.2.4 documentation")
+
+  # The 6to4 image of the deprecated relay anycast address, which is the one
+  # place the mapping runs the other way (section 5.3.7 rule 1).
+  expect_equal(format(embedded_of("2002:c058:6301::")),
+               "6to4/embedded 192.88.99.1 anycast")
+
+  # And 192.88.99.0/24 itself embeds nothing: it is IPv4, and classify-only.
+  expect_equal(vec_size(embedded_of("192.88.99.1")), 0L)
+  expect_true(is.na(addr_embedded_kind(addr_pton("192.88.99.1"))))
+})
+
+test_that("Teredo reports both addresses, and complements exactly one", {
+  # RADD-upovkbfc, and RFC 4380 section 4's own example address. Two rows in
+  # the RFC's order, both classified, neither ranked -- section 5.3.5.
+  rows <- embedded_of("2001:0:4136:e378:8000:63bf:3fff:fdd2")
+  expect_equal(vec_size(rows), 2L)
+  expect_equal(
+    format(rows),
+    c(
+      "teredo/server 65.54.227.120 global",
+      "teredo/client 192.0.2.45 documentation"
+    )
+  )
+
+  # The two symmetric failures docs/research/04 records, each of which produces
+  # a wrong-but-routable-looking address with no error: reporting the raw
+  # client bits, or complementing the server too.
+  addresses <- field(rows, "address")
+  expect_false(any(addresses == addr_pton("63.255.253.210")))
+  expect_false(any(addresses == addr_pton("63.255.253.254")))
+})
+
+test_that("Teredo is the only form with two rows", {
+  lits <- c(
+    "::ffff:1.2.3.4", "::2", "::ffff:0:1.2.3.4", "2002:102:304::",
+    "2001:0:4136:e378:8000:63bf:3fff:fdd2", "64:ff9b::1.2.3.4",
+    "64:ff9b:1:102:3:400::", "2001:db8::5efe:1.2.3.4"
+  )
+  sizes <- vapply(
+    field(addr_classify(addr_pton(lits)), "embeddings"),
+    vec_size,
+    integer(1L)
+  )
+  expect_equal(sizes, c(1L, 1L, 1L, 1L, 2L, 1L, 1L, 1L))
+})
+
+test_that("NAT64 reads the well-known prefix and the local-use prefix", {
+  # RADD-dgdptgoc, and the worked example section 5.3.5 is built on: four
+  # simultaneously true facts about `64:ff9b::a9fe:a9fe`, none collapsed.
+  cl <- addr_classify(addr_pton("64:ff9b::a9fe:a9fe"))
+  expect_equal(field(cl, "block"), "64:ff9b::/96")
+  expect_equal(as.character(field(cl, "category")), "protocol")
+  expect_true(field(cl, "globally_reachable"))
+  expect_equal(format(field(cl, "embeddings")[[1L]]),
+               "nat64_wk/embedded 169.254.169.254 link_local")
+
+  # RFC 8215's local-use prefix reads RFC 6052 /48 geometry, where the address
+  # straddles the reserved u-byte. A contiguous read here gives 192.0.0.2.
+  expect_equal(format(embedded_of("64:ff9b:1:c000:2:2100::")),
+               "nat64_local/embedded 192.0.2.33 documentation")
+
+  # The extraction is contested rather than implied, and says so.
+  expect_true(
+    "nat64_local_layout_unspecified" %in%
+      field(addr_classify(addr_pton("64:ff9b:1:c000:2:2100::")), "codes")[[1L]]
+  )
+})
+
+test_that("a network-specific NAT64 prefix is invisible, and says nothing", {
+  # Section 5.3.7: `embedded_kind` is affirmative only. RFC 6052's own /48
+  # example under a documentation prefix is a real NAT64 address that no prefix
+  # table can see, so raddr reports no kind and extracts nothing -- it does NOT
+  # report "not NAT64".
+  nsp <- addr_pton("2001:db8:122:c000:2:2100::")
+  expect_true(is.na(addr_embedded_kind(nsp)))
+  expect_equal(vec_size(addr_embeddings(nsp)[[1L]]), 0L)
+})
+
+test_that("ISATAP extracts from both permitted interface identifiers", {
+  # RADD-mwjduppi. RFC 5214 section 6.1: `0000:5efe` or `0200:5efe`, the second
+  # when the IPv4 address is known globally unique. Matching only one form
+  # misses half the mechanism.
+  expect_equal(format(embedded_of("2001:db8::5efe:c000:221")),
+               "isatap/embedded 192.0.2.33 documentation")
+  expect_equal(format(embedded_of("2001:db8::200:5efe:c000:221")),
+               "isatap/embedded 192.0.2.33 documentation")
+
+  # A private embedded address is expected, not anomalous: RFC 5214 section 6.1
+  # says ISATAP works "whether global or private IPv4 addresses are used".
+  expect_equal(format(embedded_of("fe80::5efe:a00:1")),
+               "isatap/embedded 10.0.0.1 private")
+
+  # A prefix outranks the pattern, and the extraction follows the prefix: this
+  # is a 6to4 address, so the bits read are 16-47 and not 96-127.
+  expect_equal(format(embedded_of("2002:c000:201:0:0:5efe:1.2.3.4")),
+               "6to4/embedded 192.0.2.1 documentation")
+})
+
+test_that("extraction is vectorized and agrees with one-at-a-time", {
+  lits <- c(
+    "::ffff:127.0.0.1", "8.8.8.8", "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+    "not an address", "64:ff9b::a9fe:a9fe", "::1", "2002:c058:6301::"
+  )
+  together <- field(addr_classify(addr_pton(lits)), "embeddings")
+  apart <- lapply(lits, embedded_of)
+
+  expect_length(together, length(lits))
+  for (i in seq_along(lits)) {
+    expect_equal(together[[i]], apart[[i]], info = lits[[i]])
+  }
+})
+
+test_that("an extracted address never inherits the outer zone", {
+  # The zone is storage alongside the bits, never inside them, and it names an
+  # interface on the OUTER address. Carrying it into an extracted IPv4 address
+  # would assert a scope for a value that was read out of 32 bits.
+  rows <- embedded_of("fe80::5efe:a00:1%en0")
+  expect_true(is.na(addr_zone(field(rows, "address"))))
+  expect_equal(rows, embedded_of("fe80::5efe:a00:1"))
+})
+
+test_that("extraction survives the 0x80000000 word, in both directions", {
+  # Section 5.1.1's pattern, reached through the geometry rather than built by
+  # hand. `2001::8000:0` is a Teredo client at 127.255.255.255 once
+  # complemented; `::ffff:128.0.0.0` stores the pattern directly.
+  client <- field(embedded_of("2001::8000:0"), "address")[[2L]]
+  expect_equal(client, addr_pton("127.255.255.255"))
+
+  mapped <- field(embedded_of("::ffff:128.0.0.0"), "address")
+  expect_equal(mapped, addr_pton("128.0.0.0"))
+  expect_true(is.na(field(mapped, "w4")))
+  expect_true(mapped == mapped)
+})
+
 # --- the record's shape and API ----------------------------------------------
 
 test_that("a string may never be classified, and neither may a raddr_parse", {

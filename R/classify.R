@@ -429,10 +429,10 @@ new_raddr_class <- function(block, name, rfc, footnotes, category,
 #'     caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
 #'     table, so raddr states a NAT64 kind only affirmatively.}
 #'   \item{`embeddings`}{Zero or more extracted inner addresses, one
-#'     `raddr_embedding` per element. Plural because a Teredo address carries
-#'     **two** IPv4 addresses and raddr does not choose between them. The
-#'     extractor that fills this is not written yet, so every element currently
-#'     has zero rows.}
+#'     `raddr_embedding` per element, each carrying the extracted address and
+#'     **its own** `category`. Plural because a Teredo address carries **two**
+#'     IPv4 addresses -- a server in the clear and a bitwise-complemented
+#'     client -- and raddr does not choose between them.}
 #'   \item{`codes`}{Classify-layer reason codes, from the same vocabulary as
 #'     [addr_codes_registry()] and graded by that registry's `strength`
 #'     column. See below.}
@@ -541,8 +541,8 @@ addr_classify <- function(x) {
   version[from_special] <- addr_registry_version()
   version[from_space] <- addr_address_space_version()
 
-  empty <- empty_raddr_embedding()
   kind <- embedded_kind_of(x)
+  embedded <- extract_embeddings(x, kind)
   new_raddr_class(
     block = block,
     name = take(blocks$name, spaces$name),
@@ -559,7 +559,7 @@ addr_classify <- function(x) {
     reserved_by_protocol = policy("reserved_by_protocol"),
     termination_date = only_special("termination_date", NA_character_),
     embedded_kind = kind,
-    embeddings = new_list_of(rep(list(empty), n), ptype = empty),
+    embeddings = embedded$embeddings,
     codes = classify_codes_of(x, kind),
     registry = factor(registry, levels = raddr_class_registries),
     registry_version = version
@@ -638,8 +638,10 @@ class_field <- function(x, field_name, arg = "x") {
 #' other. There is deliberately no scalar accessor: reducing the pair to one
 #' address *is* the Teredo decision, and it is the consumer's to make.
 #'
-#' The extractor that fills these is not written yet, so every element currently
-#' has zero rows.
+#' Each row carries the `category` of the **extracted** address, not of the one
+#' it came out of. `addr_classify(addr_pton("::ffff:127.0.0.1"))` therefore
+#' reports an IPv6 address in `::ffff:0:0/96` *and* an embedded `127.0.0.1`
+#' that is `loopback`, with neither fact collapsed into the other.
 #'
 #' @section `embedded_kind` is affirmative only:
 #'

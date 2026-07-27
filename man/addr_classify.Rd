@@ -109,10 +109,10 @@ matched. \code{NA} means no prefix matched -- it never means "not NAT64". A
 caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
 table, so raddr states a NAT64 kind only affirmatively.}
 \item{\code{embeddings}}{Zero or more extracted inner addresses, one
-\code{raddr_embedding} per element. Plural because a Teredo address carries
-\strong{two} IPv4 addresses and raddr does not choose between them. The
-extractor that fills this is not written yet, so every element currently
-has zero rows.}
+\code{raddr_embedding} per element, each carrying the extracted address and
+\strong{its own} \code{category}. Plural because a Teredo address carries \strong{two}
+IPv4 addresses -- a server in the clear and a bitwise-complemented
+client -- and raddr does not choose between them.}
 \item{\code{codes}}{Classify-layer reason codes, from the same vocabulary as
 \code{\link[=addr_codes_registry]{addr_codes_registry()}} and graded by that registry's \code{strength}
 column. See below.}
