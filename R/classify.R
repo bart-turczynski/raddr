@@ -252,14 +252,10 @@ embedded_kind_of <- function(x) {
 # The classify codes for each address, as the `list_of<character>` the record
 # stores.
 #
-# `kind` is passed in rather than recomputed: two of the rules are conditional
-# on the mechanism, and `addr_classify()` has already paid for that lookup.
-#
-# Three codes are absent by necessity, not by omission -- the two MUST-drop
-# rules and Teredo's conditional MUST all need the embedded IPv4 extracted and
-# classified, which is Epic J's. Their vocabulary, grading and provenance land
-# here so that adding the extractor is not also a re-versioning of the API.
-classify_codes_of <- function(x, kind) {
+# `kind` and `embedded` are passed in rather than recomputed: five of the eight
+# rules are conditional on the mechanism or on the extracted address, and
+# `addr_classify()` has already paid for both lookups.
+classify_codes_of <- function(x, kind, embedded) {
   n <- vec_size(x)
   if (n == 0L) {
     return(new_list_of(list(), ptype = character()))
@@ -298,6 +294,50 @@ classify_codes_of <- function(x, kind) {
       compatible & tail32 < ipv4_this_network_end
     )
   }
+
+  # --- and the three that are about the EMBEDDED address ---------------------
+  #
+  # `embedded$global` is `NA` for a role a mechanism has no row for, so a
+  # negation is `NA` there too and `add_classify_code()` drops it. That is the
+  # affirmative-only discipline again: a rule fires where raddr extracted an
+  # address and found it non-global, never where it extracted nothing.
+  #
+  # Each rule binds a different mechanism, and the binding is the load-bearing
+  # half in every case.
+
+  # RFC 6052 section 3.1 binds the WELL-KNOWN PREFIX ALONE. It never reached a
+  # network-specific prefix, and RFC 8215 section 5 says in terms that it does
+  # not reach 64:ff9b:1::/48 -- "the restrictions on the use of the WKP
+  # described in Section 3.1 of [RFC6052] do not apply". Over-applying it
+  # reports a MUST-drop on legitimate addresses.
+  mask <- add_classify_code(
+    mask, "nat64_wk_embedded_not_global",
+    !is.na(kind) & kind == "nat64_wk" & !embedded$global$embedded
+  )
+
+  # RFC 3056 section 9. The 6to4 case has no equivalent carve-out: every
+  # 2002::/16 address is a 6to4 address by construction of the prefix.
+  mask <- add_classify_code(
+    mask, "sixtofour_embedded_not_global",
+    !is.na(kind) & kind == "6to4" & !embedded$global$embedded
+  )
+
+  # RFC 4380 section 4 is conditional on the OUTER address -- "the identifiers
+  # used in global addresses MUST include a global scope unicast IPv4 address,
+  # while the identifiers used in link-local addresses MAY include a private
+  # IPv4 address". The condition resolves without being evaluated: raddr names
+  # `teredo` only from the 2001::/32 prefix, which is the global form, and the
+  # link-local Teredo identifier sits under fe80::/64 and has no overlay row.
+  # So a Teredo kind IS the antecedent, and the MAY case never reaches here.
+  #
+  # The SERVER is not graded. RFC 4380 states no equivalent requirement on it,
+  # and section 5.3.5 records the asymmetry running the other way -- section
+  # 5.2.3 validates the client against the packet source and specifies no check
+  # of the server at all. Reporting one would be raddr inventing a rule.
+  mask <- add_classify_code(
+    mask, "teredo_client_not_global",
+    !is.na(kind) & kind == "teredo" & !embedded$global$client
+  )
 
   new_list_of(
     codes_from_mask(mask, classify_code_levels, classify_code_bits),
@@ -446,6 +486,17 @@ new_raddr_class <- function(block, name, rfc, footnotes, category,
 #' a spectrum into a binary:
 #'
 #' \describe{
+#'   \item{`nat64_wk_embedded_not_global` (`must`)}{`64:ff9b::/96` carries a
+#'     non-global embedded IPv4 address, which RFC 6052 section 3.1 says
+#'     translators MUST drop. The rule binds the well-known prefix **alone** --
+#'     never a network-specific prefix, and RFC 8215 section 5 says in terms
+#'     that it does not reach `64:ff9b:1::/48`.}
+#'   \item{`sixtofour_embedded_not_global` (`must`)}{the 6to4 `V4ADDR` is not a
+#'     global unicast address, so RFC 3056 section 9 requires both encapsulators
+#'     and decapsulators to discard the traffic silently.}
+#'   \item{`teredo_client_not_global` (`must`)}{a global Teredo address embeds a
+#'     non-global client IPv4 (RFC 4380 section 4). The **server** is not
+#'     graded: the RFC states no equivalent requirement on it.}
 #'   \item{`link_local_outside_fe80_64` (`must`)}{`febf::1` matches the
 #'     `fe80::/10` registry row but is not a link-local address -- RFC 4291
 #'     section 2.5.6 fixes the next 54 bits to zero. Both CPython's
@@ -464,11 +515,18 @@ new_raddr_class <- function(block, name, rfc, footnotes, category,
 #'     Only `fd00::/8` is a specified ULA.}
 #' }
 #'
-#' Three further classify codes are registered and are not emitted yet:
-#' `nat64_wk_embedded_not_global`, `sixtofour_embedded_not_global` and
-#' `teredo_client_not_global` each need the embedded IPv4 extracted and
-#' classified. They are registered now so that filling `embeddings` later adds
-#' no code to the vocabulary.
+#' The first three are stated about the **embedded** address rather than the
+#' outer one, and all three are worded slightly differently -- "non-global",
+#' "not in the format of a global unicast address", "a global scope unicast
+#' IPv4 address". raddr answers them with one predicate, and answers it
+#' affirmatively from both registry layers: an extracted address is global when
+#' IANA records `globally_reachable = TRUE` for it, or when it lies in space
+#' delegated to an RIR. Neither layer settles it alone.
+#'
+#' A rule fires only where raddr actually extracted an address. A
+#' caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
+#' table, so no code is emitted for one -- silence here is not a clean bill of
+#' health, for the same reason `embedded_kind = NA` is not.
 #'
 #' @section A string may never be classified:
 #'
@@ -560,7 +618,7 @@ addr_classify <- function(x) {
     termination_date = only_special("termination_date", NA_character_),
     embedded_kind = kind,
     embeddings = embedded$embeddings,
-    codes = classify_codes_of(x, kind),
+    codes = classify_codes_of(x, kind, embedded),
     registry = factor(registry, levels = raddr_class_registries),
     registry_version = version
   )

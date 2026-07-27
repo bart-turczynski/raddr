@@ -179,26 +179,23 @@ test_that("no code outside the registry ever escapes", {
   expect_true(all(observed_codes(code_corpus) %in% parse_code_levels))
 })
 
-# --- Coverage: the classify layer, and its one honest gap --------------------
+# --- Coverage: the classify layer, and the gap that has now closed -----------
 #
-# Same discipline, one difference: three codes cannot be emitted yet, because
-# each needs the embedded IPv4 extracted and classified and the extractor is
-# Epic J's. The pending set is written out so the gap is a recorded fact rather
-# than a silently thinner corpus -- when the extractor lands, both halves of
-# this fail until the list shrinks.
-
-classify_codes_pending <- c(
-  "nat64_wk_embedded_not_global",  # RFC 6052 section 3.1, needs the embedding
-  "sixtofour_embedded_not_global", # RFC 3056 section 9, needs the embedding
-  "teredo_client_not_global"       # RFC 4380 section 4, needs the embedding
-)
+# Same discipline, and it is now unconditional. Three of the eight codes were
+# registered ahead of the extractor and could not be emitted at all, which this
+# file carried as a written-out pending list so the gap stayed a recorded fact
+# rather than a silently thinner corpus. Epic J closed it: every classify code
+# has an input below, and the pending list is gone rather than emptied.
 
 classify_corpus <- c(
-  "febf::1",             # link_local_outside_fe80_64
-  "169.254.255.5",       # link_local_reserved_range
-  "::2",                 # ipv4_compatible_low_tail
-  "64:ff9b:1::c000:201", # nat64_local_layout_unspecified
-  "fc00::1"              # ula_l_bit_unset
+  "64:ff9b::a9fe:a9fe",                   # nat64_wk_embedded_not_global
+  "2002:a00:1::",                         # sixtofour_embedded_not_global
+  "2001:0:4136:e378:8000:63bf:f5ff:fffe", # teredo_client_not_global
+  "febf::1",                              # link_local_outside_fe80_64
+  "169.254.255.5",                        # link_local_reserved_range
+  "::2",                                  # ipv4_compatible_low_tail
+  "64:ff9b:1::c000:201",                  # nat64_local_layout_unspecified
+  "fc00::1"                               # ula_l_bit_unset
 )
 
 observed_classify_codes <- function(x) {
@@ -206,18 +203,23 @@ observed_classify_codes <- function(x) {
   sort(unique(unlist(codes, use.names = FALSE)))
 }
 
-test_that("every classify code not blocked on Epic J is produced", {
+test_that("every classify code is produced by at least one input", {
   expect_setequal(
-    observed_classify_codes(classify_corpus),
-    setdiff(classify_code_levels, classify_codes_pending)
+    observed_classify_codes(classify_corpus), classify_code_levels
   )
 })
 
-test_that("exactly the three embedding-dependent codes are still pending", {
-  expect_true(all(classify_codes_pending %in% classify_code_levels))
-  expect_length(classify_codes_pending, 3L)
-  expect_false(any(classify_codes_pending %in%
-                     observed_classify_codes(classify_corpus)))
+test_that("the corpus names one input per code, and they are distinct", {
+  # One literal per code, in the registry's order, so a code added without a
+  # corpus entry fails here rather than thinning the coverage check above.
+  expect_length(classify_corpus, length(classify_code_levels))
+  for (i in seq_along(classify_corpus)) {
+    expect_true(
+      classify_code_levels[[i]] %in%
+        observed_classify_codes(classify_corpus[[i]]),
+      info = classify_corpus[[i]]
+    )
+  }
 })
 
 # --- Bidirectional docs validation (RADD-srqvttwe) ---------------------------

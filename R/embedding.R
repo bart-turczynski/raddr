@@ -327,29 +327,42 @@ extract_embeddings <- function(x, kind) {
 #   RFC 3056 section 9    "not in the format of a global unicast address"
 #   RFC 4380 section 4    "a global scope unicast IPv4 address"
 #
-# One predicate serves all three, because over IPv4 the three sets coincide:
-# RFC 5735 section 3 enumerates exactly the special-use blocks, and RFC 3056
-# section 9 names "[RFC1918], broadcast, subnet broadcast, multicast and
-# loopback" -- every one of which is in that enumeration.
+# One predicate serves all three, because over IPv4 the three sets coincide.
+# RFC 5735 section 3 enumerates the special-use blocks, and RFC 3056 section 9
+# names "[RFC1918], broadcast, subnet broadcast, multicast and loopback" --
+# every one of which is in that enumeration.
 #
-# TWO POSITIVE TESTS, NOT ONE NEGATIVE ONE, because neither layer answers alone
-# and neither absence may be read as an answer:
+# IT RETURNS THREE VALUES, AND THE THIRD IS THE POINT. Each layer answers the
+# question in its own terms, and neither silence may be read as an answer:
 #
-#   - `globally_reachable == TRUE` is IANA saying so. It settles the five
-#     special-purpose blocks that ARE globally reachable -- PCP and TURN
-#     anycast, AS112 twice, AMT -- which a category test would wrongly report.
-#   - `category == "global"` is the address-space layer, where a delegated /8
-#     lives and IANA publishes no policy column at all. A `globally_reachable`
-#     test alone would call 8.8.8.8 non-global, and would also miss
-#     `224.0.0.0/4` and the other blocks that have no special-purpose row at
-#     all -- CVE-2025-8267's shape.
+#   - where the SPECIAL-PURPOSE layer answered, the answer is IANA's own
+#     `globally_reachable` column, unmodified. That is what keeps the five
+#     blocks IANA marks globally reachable -- PCP and TURN anycast, AS112 twice,
+#     AMT -- out of a MUST-drop they do not deserve.
+#   - where the ADDRESS-SPACE layer answered there is no policy column at all,
+#     and the question that layer does answer is whether the space is delegated
+#     to an RIR. That is `category = global`, the one level documented to mean
+#     "an ordinary host may live here". Without it `8.8.8.8` reads as non-global
+#     and `224.0.0.0/4` reads as nothing -- CVE-2025-8267's shape.
 #
-# Section 5.3.3 forbids a policy layer from enumerating `category` as a deny
-# list, and this is not that: it is one POSITIVE level, the one documented to
-# mean "an ordinary host may live here", and a level added later falls on the
-# non-global side, which is the direction that fails safe.
+# Measured over all 256 IPv4 /8s [2026-07-27]: 220 answer `global` and 16
+# `multicast` from the address-space layer, 25 of the 26 special-purpose rows
+# state `globally_reachable`, and EXACTLY ONE block leaves the question open --
+# `192.88.99.0/24`, which IANA withdrew and gave no policy at all. So `NA` here
+# is not a hypothetical tier: it is the 6to4 image of the deprecated relay
+# anycast address, `2002:c058:6301::`, and asserting a MUST-drop for it would
+# be reading IANA's silence as a `FALSE` one level down. The rules fire on an
+# affirmative `FALSE` and nowhere else.
+#
+# This is not the `category` deny-list section 5.3.3 forbids. It reads ONE
+# positive level, only in the layer that has no other column, and a level added
+# later changes no answer that layer gives today.
 embedded_is_global <- function(class) {
-  reachable <- field(class, "globally_reachable")
+  registry <- field(class, "registry")
   category <- field(class, "category")
-  (!is.na(reachable) & reachable) | (!is.na(category) & category == "global")
+
+  out <- field(class, "globally_reachable")
+  from_space <- !is.na(registry) & registry == "address_space"
+  out[from_space] <- category[from_space] == "global"
+  out
 }

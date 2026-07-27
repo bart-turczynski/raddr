@@ -884,12 +884,12 @@ not read `must` and `may` as the whole scale. The nearest candidate, RFC 6052
 §3.1's "the Well-Known Prefix SHOULD NOT be used to construct IPv4-translatable
 IPv6 addresses", is not decidable from an address.
 
-Three codes are registered and **not emitted yet** — the two MUST-drop rules and
-Teredo's conditional MUST each need the embedded IPv4 extracted and classified
-(Epic J). They are registered now because adding a code is an API addition, so
-landing the extractor later must not also be a re-versioning. `test-codes.R`
-writes the pending set out explicitly and fails when it stops being accurate,
-rather than quietly checking a thinner corpus.
+Three codes were registered ahead of the rule that emits them — the two
+MUST-drop rules and Teredo's conditional MUST each need the embedded IPv4
+extracted and classified. They were registered early because adding a code is an
+API addition, so landing the extractor must not also be a re-versioning, and it
+was not: **all eight are emitted as of Epic J [implemented 2026-07-27]**, and
+`test-codes.R` names one input per code rather than carrying a pending list.
 
 Five rules need nothing but the address, and three of those are decided by
 prefix alone — one longest-prefix-match pass over a five-row table in
@@ -906,6 +906,75 @@ apart, with nothing attached that a caller could use to tell them apart.
 `sixtofour_embedded_not_global` also takes its spelling from that survey: a code
 may not begin with a digit, and `ipaddress` solved the identical problem the
 identical way with its `sixtofour` property.
+
+#### 5.2.4 What "global" means to the three embedded rules **[added 2026-07-27]**
+
+The remaining three rules are stated about the **embedded** address, and all
+three state the same antecedent in different words:
+
+| Code | Source | Wording |
+|---|---|---|
+| `nat64_wk_embedded_not_global` | RFC 6052 §3.1 | "non-global IPv4 addresses, such as those defined in \[RFC1918\] or listed in Section 3 of \[RFC5735\]" |
+| `sixtofour_embedded_not_global` | RFC 3056 §9 | "not in the format of a global unicast address" |
+| `teredo_client_not_global` | RFC 4380 §4 | "a global scope unicast IPv4 address" |
+
+One predicate answers all three, because over IPv4 the three sets coincide. RFC
+5735 §3 enumerates the special-use blocks, and RFC 3056 §9's own gloss —
+"\[RFC1918\], broadcast, subnet broadcast, multicast and loopback" — names
+members of that enumeration and nothing outside it.
+
+**The predicate is three-valued, and the third value is the point.** Each
+vendored layer answers in its own terms, and neither silence is an answer:
+
+| Layer that answered | The question it can answer |
+|---|---|
+| special-purpose | IANA's own `globally_reachable`, unmodified — `TRUE`, `FALSE` or `N/A` |
+| address space | whether the space is delegated to an RIR, which is `category = global`. That layer has no policy column at all |
+
+Measured over all 256 IPv4 `/8`s **[verified 2026-07-27]**: 220 answer `global`
+and 16 `multicast` from the address-space layer; 25 of the 26 special-purpose
+rows state `globally_reachable`; and **exactly one block leaves the question
+open** — `192.88.99.0/24`, which IANA withdrew and gave no policy at all.
+
+So the `NA` tier is not a hypothetical: it is `2002:c058:6301::`, the 6to4 image
+of the deprecated relay anycast address. The rules fire on an affirmative
+`FALSE` and nowhere else, because asserting a MUST-drop there would be reading
+IANA's `N/A` as `FALSE` one level down — §7.1's mistake, relocated rather than
+avoided. What raddr reports instead is the extracted address with its own
+record, whose `termination_date = 2015-03` is exactly why the question has no
+answer.
+
+Both halves of the predicate are load-bearing, and each fixes what the other
+gets wrong:
+
+- Without `globally_reachable = TRUE`, the five special-purpose blocks IANA
+  marks globally reachable — PCP and TURN anycast, AS112 twice, AMT — take a
+  MUST-drop they do not deserve. `64:ff9b::192.31.196.1` is the case.
+- Without `category = global`, `8.8.8.8` reads as non-global (its layer has no
+  policy column) and `224.0.0.0/4` reads as nothing at all. That second failure
+  is CVE-2025-8267's shape, one level in.
+
+This is **not** the `category` deny-list §5.3.3 forbids. It reads one *positive*
+level, only in the layer that has no other column, and a level added later
+changes no answer that layer gives today.
+
+**A disagreement worth recording: RFC 7050 versus IANA, on `192.0.0.170`**
+**[verified 2026-07-27].** RFC 7050 §2 constructs `Pref64::WKA` for NAT64
+discovery and gives `64:ff9b::192.0.0.170` as a worked example, justifying the
+choice of well-known address with:
+
+> The IPv4 addresses for the well-known name cannot be non-global IPv4 addresses
+> as listed in the Section 3 of \[RFC5735\]. Otherwise, DNS64 servers might not
+> perform AAAA record synthesis when the well-known prefix is used, as stated in
+> Section 3.1 of \[RFC6052\].
+
+But RFC 5735 §3 **does** list `192.0.0.0/24` ("reserved for IETF protocol
+assignments"), and IANA records `192.0.0.170/32` as `Globally Reachable =
+False`. Two sources disagree about whether RFC 6052 §3.1 binds the address the
+IETF built for exactly this purpose. raddr does not resolve it: the code fires,
+because IANA says `FALSE` affirmatively, and the embedding's own `category =
+discovery` names what the address is. P8 — a consumer implementing RFC 7050
+knows to expect it; raddr may not decide that for them.
 
 ### 5.3 `raddr_class`
 
@@ -1145,7 +1214,7 @@ is evidence about the other. P9 permits this: P9 forbids hand-transcribing an
 upstream fact when an authoritative file exists, and `category` has no upstream
 value to preserve.
 
-#### 5.3.5 Embeddings are plural, and Teredo is why
+#### 5.3.5 Embeddings are plural, and Teredo is why **[implemented 2026-07-27]**
 
 **`embeddings` is a `list_of` column with exactly one element per row.** The
 outer record stays `vctrs` size-stable — `vec_size()` is preserved by
@@ -1204,6 +1273,31 @@ asserts that one of three simultaneously-true fields is the real one. It became
 `embedded_scope`, and then went entirely (§5.3.5) because a *scalar* asserts
 that one of Teredo's two embedded addresses is the real one. Same judgment,
 refused at two different layers — first in a name, then in a cardinality.
+
+**Filling the column changed nothing about it [implemented 2026-07-27].** The
+extractor writes the same four fields the type was built with, and the record
+was not re-versioned — which is what settling the type ahead of Epic J bought.
+Two properties of the implementation are worth stating here because neither is
+visible from the field list:
+
+- **`category` is the extracted address's, so extraction recurses** — one level
+  of `addr_classify()` on what came out. It terminates *by construction* rather
+  than by a depth guard: an extracted address is IPv4, the only IPv4 row in the
+  overlay is `192.88.99.0/24`, and that prefix has no geometry (§5.3.7), so the
+  inner call finds no kind and extracts nothing.
+- **An extracted address never inherits the outer zone.** The zone names an
+  interface on the address that carried the bits; attaching it to a value read
+  out of 32 of them would assert a scope nobody stated.
+
+**The invariant this exists to hold is CVE-2024-24790's.** Go's `netip`
+predicates answered differently for `127.0.0.1` and for its IPv4-mapped form.
+The invariant that catches it is *not* that the two records agree — they must
+not, and §6.3 says why — but that the **embedded** address classifies as the
+address it is. It is checked over every IPv4 block raddr maps, through both
+`::ffff:` and the deprecated `::`, plus across four textual spellings of one
+128-bit value, since Node normalising `::ffff:169.254.169.254` to the hex form
+while the range check read only the dotted one is the documented root cause
+behind CVE-2024-29415 and six more.
 
 #### 5.3.6 Every `NA` says why it is `NA` **[added 2026-07-27]**
 
@@ -1767,7 +1861,7 @@ ISATAP returns to scope. It was cut as "nobody implements it; low value until
 someone asks", which was an urgency judgment. It is RFC 5214, it is already a
 reason code in both in-house guards, and it is roughly a dozen lines.
 
-### 8.1 Wrapper matrix
+### 8.1 Wrapper matrix **[implemented 2026-07-27]**
 
 | Wrapper | Prefix | RFC | Source to port |
 |---|---|---|---|
@@ -1785,6 +1879,32 @@ reason code in both in-house guards, and it is roughly a dozen lines.
 RFC 6052 §2.2: at a /48 prefix the embedded IPv4 **straddles the reserved
 u-byte**, so the octets are not contiguous. Port with tests rather than
 rewriting.
+
+**What was actually built, and the one column that turned out to be wrong.**
+The extractor is a single table-driven pass over the geometry shipped in §7.2 —
+there is no per-mechanism code and no partially correct version of reading a
+geometry table, so the whole matrix landed together.
+
+The "source to port" column is right about ISATAP (nobody implements it, so it
+was written) and about the two in-house forms. It is wrong about NAT64. The
+recommendation was to port `ip-address` (JS) *with its tests*, on the reasoning
+that it is the only implementation covering all six lengths. **RFC 6052 ships
+two tables of its own, and both grade the geometry harder than a port would:**
+
+- **§2.3 is the extraction *algorithm***: for a /96 prefix take the last 32
+  bits; otherwise delete the `u` octet to get a 120-bit string, then take the 32
+  bits after the prefix. It is implemented independently in `test-embedding.R`
+  and required to reproduce all six offset/length pairs. This is the check
+  `docs/research/04` asks for — raddr does hard-code the six pairs, because the
+  geometry is public data, so the algorithm grades the data.
+- **§2.4 is a worked example table**: one address, `192.0.2.33`, embedded under
+  six prefixes with the result printed. Reading the RFC's own output back at
+  every length is the nearest thing to a vendor-supplied test vector.
+
+Both traps are pinned as the wrong answer they produce rather than described:
+`/64` read at bit 64 gives `0.192.0.2`, and `/48` read contiguously gives
+`192.0.0.2`. A port would have inherited whichever of these `ip-address` got
+right without proving either.
 
 ---
 

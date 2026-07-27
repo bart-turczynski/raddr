@@ -128,6 +128,17 @@ of the rule it reports, because reporting only the MUST rules would collapse
 a spectrum into a binary:
 
 \describe{
+\item{\code{nat64_wk_embedded_not_global} (\code{must})}{\verb{64:ff9b::/96} carries a
+non-global embedded IPv4 address, which RFC 6052 section 3.1 says
+translators MUST drop. The rule binds the well-known prefix \strong{alone} --
+never a network-specific prefix, and RFC 8215 section 5 says in terms
+that it does not reach \verb{64:ff9b:1::/48}.}
+\item{\code{sixtofour_embedded_not_global} (\code{must})}{the 6to4 \code{V4ADDR} is not a
+global unicast address, so RFC 3056 section 9 requires both encapsulators
+and decapsulators to discard the traffic silently.}
+\item{\code{teredo_client_not_global} (\code{must})}{a global Teredo address embeds a
+non-global client IPv4 (RFC 4380 section 4). The \strong{server} is not
+graded: the RFC states no equivalent requirement on it.}
 \item{\code{link_local_outside_fe80_64} (\code{must})}{\verb{febf::1} matches the
 \verb{fe80::/10} registry row but is not a link-local address -- RFC 4291
 section 2.5.6 fixes the next 54 bits to zero. Both CPython's
@@ -146,11 +157,18 @@ the ULA prefix, for which RFC 4193 section 3.1 defines nothing at all.
 Only \verb{fd00::/8} is a specified ULA.}
 }
 
-Three further classify codes are registered and are not emitted yet:
-\code{nat64_wk_embedded_not_global}, \code{sixtofour_embedded_not_global} and
-\code{teredo_client_not_global} each need the embedded IPv4 extracted and
-classified. They are registered now so that filling \code{embeddings} later adds
-no code to the vocabulary.
+The first three are stated about the \strong{embedded} address rather than the
+outer one, and all three are worded slightly differently -- "non-global",
+"not in the format of a global unicast address", "a global scope unicast
+IPv4 address". raddr answers them with one predicate, and answers it
+affirmatively from both registry layers: an extracted address is global when
+IANA records \code{globally_reachable = TRUE} for it, or when it lies in space
+delegated to an RIR. Neither layer settles it alone.
+
+A rule fires only where raddr actually extracted an address. A
+caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
+table, so no code is emitted for one -- silence here is not a clean bill of
+health, for the same reason \code{embedded_kind = NA} is not.
 }
 
 \section{A string may never be classified}{

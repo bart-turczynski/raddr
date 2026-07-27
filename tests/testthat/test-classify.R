@@ -724,8 +724,8 @@ test_that("printing names every snapshot that answered", {
 })
 
 test_that("an embedding formats as its kind, role, address and category", {
-  # Nothing produces a non-empty embedding until the extractor lands, so the
-  # type is exercised directly here.
+  # Built by hand rather than extracted, so the format is pinned to the type
+  # rather than to whatever the extractor happens to produce.
   e <- new_raddr_embedding(
     kind = factor("teredo", levels = raddr_embedded_kinds),
     role = factor("server", levels = raddr_embedding_roles),
@@ -806,8 +806,14 @@ test_that("the 64:ff9b:1::/48 layout is reported as contested", {
   )
   # The rule is about the local-use prefix only. RFC 8215 section 5 says the
   # well-known prefix's own restrictions do not reach it, and the converse
-  # holds too -- the WKP's geometry is not contested.
-  expect_identical(codes_of("64:ff9b::c000:201")[[1L]], character())
+  # holds too -- the WKP's geometry is not contested. The WKP address carries
+  # its own MUST instead, which is the other half of the same section.
+  expect_false(
+    "nat64_local_layout_unspecified" %in% codes_of("64:ff9b::c000:201")[[1L]]
+  )
+  expect_identical(
+    codes_of("64:ff9b::c000:201")[[1L]], "nat64_wk_embedded_not_global"
+  )
 })
 
 test_that("an IPv4-compatible tail below 1.0.0.0 is flagged, not suppressed", {
@@ -844,4 +850,170 @@ test_that("classifying nothing produces a typed, empty codes column", {
   codes <- field(addr_classify(addr_pton(character())), "codes")
   expect_s3_class(codes, "vctrs_list_of")
   expect_length(codes, 0L)
+})
+
+# --- the three rules stated about the EMBEDDED address (RADD-twrpcrhk) -------
+
+test_that("the well-known prefix's MUST-drop binds it and nothing else", {
+  # RFC 6052 section 3.1: translators MUST drop a packet whose address is the
+  # WKP plus a non-global IPv4 address.
+  expect_true(
+    "nat64_wk_embedded_not_global" %in% codes_of("64:ff9b::a9fe:a9fe")[[1L]]
+  )
+  expect_identical(codes_of("64:ff9b::8.8.8.8")[[1L]], character())
+
+  # It binds 64:ff9b::/96 ALONE. RFC 8215 section 5 removes 64:ff9b:1::/48 from
+  # its reach in terms, and a network-specific prefix was never in it -- the
+  # same embedded address under a documentation prefix draws no code at all.
+  expect_equal(
+    format(embedded_of("64:ff9b:1:a9fe:a9:fe00::")),
+    "nat64_local/embedded 169.254.169.254 link_local"
+  )
+  expect_false(
+    "nat64_wk_embedded_not_global" %in%
+      codes_of("64:ff9b:1:a9fe:a9:fe00::")[[1L]]
+  )
+  expect_identical(codes_of("2001:db8:122:c000:2:2100::")[[1L]], character())
+})
+
+test_that("6to4 requires a global unicast V4ADDR, and Teredo its client", {
+  # RFC 3056 section 9, and RFC 4380 section 4.
+  expect_identical(
+    codes_of("2002:a00:1::")[[1L]], "sixtofour_embedded_not_global"
+  )
+  expect_identical(codes_of("2002:808:808::")[[1L]], character())
+
+  private_client <- "2001:0:4136:e378:8000:63bf:f5ff:fffe"
+  expect_identical(
+    codes_of(private_client)[[1L]], "teredo_client_not_global"
+  )
+  expect_identical(
+    codes_of("2001:0:808:808:8000:63bf:f7ff:f7f7")[[1L]], character()
+  )
+
+  # The SERVER is not graded, and that asymmetry is RFC 4380's, not raddr's:
+  # section 5.2.3 validates the client against the packet source and specifies
+  # no check of the server anywhere. A private server with a global client
+  # draws nothing.
+  rows <- addr_embeddings(addr_pton("2001:0:a00:1:8000:63bf:f7ff:f7f7"))[[1L]]
+  expect_equal(as.character(field(rows, "category")), c("private", "global"))
+  expect_identical(codes_of("2001:0:a00:1:8000:63bf:f7ff:f7f7")[[1L]],
+                   character())
+})
+
+test_that("IANA's declined policy stays declined, and fires no MUST", {
+  # 192.88.99.0/24 is the ONE IPv4 block where "is this global" has no answer:
+  # IANA withdrew it and published no policy column at all. Its 6to4 image is
+  # therefore not affirmatively non-global, and asserting the MUST-drop for it
+  # would be reading that silence as a FALSE one level down.
+  expect_identical(codes_of("2002:c058:6301::")[[1L]], character())
+
+  # What raddr reports instead is the fact, one level in: the extracted address
+  # with its own record, which says why the question has no answer.
+  embedded <- field(embedded_of("2002:c058:6301::"), "address")
+  inner <- addr_classify(embedded)
+  expect_equal(field(inner, "block"), "192.88.99.0/24")
+  expect_true(is.na(field(inner, "globally_reachable")))
+  expect_equal(field(inner, "termination_date"), "2015-03")
+
+  # And the affirmative FALSE next door still fires: 192.88.99.2/32 is a
+  # separate, longer row that IANA does answer for.
+  expect_identical(
+    codes_of("2002:c058:6302::")[[1L]], "sixtofour_embedded_not_global"
+  )
+})
+
+test_that("no rule fires where nothing was extracted", {
+  # Silence is not a clean bill of health. A caller-supplied NAT64 prefix is
+  # invisible to a prefix table, and `embedded_kind = NA` is why.
+  quiet <- c("8.8.8.8", "10.0.0.1", "2001:db8::1", "::1", "not an address")
+  codes <- field(addr_classify(addr_pton(quiet)), "codes")
+  embedded_rules <- c(
+    "nat64_wk_embedded_not_global", "sixtofour_embedded_not_global",
+    "teredo_client_not_global"
+  )
+  for (i in seq_along(quiet)) {
+    expect_false(any(embedded_rules %in% codes[[i]]), info = quiet[[i]])
+  }
+})
+
+# --- the CVE-2024-24790 invariant --------------------------------------------
+
+test_that("an embedded address classifies as itself, in every wrapper", {
+  # CVE-2024-24790 was Go's netip predicates answering differently for
+  # `127.0.0.1` and for the IPv4-mapped form of the same address. The invariant
+  # that catches it is not that the two RECORDS agree -- they must not, the
+  # outer one is an IPv6 address in ::ffff:0:0/96 -- but that the embedded
+  # address is classified as the address it is.
+  #
+  # Run over the whole IPv4 space at /8 granularity plus every IPv4 block raddr
+  # maps, so a level that classifies differently through a wrapper fails here
+  # rather than in a consumer.
+  map <- addr_category_map()
+  blocks <- map$block[!grepl(":", map$block, fixed = TRUE)]
+  bare <- addr_pton(sub("/.*", "", blocks))
+
+  direct <- addr_category(bare)
+  quads <- addr_format(bare)
+
+  for (prefix in c("::ffff:", "::")) {
+    wrapped <- addr_classify(addr_pton(paste0(prefix, quads)))
+    rows <- field(wrapped, "embeddings")
+    # `::0.0.0.0` and `::0.0.0.1` are the carve-out and extract nothing.
+    extracted <- vapply(rows, vec_size, integer(1L)) == 1L
+    through <- vapply(
+      rows[extracted],
+      function(row) as.character(field(row, "category")),
+      character(1L)
+    )
+    expect_equal(
+      through, as.character(direct)[extracted],
+      info = prefix
+    )
+  }
+})
+
+test_that("the wrapper's own record is not the embedded address's", {
+  # The other half of the invariant, and the reason raddr keeps two facts where
+  # the CVEs kept one. Collapsing these is the SSRF class in docs/research/04.
+  outer <- addr_classify(addr_pton("::ffff:127.0.0.1"))
+  inner <- addr_classify(addr_pton("127.0.0.1"))
+
+  expect_equal(field(outer, "block"), "::ffff:0:0/96")
+  expect_equal(field(inner, "block"), "127.0.0.0/8")
+  expect_equal(as.character(field(outer, "category")), "protocol")
+  expect_equal(as.character(field(inner, "category")), "loopback")
+
+  # And the loopback fact is not lost -- it is reported where it belongs.
+  rows <- field(outer, "embeddings")[[1L]]
+  expect_equal(as.character(field(rows, "category")), "loopback")
+  expect_equal(field(rows, "address"), addr_pton("127.0.0.1"))
+})
+
+test_that("the same 128 bits classify alike whatever the literal said", {
+  # The root cause behind CVE-2024-29415 and six more: Node's URL parser
+  # normalises `::ffff:169.254.169.254` to the hex form while the range check
+  # reads only the dotted one, so two spellings of one value take two paths.
+  spellings <- c(
+    "::ffff:169.254.169.254", "::ffff:a9fe:a9fe", "::FFFF:A9FE:A9FE",
+    "0000:0000:0000:0000:0000:ffff:169.254.169.254"
+  )
+  rows <- field(addr_classify(addr_pton(spellings)), "embeddings")
+  for (i in seq_along(spellings)) {
+    expect_equal(rows[[i]], rows[[1L]], info = spellings[[i]])
+  }
+  expect_equal(format(rows[[1L]]),
+               "ipv4_mapped/embedded 169.254.169.254 link_local")
+})
+
+test_that("the recursion is one level deep, and stops on its own", {
+  # An extracted address is IPv4, and the only IPv4 row in the overlay --
+  # 192.88.99.0/24 -- has no geometry, so the inner classification finds no
+  # kind and extracts nothing. There is no depth guard because none is needed.
+  outer <- c("2002:c058:6301::", "::ffff:192.88.99.1", "64:ff9b::c058:6301")
+  for (literal in outer) {
+    inner <- addr_classify(field(embedded_of(literal), "address"))
+    expect_true(is.na(field(inner, "embedded_kind")), info = literal)
+    expect_equal(vec_size(field(inner, "embeddings")[[1L]]), 0L, info = literal)
+  }
 })
