@@ -987,6 +987,33 @@ explicit month map (never `strptime`'s locale-dependent `%b`). The stamp is the
 `addr_registry_outdated()` then returns `TRUE`. Treating absence of evidence as
 evidence of freshness is the one failure a staleness check exists to prevent.
 
+**But the stamp answers a weaker question than "when did IANA change this"**
+**[verified 2026-07-27].** `Last-Modified` is a site *deploy* timestamp, not an
+editorial one. Seven CSV exports across four unrelated IANA registries are
+served with the identical second `Thu, 09 Oct 2025 21:51:16 GMT`, and the IPv4
+multicast registry's own page records an editorial `Last Updated` of
+`2026-06-26` while several of its CSV exports still carry a 2025
+`Last-Modified`. IANA's editorial signal is the page-level `Last Updated` field
+inside the XHTML, which raddr does not fetch.
+
+The number raddr currently ships is nonetheless correct: both special-purpose
+registries record `Last Updated` `2025-10-09`, matching the served header. It is
+right by coincidence, which is why the claim was narrowed rather than the
+mechanism changed. The failure mode to watch is a deploy with no content change
+advancing the stamp, which would assert freshness the data has not earned — the
+same failure as an undated snapshot, arriving more slowly.
+
+Two things contain the damage. Content identity is tracked exactly by a sha256
+per file, and `--check` compares content and never dates, so provenance drift
+cannot move the staleness guard. And the "older of the two halves" rule is
+currently a no-op, because both halves always carry the same deploy second; it
+is kept as the correct rule should they ever diverge.
+
+Stamping from the page-level `Last Updated` is the real fix and is deferred
+(`RADD-lfgkjvfv`), because it means scraping XHTML in the build script.
+Its failure mode is safe — an unparseable field yields `NA`, which yields
+`outdated = TRUE` — so the deferral is a cost decision, not a risk one.
+
 ### 7.2 The transition overlay **[implemented 2026-07-27]**
 
 **It is not vendored, because there is nothing to vendor.** The overlay is

@@ -19,24 +19,45 @@ addr_registry_outdated(max_age = 365)
 snapshot is older than \code{max_age} days \strong{or} undated.
 }
 \description{
-\code{addr_registry_version()} reports when the vendored registries were last
-changed upstream. \code{addr_registry_outdated()} says whether that is longer ago
-than \code{max_age} days.
+\code{addr_registry_version()} reports the date the vendored registry files were
+last \strong{served} with. \code{addr_registry_outdated()} says whether that is longer
+ago than \code{max_age} days.
 }
-\section{Unknown is not fresh}{
+\section{What the stamp is, and is not}{
 
 
 The IANA CSVs carry no version field, so the stamp is the \code{Last-Modified}
-date the two files were served with, normalized at build time. When either
-half has no date, the snapshot has no date: \code{addr_registry_version()} returns
-\code{NA} and \code{addr_registry_outdated()} returns \code{TRUE}.
+date the two files were served with, normalized at build time.
+
+That is a weaker signal than it looks, and the documentation used to
+overstate it. \code{Last-Modified} is a site \strong{deploy} timestamp rather than an
+editorial one: unrelated CSVs across different IANA registries are served
+with the same timestamp to the second, and at least one IANA registry has
+been edited months after the \code{Last-Modified} its own CSV export still
+carries. So the stamp answers "when was this file written to the server", not
+"when did IANA last change this data".
+
+Content identity is tracked separately and exactly, by a sha256 per file
+recorded at build time. \code{data-raw/build-registry.R --check} compares content
+and never dates, so a stamp that drifts for deploy reasons cannot make the
+staleness guard pass or fail.
+}
+
+\section{Unknown is not fresh}{
+
+
+When either half has no date, the snapshot has no date:
+\code{addr_registry_version()} returns \code{NA} and \code{addr_registry_outdated()} returns
+\code{TRUE}.
 
 That asymmetry is deliberate. A snapshot of unknown age is one you have no
 evidence about, and treating no evidence as evidence of freshness is the one
 failure mode a staleness check exists to prevent.
 
 The stamp is also the \strong{older} of the two halves, because a snapshot is only
-as current as its stalest part.
+as current as its stalest part. In practice the two halves are served with
+the same deploy timestamp and the rule rarely bites; it is kept because it is
+the right rule if they ever diverge, not because it is doing work today.
 }
 
 \section{No refresh}{
