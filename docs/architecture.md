@@ -834,9 +834,11 @@ fails is its reason, at no extra cost.
 |---|---|---|
 | `block` | `character` | matched registry prefix |
 | `name`, `rfc` | `character` | registry columns; `rfc` is the provenance string |
+| `footnotes` | `character` | upstream footnote markers, `""` when none. Says why an `rfc` or a policy value is absent **[added 2026-07-27]** |
 | `category` | factor | raddr's vocabulary — 19 levels, enumerated below. **Not** `scope` |
 | `globally_reachable` | `logical` | the IANA column, **not** a derived `is_global` |
 | `forwardable`, `source`, `destination`, `reserved_by_protocol` | `logical` | the other four IANA columns |
+| `termination_date` | `character` | set on a deprecated block, and the reason its five columns are empty **[added 2026-07-27]** |
 | `embedded_kind` | factor | the *mechanism*: `ipv4_mapped`, `6to4`, `teredo`, `nat64_wk`, ... |
 | `embeddings` | `list_of<raddr_embedding>` | zero or more extracted inner addresses. One list element per row |
 | `codes` | `list_of<character>` | classify-layer codes (`RADD-wglsdrmu`) |
@@ -1124,11 +1126,23 @@ asserts that one of three simultaneously-true fields is the real one. It became
 that one of Teredo's two embedded addresses is the real one. Same judgment,
 refused at two different layers — first in a name, then in a cardinality.
 
-#### 5.3.6 `registry`, and the two meanings of `NA` **[added 2026-07-27]**
+#### 5.3.6 Every `NA` says why it is `NA` **[added 2026-07-27]**
 
-**This field is an addition to the settled list, made while building the
-record.** The reason is that without it the five policy logicals carry two
-different `NA`s that a caller cannot tell apart:
+**The governing rule, stated by the user and now the section's title: be
+perfectly compliant with the standard, report everything we know, and where we
+know two `NA`s mean different things, disclose it.** Three fields are additions
+to the settled list, all made while building the record and all falling out of
+that one rule.
+
+The line it draws is narrow on purpose. `raddr_class` does **not** duplicate
+every column of the two source tables — `block` plus `registry` is an exact key
+into them, so `status`, `date`, `notes` and `allocation_date` stay one lookup
+away. What the record may not do is leave a field empty when the vendored data
+says *why* it is empty. That fact would be unrecoverable, because nothing in the
+record points at it.
+
+**`registry`.** Without it the five policy logicals carry two different `NA`s
+that a caller cannot tell apart:
 
 | `registry` | What `globally_reachable = NA` means |
 |---|---|
@@ -1146,6 +1160,40 @@ separately *because* one date across both would assert something about a table
 it says nothing about; a per-row version with no per-row registry reintroduces
 exactly that ambiguity. So the two travel together, and P7 is satisfied per row
 rather than per call.
+
+**`termination_date` and `footnotes`.** `registry` separates the two *layers*'
+`NA`s; these two separate the reasons *within* the special-purpose layer.
+Measured: exactly four blocks have a missing policy value, and they carry three
+different reasons **[verified 2026-07-27]**.
+
+| Block | Which columns are `NA` | Why | Disclosed by |
+|---|---|---|---|
+| `192.88.99.0/24` | all five | deprecated — IANA gives a withdrawn block no policy at all | `termination_date = 2015-03` |
+| `2001:10::/28` | all five | deprecated (previously ORCHID) | `termination_date = 2014-03` |
+| `2001::/32` Teredo | `globally_reachable` only | relay advertisement is voluntary and per-deployment (RFC 4380 §5) | footnote `[2]` |
+| `2002::/16` 6to4 | `globally_reachable` only | reachability follows the **embedded** IPv4 (RFC 3056) | footnote `[3]` |
+
+The last two are the pair §7.1 already splits in four places. Before these
+fields the record was the fifth place they were merged — both came out as a bare
+`NA`, and the only thing in the vendored data distinguishing them was a column
+the record dropped.
+
+`footnotes` does the same job for `rfc`. That column is `NA` for **every** one
+of the 256 IPv4 address-space rows, because the registry has no reference
+column — but **42 of them carry a footnote marker** and 214 do not. "There is no
+citation" and "there is a citation, and its text is on the registry page rather
+than in the CSV" are different facts, and `127.0.0.0/8`'s `[7]` is the evidence
+for the second. Footnote numbering is per registry, so a marker is only
+meaningful alongside `registry` and the family — one more thing that field is
+load-bearing for.
+
+**Where the rule stops.** `embedded_kind = NA` also has three causes — no
+overlay prefix matched, a prefix with no geometry matched (`192.88.99.0/24`), or
+the `::/96` carve-out fired. No field is added for it, because unlike the cases
+above **nothing is unrecoverable**: `block`, `name` and `category` are in the
+same record, and `addr_transition_registry()` is public and keyed on the block.
+The rule is "disclose what only the source knows", not "annotate every
+absence".
 
 **The survey supports the shape, and it is the only one that does**
 **[measured 2026-07-27].** Of the comparable implementations, one consults more

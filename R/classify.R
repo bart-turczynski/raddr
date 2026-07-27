@@ -246,19 +246,22 @@ embedded_kind_of <- function(x) {
 # leaving a caller to infer it from the block.
 raddr_class_registries <- c("special_purpose", "address_space")
 
-new_raddr_class <- function(block, name, rfc, category,
+new_raddr_class <- function(block, name, rfc, footnotes, category,
                             globally_reachable, forwardable, source,
                             destination, reserved_by_protocol,
+                            termination_date,
                             embedded_kind, embeddings, codes,
                             registry, registry_version) {
   new_rcrd(
     list(
-      block = block, name = name, rfc = rfc, category = category,
+      block = block, name = name, rfc = rfc, footnotes = footnotes,
+      category = category,
       globally_reachable = globally_reachable,
       forwardable = forwardable,
       source = source,
       destination = destination,
       reserved_by_protocol = reserved_by_protocol,
+      termination_date = termination_date,
       embedded_kind = embedded_kind,
       embeddings = embeddings,
       codes = codes,
@@ -310,12 +313,41 @@ new_raddr_class <- function(block, name, rfc, category,
 #'     absent rather than inventing them.}
 #' }
 #'
+#' @section Every `NA` says why it is `NA`:
+#'
+#' Where raddr knows that two missing values mean different things, it reports
+#' what distinguishes them rather than leaving both blank. Four special-purpose
+#' blocks have a missing policy value, for three different reasons, and each
+#' reason is a column:
+#'
+#' \describe{
+#'   \item{Deprecated: `192.88.99.0/24`, `2001:10::/28`}{all five columns are
+#'     `NA` and `termination_date` is set. IANA gives a withdrawn block no
+#'     policy at all.}
+#'   \item{Withheld: `2001::/32` (Teredo), footnote `[2]`}{RFC 4380 section 5
+#'     makes relay advertisement voluntary and per-deployment, so no bits in the
+#'     address answer reachability.}
+#'   \item{Withheld: `2002::/16` (6to4), footnote `[3]`}{a different reason
+#'     entirely -- reachability follows the *embedded* IPv4 address, which a
+#'     prefix table cannot express.}
+#' }
+#'
+#' `footnotes` does the same job for `rfc`, which is `NA` for every IPv4
+#' address-space row. 42 of those 256 rows carry a footnote marker, meaning the
+#' citation exists and its text is on the registry page rather than in the CSV;
+#' the other 214 carry none. raddr reports that a caveat exists rather than
+#' inventing its wording, and `""` means the row carried no marker at all.
+#'
+#' Footnote numbering is **per registry**, so a marker is only meaningful
+#' alongside `registry` and the address family.
+#'
 #' @section What the fields are:
 #'
 #' \describe{
-#'   \item{`block`, `name`, `rfc`}{The matched row, as vendored. `rfc` is `NA`
-#'     for every IPv4 address-space row, because that registry has no reference
-#'     column.}
+#'   \item{`block`, `name`, `rfc`, `footnotes`}{The matched row, as vendored.
+#'     `rfc` is `NA` for every IPv4 address-space row, because that registry has
+#'     no reference column; `footnotes` is what says whether a citation
+#'     nonetheless exists.}
 #'   \item{`category`}{raddr's own one-word vocabulary, 19 levels. It is
 #'     **descriptive, not a policy input** -- see [addr_category_map()], and do
 #'     not build a deny-list of level names on it.}
@@ -323,6 +355,9 @@ new_raddr_class <- function(block, name, rfc, category,
 #'     `reserved_by_protocol`}{IANA's five policy columns, per row and never
 #'     collapsed. `globally_reachable` **is** the column, not a derived
 #'     `is_global`.}
+#'   \item{`termination_date`}{Set on a deprecated block, and the reason its
+#'     policy columns are empty. `NA` everywhere else, including for every
+#'     address-space row.}
 #'   \item{`embedded_kind`}{The transition mechanism, when a mechanism prefix
 #'     matched. `NA` means no prefix matched -- it never means "not NAT64". A
 #'     caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
@@ -388,14 +423,15 @@ addr_classify <- function(x) {
     out
   }
 
-  # The five policy columns exist in the special-purpose registry only. Where
-  # the address-space layer answered they stay NA, because that registry does
-  # not have them -- see the two meanings of NA above.
-  policy <- function(column) {
-    out <- rep(NA, n)
+  # Columns the address-space registry does not have. Where that layer
+  # answered they stay missing, because the question was never asked of it --
+  # see the two meanings of NA above.
+  only_special <- function(column, empty) {
+    out <- rep(empty, n)
     out[from_special] <- blocks[[column]][special[from_special]]
     out
   }
+  policy <- function(column) only_special(column, NA)
 
   block <- take(blocks$block, spaces$block)
   registry <- rep(NA_character_, n)
@@ -411,6 +447,7 @@ addr_classify <- function(x) {
     block = block,
     name = take(blocks$name, spaces$name),
     rfc = take(blocks$rfc, spaces$rfc),
+    footnotes = take(blocks$footnotes, spaces$footnotes),
     category = factor(
       unname(raddr_category_map[block]),
       levels = raddr_category_levels
@@ -420,6 +457,7 @@ addr_classify <- function(x) {
     source = policy("source"),
     destination = policy("destination"),
     reserved_by_protocol = policy("reserved_by_protocol"),
+    termination_date = only_special("termination_date", NA_character_),
     embedded_kind = embedded_kind_of(x),
     embeddings = new_list_of(rep(list(empty), n), ptype = empty),
     codes = new_list_of(rep(list(character()), n), ptype = character()),

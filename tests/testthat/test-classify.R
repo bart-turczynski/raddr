@@ -214,6 +214,63 @@ test_that("the two meanings of a missing policy column stay apart", {
   expect_equal(field(cl, "block")[[2]], "8.0.0.0/8")
 })
 
+test_that("every missing policy value carries the column that explains it", {
+  # Exactly four special-purpose blocks have one, and they split into three
+  # reasons. Reporting all four as a bare NA would merge facts raddr knows to
+  # be different, which is the mistake this record exists to refuse.
+  reg <- addr_registry()
+  policy <- c(
+    "source", "destination", "forwardable",
+    "globally_reachable", "reserved_by_protocol"
+  )
+  withheld <- reg$block[apply(reg[policy], 1L, anyNA)]
+  expect_setequal(
+    withheld,
+    c("192.88.99.0/24", "2001:10::/28", "2001::/32", "2002::/16")
+  )
+
+  cl <- addr_classify(addr_pton(c("192.88.99.1", "2001:10::1", "2001::1",
+                                  "2002::1")))
+
+  # Deprecated: all five gone, and a termination date saying why.
+  deprecated <- vec_slice(cl, 1:2)
+  expect_false(anyNA(field(deprecated, "termination_date")))
+  expect_equal(field(deprecated, "footnotes"), c("", ""))
+
+  # Withheld: policy stated except for reachability, no termination date, and
+  # two DIFFERENT footnote markers -- Teredo's [2] is not 6to4's [3].
+  declined <- vec_slice(cl, 3:4)
+  expect_true(all(is.na(field(declined, "termination_date"))))
+  expect_true(all(field(declined, "forwardable")))
+  expect_true(all(is.na(field(declined, "globally_reachable"))))
+  expect_equal(length(unique(field(declined, "footnotes"))), 2L)
+  expect_true(all(nzchar(field(declined, "footnotes"))))
+})
+
+test_that("footnotes say whether an absent rfc has a citation elsewhere", {
+  # `rfc` is NA for all 256 IPv4 address-space rows, because that registry has
+  # no reference column -- but 42 of them cite one in a numeric footnote whose
+  # text lives on the registry page. "No citation" and "a citation you have to
+  # go and read" are different facts.
+  space <- addr_address_space()
+  v4 <- space[space$space == "v4", ]
+  expect_true(all(is.na(v4$rfc)))
+  expect_equal(sum(nzchar(v4$footnotes)), 42L)
+
+  cl <- addr_classify(addr_pton(c("127.0.0.1", "1.1.1.1")))
+  expect_true(all(is.na(field(cl, "rfc"))[2]))
+  # 127.0.0.0/8 answers from the special-purpose layer, which does cite one.
+  expect_false(is.na(field(cl, "rfc")[[1]]))
+  # 1.0.0.0/8 is an address-space row carrying neither.
+  expect_equal(field(cl, "footnotes")[[2]], "")
+
+  # And one that carries a marker instead of a citation.
+  marked <- addr_classify(addr_pton("169.1.2.3"))
+  expect_equal(field(marked, "block"), "169.0.0.0/8")
+  expect_true(is.na(field(marked, "rfc")))
+  expect_true(nzchar(field(marked, "footnotes")))
+})
+
 test_that("Teredo's and 6to4's N/A survive into the record, still separate", {
   cl <- addr_classify(addr_pton(c("2001::1", "2002::1")))
   expect_equal(field(cl, "block"), c("2001::/32", "2002::/16"))
@@ -433,9 +490,10 @@ test_that("as.data.frame exposes every field", {
   expect_equal(
     names(df),
     c(
-      "block", "name", "rfc", "category",
+      "block", "name", "rfc", "footnotes", "category",
       "globally_reachable", "forwardable", "source", "destination",
-      "reserved_by_protocol", "embedded_kind", "embeddings", "codes",
+      "reserved_by_protocol", "termination_date",
+      "embedded_kind", "embeddings", "codes",
       "registry", "registry_version"
     )
   )

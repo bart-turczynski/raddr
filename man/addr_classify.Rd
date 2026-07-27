@@ -56,13 +56,44 @@ absent rather than inventing them.}
 }
 }
 
+\section{Every \code{NA} says why it is \code{NA}}{
+
+
+Where raddr knows that two missing values mean different things, it reports
+what distinguishes them rather than leaving both blank. Four special-purpose
+blocks have a missing policy value, for three different reasons, and each
+reason is a column:
+
+\describe{
+\item{Deprecated: \verb{192.88.99.0/24}, \verb{2001:10::/28}}{all five columns are
+\code{NA} and \code{termination_date} is set. IANA gives a withdrawn block no
+policy at all.}
+\item{Withheld: \verb{2001::/32} (Teredo), footnote \verb{[2]}}{RFC 4380 section 5
+makes relay advertisement voluntary and per-deployment, so no bits in the
+address answer reachability.}
+\item{Withheld: \verb{2002::/16} (6to4), footnote \verb{[3]}}{a different reason
+entirely -- reachability follows the \emph{embedded} IPv4 address, which a
+prefix table cannot express.}
+}
+
+\code{footnotes} does the same job for \code{rfc}, which is \code{NA} for every IPv4
+address-space row. 42 of those 256 rows carry a footnote marker, meaning the
+citation exists and its text is on the registry page rather than in the CSV;
+the other 214 carry none. raddr reports that a caveat exists rather than
+inventing its wording, and \code{""} means the row carried no marker at all.
+
+Footnote numbering is \strong{per registry}, so a marker is only meaningful
+alongside \code{registry} and the address family.
+}
+
 \section{What the fields are}{
 
 
 \describe{
-\item{\code{block}, \code{name}, \code{rfc}}{The matched row, as vendored. \code{rfc} is \code{NA}
-for every IPv4 address-space row, because that registry has no reference
-column.}
+\item{\code{block}, \code{name}, \code{rfc}, \code{footnotes}}{The matched row, as vendored.
+\code{rfc} is \code{NA} for every IPv4 address-space row, because that registry has
+no reference column; \code{footnotes} is what says whether a citation
+nonetheless exists.}
 \item{\code{category}}{raddr's own one-word vocabulary, 19 levels. It is
 \strong{descriptive, not a policy input} -- see \code{\link[=addr_category_map]{addr_category_map()}}, and do
 not build a deny-list of level names on it.}
@@ -70,6 +101,9 @@ not build a deny-list of level names on it.}
 \code{reserved_by_protocol}}{IANA's five policy columns, per row and never
 collapsed. \code{globally_reachable} \strong{is} the column, not a derived
 \code{is_global}.}
+\item{\code{termination_date}}{Set on a deprecated block, and the reason its
+policy columns are empty. \code{NA} everywhere else, including for every
+address-space row.}
 \item{\code{embedded_kind}}{The transition mechanism, when a mechanism prefix
 matched. \code{NA} means no prefix matched -- it never means "not NAT64". A
 caller-supplied RFC 6052 network-specific prefix is invisible to a prefix
