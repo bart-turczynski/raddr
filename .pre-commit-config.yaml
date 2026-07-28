@@ -9,13 +9,13 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=5120']
       - id: end-of-file-fixer
-        exclude: '^inst/extdata/'
+        exclude: '^(inst/extdata/|tests/testthat/fixtures/wpt/)'
       - id: trailing-whitespace
-        exclude: '^inst/extdata/'
+        exclude: '^(inst/extdata/|tests/testthat/fixtures/wpt/)'
       - id: check-merge-conflict
       - id: check-yaml
       - id: mixed-line-ending
-        exclude: '^inst/extdata/'
+        exclude: '^(inst/extdata/|tests/testthat/fixtures/wpt/)'
       - id: check-case-conflict
   - repo: local
     hooks:

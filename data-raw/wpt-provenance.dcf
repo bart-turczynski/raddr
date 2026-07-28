@@ -1,0 +1,20 @@
+Package: web-platform-tests
+Component: url/resources/urltestdata.json
+Path: tests/testthat/fixtures/wpt/urltestdata.json
+Repository: https://github.com/web-platform-tests/wpt
+Commit: 181476aa16e8b28a07698bef3a0275fa53dd22e5
+Source:
+        https://raw.githubusercontent.com/web-platform-tests/wpt/181476aa16e8b28a07698bef3a0275fa53dd22e5/url/resources/urltestdata.json
+Checksum:
+        sha256:355c9f1e5f34aae66ba8adfabf3c853f5cd30ea22964ef7a53eb292e7975d81e
+Bytes: 228373
+Entries: 1004
+Objects: 891
+Successes: 624
+Failures: 267
+HostRows: 99
+Bracketed: 41
+Numeric: 58
+Unreadable: 454
+License: BSD-3-Clause
+Copyright: web-platform-tests contributors

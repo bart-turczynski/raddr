@@ -5,3 +5,8 @@
 # CSVs terminate rows with CRLF but use bare LF inside their wrapped quoted
 # fields, so any eol normalization rewrites them.
 inst/extdata/*.csv -text
+
+# The WPT URL corpus, on the same terms and for the same reason. The whole
+# directory rather than one filename: fixtures/wpt/ holds nothing but upstream
+# bytes, and that is what makes an upstream re-sync a file swap.
+tests/testthat/fixtures/wpt/** -text
