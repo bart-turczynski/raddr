@@ -47,7 +47,8 @@ addr_curl         =  aton, falling back to pton
 
 ### Measured divergence
 
-Measured on macOS Darwin 25.4.0 arm64, Apple libc, 2026-07-26:
+Measured on macOS Darwin 25.4.0 arm64, curl 7.1.0 / libcurl 8.14.1, Apple libc,
+2026-07-26:
 
 | input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
 |---|---|---|---|---|---|---|
@@ -62,14 +63,8 @@ Measured on macOS Darwin 25.4.0 arm64, Apple libc, 2026-07-26:
 
 Two rows carry most of the package's value:
 
-- **`0177.0.0.1`** — `getaddrinfo` and `curl` order the same two primitives
-  differently, so one string is two different hosts on one machine.
+- **`192.0.048.1`** — curl reaches a host a browser refuses to dial.
 - **`4294967296`** — `aton` wraps modulo 2^32 to `0.0.0.0`; the standards reject.
-
-The `getaddrinfo` and `curl` columns are the **resolver**: what happens once
-something hands the bare string over. They are not URL parsers. curl's own URL
-parser gates the host first and admits strictly less, so
-`curl http://192.0.048.1/` looks up a *name* and never dials `192.0.48.1`.
 
 ### For IPv6 the disagreement inverts
 

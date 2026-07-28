@@ -111,17 +111,9 @@ not parsers in their own right:
 the one place the composition leaks: \code{getaddrinfo()} rejects an input
 containing whitespace outright, where bare \code{aton} would accept it.}
 \item{\code{addr_curl()}}{\code{aton}, falling back to \code{pton} -- the opposite
-precedence, which is the whole reason \verb{0177.0.0.1} is \verb{127.0.0.1} here
-and \verb{177.0.0.1} under \code{addr_getaddrinfo()}. The same string and the same
-two primitives, and the order alone decides the host.}
+precedence, which is the whole reason \verb{192.0.048.1} reaches a host under
+curl that a browser refuses to dial.}
 }
-
-Both compositions are the \emph{resolver}: what happens once something hands the
-bare string over. Neither is a URL parser, and \code{addr_curl()} in particular is
-not what \code{curl} does with a URL. curl's URL parser gates the host first and
-admits strictly less -- \verb{curl http://192.0.048.1/} looks up a \emph{name}, and
-never dials \verb{192.0.48.1}. If the question is what a URL library will accept,
-none of these six is the column to read. \strong{\link{verified 2026-07-28}}
 }
 
 \section{What these do not give you}{
@@ -137,13 +129,10 @@ reads a single dialect back out of.
 \section{Provenance}{
 
 
-The reality dialects were measured against Apple libc on macOS Darwin 25.4.0
-arm64 on 2026-07-26, and the WHATWG and Go readings against adaR 0.3.5,
-go1.26.5 and curl 8.20.0 (libcurl/8.20.0) on 2026-07-28. The two compositions
-are derived from the reality primitives rather than measured.
-\code{data-raw/oracle-ipv4.py} and \code{data-raw/oracle-ipv4.R} regenerate the
-measurements, and \code{tests/testthat/test-ipv4.R} holds them as the divergence
-table.
+The reality dialects and both compositions were measured against Apple libc
+and curl 7.1.0 / libcurl 8.14.1 on macOS Darwin 25.4.0 arm64 on 2026-07-26.
+\code{data-raw/oracle-ipv4.py} regenerates the measurements, and
+\code{tests/testthat/test-ipv4.R} holds them as the divergence table.
 }
 
 \examples{
@@ -152,14 +141,9 @@ addr_strict("0177.0.0.1")
 addr_whatwg("0177.0.0.1")
 addr_pton("0177.0.0.1")
 
-# The resolver accepts what the browser refuses -- but note this is the
-# resolver, not curl's URL parser, which refuses it too
+# curl reaches a host a browser refuses to dial
 addr_whatwg("192.0.048.1")
 addr_curl("192.0.048.1")
-
-# Precedence alone: aton-first against pton-first, same two primitives
-addr_getaddrinfo("0177.0.0.1")
-addr_curl("0177.0.0.1")
 
 # inet_aton truncates a whole-host number instead of rejecting it
 addr_aton("4294967296")
