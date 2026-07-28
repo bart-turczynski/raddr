@@ -233,8 +233,23 @@ test_that("getaddrinfo's whitespace gate is a rejection with its own code", {
   # The gate covers the address, not the zone ID, so the second row survives it.
   expect_identical(addr_zone(addr_reading(p, "getaddrinfo"))[[2L]], "lo0 ")
 
-  # curl has no such gate, and reaches the host.
+  # curl inherits the gate along with the whole entry point (section 3.2), but
+  # never reaches it here: aton answers first and gets to the host.
   expect_identical(addr_format(addr_reading(p, "curl"))[[1L]], "1.2.3.4")
+  expect_identical(as.character(addr_outcome(p, "curl")[[1L]]), "ok")
+})
+
+test_that("moving curl's fallback left its acceptance set alone", {
+  # RADD-puzhycev swapped curl's fallback from pton to the getaddrinfo entry
+  # point, which changes bits on the lift rows but decides no acceptance:
+  # getaddrinfo accepts what pton accepts plus what aton accepts, and aton has
+  # already run. So the outcome and code surfaces still resolve over the two
+  # primitives, and this is what says that is still true.
+  literals <- corpus_literals()
+  p <- addr_parse(literals)
+
+  ok <- function(dialect) !is.na(addr_family(addr_reading(p, dialect)))
+  expect_identical(ok("curl"), ok("aton") | ok("pton"))
 })
 
 test_that("curl and getaddrinfo differ by precedence alone", {

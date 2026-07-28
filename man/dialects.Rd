@@ -91,7 +91,9 @@ enters the address and never affects equality.}
 \item{\verb{fe80::/10}}{\code{addr_getaddrinfo()} lifts the second hextet of a
 link-local address out into the zone and clears it, zone ID or not, so
 \verb{fe80:abcd::1} is \verb{fe80::1} with zone \code{43981} -- while \code{addr_pton()}
-leaves it alone. One string, one machine, two different hosts.}
+leaves it alone. One string, one machine, two different hosts.
+\code{addr_curl()} goes with \code{getaddrinfo}, because that is the entry point
+curl reaches.}
 }
 
 Apple \code{inet_pton()} also does the reverse, writing a resolved interface index
@@ -103,17 +105,26 @@ input, and raddr is pure and offline.
 \section{Compositions}{
 
 
-The last two are precedence orderings over the same two reality primitives,
-not parsers in their own right:
+The last two are precedence orderings over the reality primitives, not
+parsers in their own right:
 
 \describe{
 \item{\code{addr_getaddrinfo()}}{\code{pton}, falling back to \code{aton}. Whitespace is
 the one place the composition leaks: \code{getaddrinfo()} rejects an input
 containing whitespace outright, where bare \code{aton} would accept it.}
-\item{\code{addr_curl()}}{\code{aton}, falling back to \code{pton} -- the opposite
-precedence, which is the whole reason \verb{192.0.048.1} reaches a host under
-curl that a browser refuses to dial.}
+\item{\code{addr_curl()}}{\code{aton}, falling back to \strong{\code{addr_getaddrinfo()}} --
+the opposite precedence, which is the whole reason \verb{192.0.048.1} reaches
+a host under curl that a browser refuses to dial.}
 }
+
+The asymmetry in that second fallback is not a slip. curl's URL layer
+normalizes a numeric host itself, \code{aton}-style, and hands the resolver
+whatever is left, so the fallback is the resolver entry point rather than the
+bare parser under it. For IPv4 the distinction is invisible, because
+\code{getaddrinfo()} reduces to \code{pton} once \code{aton} has rejected. For IPv6 it is
+the whole composition: \code{aton} rejects every IPv6 literal, so \verb{fe80:abcd::1}
+is \verb{fe80::1} with zone \code{43981} under \code{addr_curl()}, exactly as under
+\code{addr_getaddrinfo()}.
 }
 
 \section{What these do not give you}{
@@ -129,10 +140,13 @@ reads a single dialect back out of.
 \section{Provenance}{
 
 
-The reality dialects and both compositions were measured against Apple libc
-and libcurl 8.14.1 on macOS Darwin 25.4.0 arm64 on 2026-07-26.
-\code{data-raw/oracle-ipv4.py} regenerates the measurements, and
-\code{tests/testthat/test-ipv4.R} holds them as the divergence table.
+The reality dialects and \code{addr_getaddrinfo()} were measured against Apple
+libc on macOS Darwin 25.4.0 arm64 on 2026-07-26. \code{addr_curl()}'s precedence
+was measured against real curl 8.20.0 on 2026-07-28 -- until then it was
+derived from the other two rather than run, and the IPv6 half of it was
+wrong. \code{data-raw/oracle-ipv4.py} and \code{data-raw/oracle-tools.R} regenerate the
+measurements; \code{tests/testthat/test-ipv4.R} holds them as the divergence
+table.
 }
 
 \examples{
@@ -148,9 +162,11 @@ addr_curl("192.0.048.1")
 # inet_aton truncates a whole-host number instead of rejecting it
 addr_aton("4294967296")
 
-# Two libc entry points, one machine, two different IPv6 hosts
+# Two libc entry points, one machine, two different IPv6 hosts -- and curl
+# reaches the one that lifts the scope
 addr_pton("fe80:abcd::1")
 addr_getaddrinfo("fe80:abcd::1")
+addr_curl("fe80:abcd::1")
 
 # The zone travels beside the bits, so it does not affect equality
 addr_pton("fe80::1\%lo0") == addr_pton("fe80::1\%en0")

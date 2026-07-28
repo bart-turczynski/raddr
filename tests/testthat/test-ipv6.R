@@ -27,7 +27,12 @@ test_that("the section 3.5 divergence table holds", {
       one, wide, quad, paste0(bare, "%43981"),
       paste0(bare, "%lo0"), "1.2.3.4", no
     ),
-    curl = c(one, wide, quad, ll, paste0(bare, "%lo0"), "1.2.3.4", no)
+    # A copy of the getaddrinfo column, and that is the finding: aton rejects
+    # every IPv6 literal, so the composition is nothing but its fallback here.
+    curl = c(
+      one, wide, quad, paste0(bare, "%43981"),
+      paste0(bare, "%lo0"), "1.2.3.4", no
+    )
   )
 
   for (dialect in names(expected)) {
@@ -37,6 +42,7 @@ test_that("the section 3.5 divergence table holds", {
       label = dialect
     )
   }
+  expect_identical(expected$curl, expected$getaddrinfo)
 })
 
 # --- the measured dialects, against the recorded oracle ----------------------
@@ -142,7 +148,8 @@ test_that("real curl reaches getaddrinfo for IPv6, which settles O13", {
   # section 3.3 was derived from the composition rather than measured.
   #
   # Measured, the answer is getaddrinfo, on all 88 rows that can be asked
-  # through a URL at all. The derived half was wrong.
+  # through a URL at all. The derived half was wrong, and addr_curl() now
+  # composes aton with getaddrinfo rather than with pton (RADD-puzhycev).
   oracle <- ipv6_oracle()
   # "-" marks a row that cannot be asked: a zone needs %25, and whitespace and
   # the authority delimiters never reach the resolver.
@@ -153,40 +160,63 @@ test_that("real curl reaches getaddrinfo for IPv6, which settles O13", {
     address_only(addr_getaddrinfo(oracle$literal[keep])),
     expected
   )
+  # aton rejects every IPv6 literal, so for this family the composition IS its
+  # fallback and the two columns have to be the same one.
+  expect_identical(address_only(addr_curl(oracle$literal[keep])), expected)
+  expect_true(all(is.na(addr_aton(oracle$literal))))
 })
 
-test_that("addr_curl() is wrong for IPv6 on the lift rows (RADD-puzhycev)", {
-  # This test pins a KNOWN DEFECT so it cannot spread quietly, and it fails the
-  # moment addr_curl() is corrected -- which is the point, because the fix is
-  # meant to delete it.
-  #
-  # addr_curl() composes aton then pton. Real curl composes aton then
-  # getaddrinfo, and the two part company wherever Apple's getaddrinfo lifts an
-  # embedded scope out of a link-local address and inet_pton does not. Every
-  # such row is inside fe80::/10 and carries a non-zero second hextet. The
-  # measured column above is the truth; these ten are raddr disagreeing with it.
+test_that("the curl fallback moves exactly the ten lift rows (RADD-puzhycev)", {
+  # The whole footprint of the fix, named rather than pattern-matched. Before
+  # RADD-puzhycev addr_curl() composed aton then pton and these ten rows
+  # disagreed with the measured curl column; the fallback is getaddrinfo now, so
+  # they are the rows where addr_curl() and addr_pton() part company instead.
+  # Every one is inside fe80::/10 with a non-zero second hextet -- there is no
+  # other way for the two entry points to differ.
   oracle <- ipv6_oracle()
   keep <- oracle$curl != "-"
-  measured <- oracle$curl[keep]
-  measured[!nzchar(measured)] <- NA_character_
+  literals <- oracle$literal[keep]
 
-  wrong <- which(address_only(addr_curl(oracle$literal[keep])) != measured)
+  moved <- which(
+    address_only(addr_curl(literals)) != address_only(addr_pton(literals))
+  )
   expect_identical(
-    oracle$literal[keep][wrong],
+    literals[moved],
     c(
       "fe80:abcd::1", "fe80:1::1", "fe80:ffff::1", "fe80:abcd:1234::1",
       "fe80:1:2:3:4:5:6:7", "fe81:1::1", "fe8f:1::1", "fe90:1::1",
       "fea0:1::1", "febf:1::1"
     )
   )
+})
 
-  # And the shape of the error is one thing, not ten: aton rejects every IPv6
-  # literal, so swapping the fallback from pton to getaddrinfo removes all of
-  # them and changes nothing raddr currently gets right.
-  expect_identical(
-    address_only(addr_getaddrinfo(oracle$literal[keep])),
-    measured
+test_that("the getaddrinfo whitespace gate is unobservable through curl", {
+  # addr_curl() falls back to the whole getaddrinfo entry point, gate included,
+  # so the gate is inherited -- but it can never decide a curl reading, and that
+  # is why addr_curl() needs no gate of its own.
+  #
+  # The argument: the gate tests the text before the "%", which is exactly the
+  # address text, so a gated literal is one whose address carries whitespace,
+  # and pton refuses those anyway. Where aton accepts one it wins first. Pinned
+  # by running it rather than left as prose, over every literal in the corpus.
+  literals <- corpus_literals()
+  ungated <- compose_dialects(
+    addr_aton(literals),
+    gai_extract_scope(compose_dialects(
+      addr_pton(literals), addr_aton(literals)
+    ))
   )
+  expect_true(all(vctrs::vec_equal(
+    addr_curl(literals), ungated,
+    na_equal = TRUE
+  )))
+
+  # The gate is real on the entry point itself, which is what makes the
+  # inheritance worth checking rather than assuming. It bites precisely where
+  # aton accepts -- and there aton has already answered for curl.
+  expect_false(is.na(addr_aton("1.2 .3.4")))
+  expect_true(is.na(addr_getaddrinfo("1.2 .3.4")))
+  expect_false(is.na(addr_curl("1.2 .3.4")))
 })
 
 test_that("Go net/netip and Python ipaddress are one dialect, except once", {
@@ -407,11 +437,10 @@ test_that("getaddrinfo lifts an embedded scope out of a link-local address", {
     addr_expand(a),
     "fe80:0000:0000:0000:0000:0000:0000:0001%43981"
   )
-  expect_identical(
-    format(addr_pton("fe80:abcd::1")),
-    format(addr_curl("fe80:abcd::1"))
-  )
   expect_false(format(addr_pton("fe80:abcd::1")) == format(a))
+  # And curl reaches the entry point that lifts, not the parser under it
+  # (RADD-puzhycev), so it is pton that stands alone on this row.
+  expect_identical(format(addr_curl("fe80:abcd::1")), format(a))
 
   # An explicit zone wins, but the hextet is cleared either way.
   expect_identical(

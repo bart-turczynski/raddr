@@ -148,12 +148,22 @@ separate parsers **[verified 2026-07-26]**:
 
 ```
 addr_getaddrinfo  =  pton, falling back to aton
-addr_curl         =  aton, falling back to pton     <- wrong for IPv6, see below
+addr_curl         =  aton, falling back to addr_getaddrinfo
 ```
 
 Every measured row falls out of those two orderings. They are implemented as
 literal compositions of the exported primitives, so a precedence change upstream
-is an argument swap, not a rewrite.
+is an argument swap, not a rewrite — which is exactly what `RADD-puzhycev` cost
+when the second line turned out to be wrong.
+
+**The asymmetry in the second line is deliberate.** `curl` falls back to the
+resolver *entry point*, not to the bare parser under it, because curl's URL
+layer normalizes a numeric host `aton`-style and hands `getaddrinfo` whatever is
+left. `addr_getaddrinfo()`'s whitespace gate is inherited along with it but can
+never be seen through `addr_curl()`: the gate tests the text before the `%`,
+which is the address text, and `pton` refuses whitespace there anyway — so
+wherever the gate would bite, `aton` has already answered. Pinned by running it
+over the whole corpus in `test-ipv6.R` rather than left as this paragraph.
 
 **The `curl` ordering was derived, not measured, until 2026-07-28 [§11.6].**
 "Verified 2026-07-26" above covered `getaddrinfo`; no `data-raw` script invoked
@@ -163,17 +173,19 @@ being read as evidence for. Running real curl (8.20.0) says:
 - **IPv4 — the ordering holds**, on all 78 rows that can be asked. curl's URL
   layer normalizes a numeric host itself, `aton`-style, before the resolver is
   reached, which is why the `aton`-first precedence is right.
-- **IPv6 — the ordering is wrong.** `aton` rejects every IPv6 literal, so the
-  composition *is* its fallback, and the fallback should be `getaddrinfo`.
-  curl's URL layer does not normalize an IPv6 literal, so the text reaches
-  `getaddrinfo`, which lifts an embedded scope out of a link-local address where
-  `inet_pton` does not (§3.5.3). Ten rows differ, all inside `fe80::/10` with a
-  non-zero second hextet.
+- **IPv6 — the ordering was wrong**, and it was `aton, falling back to pton`
+  until 2026-07-28. `aton` rejects every IPv6 literal, so the composition *is*
+  its fallback, and the fallback has to be `getaddrinfo`. curl's URL layer does
+  not normalize an IPv6 literal, so the text reaches `getaddrinfo`, which lifts
+  an embedded scope out of a link-local address where `inet_pton` does not
+  (§3.5.3). Ten rows differed, all inside `fe80::/10` with a non-zero second
+  hextet.
 
 `aton` falling back to **`getaddrinfo`** fits both families with no divergence,
 because once `aton` has rejected an IPv4 literal `getaddrinfo` reduces to `pton`
-anyway. That one-argument fix is `RADD-puzhycev`; until it lands the defect is
-pinned by name in `test-ipv6.R` so it cannot spread.
+anyway. **That one-argument fix landed as `RADD-puzhycev`**, and the ten rows it
+moved are still named in `test-ipv6.R` — as the set where `addr_curl()` and
+`addr_pton()` now part company, which is the same set seen from the other side.
 
 **One leak, found while implementing Epic C [verified 2026-07-26].** The
 `getaddrinfo` composition is exact except for whitespace. `inet_aton` stops at
@@ -301,7 +313,7 @@ of the divergence is on the reality side.
 | `::1` | ::1 | ::1 | ::1 | reject | ::1 | ::1 |
 | `00001::` | reject | reject | 1:: | reject | 1:: | 1:: |
 | `::1.2.3.04` | reject | reject | ::102:304 | reject | ::102:304 | ::102:304 |
-| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | fe80:abcd::1 |
+| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | **fe80::1 %43981** |
 | `fe80::1%lo0` | reject | reject | ::1 %lo0 | reject | ::1 %lo0 | ::1 %lo0 |
 | `1.2.3.4` | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 | 1.2.3.4 |
 | `[::1]` | reject | reject | reject | reject | reject | reject |
@@ -310,12 +322,21 @@ The row that carries the value is **`fe80:abcd::1`**: two libc entry points on
 one machine return different bits for one string, which is the IPv6 counterpart
 of what `0177.0.0.1` does for IPv4.
 
+**The `curl` column is a copy of the `getaddrinfo` one, and that is the finding
+rather than a redundancy.** `aton` rejects every IPv6 literal, so §3.2's
+composition is nothing but its fallback here — and the fallback is the
+`getaddrinfo` entry point **[measured 2026-07-28, curl 8.20.0; `RADD-puzhycev`]**.
+For IPv4 the same two columns differ on two of §3.3's eight rows, `0177.0.0.1`
+and `192.0.010.1`, where `aton` reads the leading zero as octal and answers
+first.
+
 #### 3.5.1 The four measured facts
 
 - **`inet_aton` has no IPv6 reading at all.** It is `AF_INET` by signature and
   rejects every colon-bearing literal. Measured rather than assumed, because
-  both compositions in §3.2 lean on it: for IPv6, `getaddrinfo` and `curl` both
-  collapse onto their `pton` half.
+  both compositions in §3.2 lean on it: for IPv6, `getaddrinfo` collapses onto
+  its `pton` half and `curl` collapses onto `getaddrinfo`, so nothing about IPv6
+  is decided by the precedence — only by which fallback was named.
 - **Apple `inet_pton` puts no width limit on leading zeros in a hextet**, then
   caps the *significant* digits at four. `0000000000001::` is `1::`; `12345::`,
   `abcde::` and `ffff1::` are rejections. This is exactly the IPv4 finding of
@@ -2330,7 +2351,7 @@ the decisions are not relitigated.
 | O10 | WPT vendoring licence mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analogue. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a licence notice appended there is deleted by the next registry rebuild |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
-| O13 | The `curl` = aton-then-pton composition for **IPv6** | **Settled 2026-07-28 by running it, and the answer is no — see §11.6.** curl reaches **`getaddrinfo`**, not `inet_pton`, on all 88 IPv6 rows that can be asked through a URL at all; the derived half was wrong on the 10 rows where Apple's `getaddrinfo` lifts an embedded scope and `inet_pton` does not. The item's own premise was also wrong: the IPv4 composition had never been measured either — no `data-raw` script invoked curl before `RADD-xpmuxafb`, so §3.3's `curl` column was derived from the composition it was being used to support. Measured now, IPv4 holds on all 78 rows. `addr_curl()`'s fallback is `RADD-puzhycev` |
+| O13 | The `curl` = aton-then-pton composition for **IPv6** | **Settled 2026-07-28 by running it, and the answer is no — see §11.6.** curl reaches **`getaddrinfo`**, not `inet_pton`, on all 88 IPv6 rows that can be asked through a URL at all; the derived half was wrong on the 10 rows where Apple's `getaddrinfo` lifts an embedded scope and `inet_pton` does not. The item's own premise was also wrong: the IPv4 composition had never been measured either — no `data-raw` script invoked curl before `RADD-xpmuxafb`, so §3.3's `curl` column was derived from the composition it was being used to support. Measured now, IPv4 holds on all 78 rows. `addr_curl()`'s fallback was corrected to `getaddrinfo` under `RADD-puzhycev` |
 | O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
 | O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
 | O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | 5.7 s against 2.5 s per 1e6 **[verified 2026-07-27, §11.1.1]**, which the flat-per-row theory does not explain. The suspicion, unmeasured, is `derive_status()`: for an IPv6 vector `aton`'s reading is missing on every row, so `readings_agree()` runs `vec_equal()` against an all-missing address and enters `blank_missing()`'s `proxy[is.na(code), ] <- NA` over a million rows and six columns — a path an all-accepted IPv4 vector never takes. If that is it, the fix is to skip dialects that accepted nothing, and it is small. Profile before touching anything |
@@ -3053,7 +3074,8 @@ with Python. One row is not a refutation of the grouping, but it is the
 difference between a grouping that was checked and one that was assumed.
 
 **curl — see §3.2.** The IPv4 ordering holds on every measurable row; the IPv6
-ordering is wrong and is now `RADD-puzhycev`.
+ordering was wrong, and `RADD-puzhycev` swapped the fallback from `pton` to
+`getaddrinfo`.
 
 **Measuring curl means measuring curl's resolver, and that is easy to get
 wrong.** Two traps were hit and are worth recording, because both produced

@@ -37,17 +37,22 @@ Not one list, but what a *standard* requires ("on paper") versus what an
 | reality | `pton` | POSIX `inet_pton` | **platform-varying** |
 | reality | `aton` | BSD `inet_aton` | stable in practice |
 
-Two more dialects are precedence orderings over the same reality primitives, not
+Two more dialects are precedence orderings over those reality primitives, not
 separate parsers:
 
 ```
 addr_getaddrinfo  =  pton, falling back to aton
-addr_curl         =  aton, falling back to pton
+addr_curl         =  aton, falling back to addr_getaddrinfo
 ```
+
+curl falls back to the resolver *entry point* rather than to the bare parser
+under it, because that is what real curl reaches — measured against curl 8.20.0,
+after the derived version of this line turned out to be wrong for IPv6.
 
 ### Measured divergence
 
-Measured on macOS Darwin 25.4.0 arm64, libcurl 8.14.1, Apple libc, 2026-07-26:
+Measured on macOS Darwin 25.4.0 arm64, Apple libc, 2026-07-26; the `curl`
+column against real curl 8.20.0, 2026-07-28:
 
 | input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
 |---|---|---|---|---|---|---|
@@ -76,13 +81,17 @@ reality side:
 | `::1` | ::1 | ::1 | ::1 | reject | ::1 | ::1 |
 | `00001::` | reject | reject | 1:: | reject | 1:: | 1:: |
 | `::1.2.3.04` | reject | reject | ::102:304 | reject | ::102:304 | ::102:304 |
-| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | fe80:abcd::1 |
+| `fe80:abcd::1` | fe80:abcd::1 | fe80:abcd::1 | fe80:abcd::1 | reject | **fe80::1 %43981** | **fe80::1 %43981** |
 | `fe80::1%lo0` | reject | reject | ::1 %lo0 | reject | ::1 %lo0 | ::1 %lo0 |
 
 - **`fe80:abcd::1`** — two libc entry points on one machine return different
   bits for one string. Apple's `getaddrinfo` reads the second hextet of a
   link-local address as a scope ID and clears it; `inet_pton` does not. This is
-  the IPv6 counterpart of `0177.0.0.1`.
+  the IPv6 counterpart of `0177.0.0.1`. curl reaches the entry point that lifts,
+  so `pton` is the odd one out on this row.
+- **The `curl` column is a copy of the `getaddrinfo` one here**, because `aton`
+  rejects every IPv6 literal and the composition is nothing but its fallback.
+  For IPv4 the two differ on `0177.0.0.1` and `192.0.010.1` above.
 - **`00001::`** — `inet_pton` counts only the four *significant* hex digits and
   lets the leading zeros run as wide as they like. The standards cap the digits
   outright.

@@ -340,15 +340,19 @@ blank_address <- function(a, at) {
 }
 
 composed_reading <- function(x, dialect) {
-  if (dialect == "curl") {
-    return(compose_dialects(field(x, "aton"), field(x, "pton")))
-  }
   gated <- gai_whitespace(field(x, "input"))
-  out <- compose_dialects(
+  gai <- gai_extract_scope(compose_dialects(
     blank_address(field(x, "pton"), gated),
     blank_address(field(x, "aton"), gated)
-  )
-  gai_extract_scope(out)
+  ))
+  if (dialect == "curl") {
+    # curl falls back to the `getaddrinfo` entry point, not to bare `pton`
+    # (section 3.2), so the scope lift rides along. `aton` runs first, so
+    # neither the whitespace gate nor the inner `aton` fallback is reachable
+    # from here.
+    return(compose_dialects(field(x, "aton"), gai))
+  }
+  gai
 }
 
 #' Pull one dialect's reading, outcome or reason codes back out
@@ -421,6 +425,12 @@ addr_outcome <- function(x, dialect) {
   outcome_factor(accepted, !silent, field(x, "input"))
 }
 
+# The *outcome* surface resolves over the two primitives even though curl's
+# reading falls back to the whole `getaddrinfo` entry point, and that is not a
+# leftover: `getaddrinfo` accepts what `pton` accepts plus what `aton` accepts,
+# and `aton` has already answered by then. Its scope lift moves bits, never
+# acceptance. So curl's acceptance set is still `aton` union `pton`, which is
+# what tests/testthat/test-parse.R pins.
 composition_parts <- function(dialect) {
   switch(
     dialect,

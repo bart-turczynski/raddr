@@ -383,7 +383,11 @@ slow_parse_one <- function(s, dialect) {
     ))
   }
   if (dialect == "curl") {
-    return(slow_compose(slow_parse_one(s, "aton"), slow_parse_one(s, "pton")))
+    # The fallback is the `getaddrinfo` entry point, not bare `pton`, so the
+    # scope lift rides along (section 3.2).
+    return(slow_compose(
+      slow_parse_one(s, "aton"), slow_parse_one(s, "getaddrinfo")
+    ))
   }
 
   rules <- slow_rules[[dialect]]
