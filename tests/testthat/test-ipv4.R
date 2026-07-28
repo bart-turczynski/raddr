@@ -108,6 +108,64 @@ test_that("the section 3.3 divergence table holds", {
   }
 })
 
+# --- and the same table, read out of the design record (RADD-fdfcmbdi) -------
+#
+# The table above is spelled out so the diff is loud. That leaves one gap: the
+# prose could still drift away from it, and section 3.3 is the package's
+# headline claim. So the markdown table is parsed and run too -- every row and
+# every column -- which makes the document itself the fixture, and a silent edit
+# to it a test failure.
+#
+# Skipped in the built package, where docs/ is not shipped.
+
+architecture_divergence <- function() {
+  path <- testthat::test_path("..", "..", "docs", "architecture.md")
+  skip_if_not(file.exists(path), "docs/architecture.md is not in the tarball")
+  lines <- readLines(path, warn = FALSE)
+
+  start <- grep("^### 3\\.3 Measured divergence", lines)
+  skip_if(length(start) != 1L, "section 3.3 is not where it was")
+  rows <- grep("^\\| `[0-9.]+` \\|", lines[seq.int(start, start + 20L)],
+               value = TRUE)
+  skip_if(length(rows) == 0L, "no divergence table under section 3.3")
+
+  cells <- strsplit(sub("^\\| ", "", sub(" \\|$", "", rows)), " \\| ")
+  table <- as.data.frame(do.call(rbind, cells), stringsAsFactors = FALSE)
+  names(table) <- c("input", "strict", "whatwg", "pton", "aton",
+                    "getaddrinfo", "curl")
+  table$input <- gsub("`", "", table$input)
+  # "reject" is how the document spells what `format()` renders as NA.
+  table[table == "reject"] <- NA_character_
+  table
+}
+
+test_that("every row of the section 3.3 table is reproduced", {
+  table <- architecture_divergence()
+
+  # The document is the fixture, so its shape is asserted before its contents:
+  # a table that lost a row would otherwise pass by testing less.
+  expect_identical(nrow(table), 8L)
+  expect_identical(
+    table$input,
+    c("127.0.0.1", "0177.0.0.1", "192.0.010.1", "192.0.048.1",
+      "4294967296", "1.2.3.", "2130706433", "10.048.1.1")
+  )
+  # And it is a divergence table: no column is a copy of another.
+  dialects <- c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl")
+  pairs <- utils::combn(dialects, 2L)
+  expect_true(all(apply(pairs, 2L, function(p) {
+    !identical(table[[p[[1L]]]], table[[p[[2L]]]])
+  })))
+
+  for (dialect in dialects) {
+    expect_identical(
+      format(dialect_fn(dialect)(table$input)),
+      table[[dialect]],
+      label = dialect
+    )
+  }
+})
+
 # --- the measured dialects, against the recorded oracle ----------------------
 #
 # data-raw/oracle-ipv4.py and data-raw/oracle-ipv4.R regenerate this fixture
