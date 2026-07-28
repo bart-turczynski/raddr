@@ -130,7 +130,7 @@ reads a single dialect back out of.
 
 
 The reality dialects and both compositions were measured against Apple libc
-and curl 7.1.0 / libcurl 8.14.1 on macOS Darwin 25.4.0 arm64 on 2026-07-26.
+and libcurl 8.14.1 on macOS Darwin 25.4.0 arm64 on 2026-07-26.
 \code{data-raw/oracle-ipv4.py} regenerates the measurements, and
 \code{tests/testthat/test-ipv4.R} holds them as the divergence table.
 }

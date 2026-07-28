@@ -7,7 +7,7 @@ wherever the two disagree; the scratch documents remain the authority for
 **Provenance.** Decisions below were settled in a review session on 2026-07-26.
 Empirical claims marked **[verified 2026-07-26]** were measured on this machine:
 macOS Darwin 25.4.0 arm64, R 4.6.0, `ipaddress` 1.0.3, `adaR` 0.3.5,
-`curl` 7.1.0 / libcurl 8.14.1, Python 3.x, Apple libc.
+libcurl 8.14.1, Python 3.x, Apple libc.
 
 Claims marked **[verified 2026-07-27]** were measured on the same machine during
 Epic E, and additionally against Python 3.9.6 / 3.12.13 / 3.14.6, Rust 1.91.1,

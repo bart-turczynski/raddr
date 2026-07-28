@@ -47,8 +47,7 @@ addr_curl         =  aton, falling back to pton
 
 ### Measured divergence
 
-Measured on macOS Darwin 25.4.0 arm64, curl 7.1.0 / libcurl 8.14.1, Apple libc,
-2026-07-26:
+Measured on macOS Darwin 25.4.0 arm64, libcurl 8.14.1, Apple libc, 2026-07-26:
 
 | input | `strict` | `whatwg` | `pton` | `aton` | `getaddrinfo` | `curl` |
 |---|---|---|---|---|---|---|
