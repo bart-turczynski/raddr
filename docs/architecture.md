@@ -2568,7 +2568,9 @@ The block-edge half of that check is also a test, `test-classify.R`, where the
 oracle is not the old walk but an independent matcher that decides containment
 by **string prefix** — `startsWith()` over `addr_to_binary()` — and so shares
 nothing with `prefix_match()` except the encoder. A wrong divisor surfaces there
-as a disagreement rather than as the same wrong answer computed twice.
+as a disagreement rather than as the same wrong answer computed twice. That
+matcher now lives in `helper-slow.R` with the rest of the naive second
+implementations (§11.3), which it was the worked example for.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**
@@ -2681,6 +2683,69 @@ the product. Pure R landing within 3x of a C++ package is a good trade.
 Vectorize aggressively: one pass over the character vector returning all fields
 at once, never per-element. Use arithmetic (`2^(8*n)`), not `bitwShiftL` —
 R integers are signed 32-bit and shifting past 2^31 is a trap.
+
+### 11.3 The naive second implementations **[implemented 2026-07-28]**
+
+Every optimization in §11.1 and §11.2 buys speed with machinery, and each piece
+of machinery is a place an off-by-one can hide and still look plausible. The
+digit run truncated to the trailing digits the modulus preserves; the flat pass
+over 8n hextets; the scatter-add over four part positions; the zero run found by
+a backwards recursion over a matrix and blanked rather than removed — none of
+those reads like what it computes, which is exactly why they are fast.
+
+So `tests/testthat/helper-slow.R` computes the same answers a second time,
+badly. One address at a time, one character at a time, no vectorization, no
+fast paths, no tables indexed by character code. It covers the two parsers, both
+compositions, and both renderers, and it is the same pattern Go keeps beside
+`net/netip`'s fast parser.
+
+The two sides share the **specification** and nothing else. The rule sets in
+`helper-slow.R` restate §3 rather than reading `rules_strict` and friends, and
+the renderer restates RFC 5952 rather than calling `render_canonical()`. A rule
+written down twice is checked; a rule read from one place by both sides is not.
+The comparison surface is text on both sides — a fixed-width hex string, a
+family and a zone, which describes a `raddr_address` completely while reaching
+none of its constructors.
+
+`tests/testthat/test-slow.R` runs both over 2104 literals: the oracle fixtures,
+the boundaries an argument is about — every per-part bound from both sides, the
+elision in every illegal quantity, `fe80::/10` at both ends — and 1800 generated
+spellings, half of them valid by construction so the agreement cannot be
+vacuous. The renderers get 1175 addresses, most of them zero-heavy, because RFC
+5952 §4.2 is entirely about runs of zero fields and a uniform draw almost never
+produces one.
+
+**What it caught, measured by breaking the shipped code on purpose.** Nine
+mutations, each a plausible slip, run against the corpus:
+
+| mutation | disagreements |
+|---|---|
+| `ipv4_final_bounds`: last part off by one | 94 |
+| `ipv4_weights`: the short form off by a byte | 2457 |
+| `ipv4_mod_digits`: decimal 32 → 16 | 15 |
+| `ipv4_digit_values`: hex alphabet off by one | 130 |
+| RFC 5952 §4.2.3: tie-break the last equal run | 25 |
+| RFC 5952 §4.2.2: compress a single zero field | 206 |
+| `ipv6_pieces`: group count off by one | 5912 |
+| `format_v4`: octet shift off by a byte | 455 |
+| `addr_hextets`: high and low half swapped | 6966 |
+
+All nine caught. A tenth — `ipv4_max_digits` for decimal widened from 10 to 11
+— is **not** caught, and should not be: an eleven-digit decimal is at least
+10^10, so the modular accumulation flags it as an overflow whether or not the
+width did. That is an equivalent mutant, and its surviving is a statement about
+the shipped code rather than about the corpus.
+
+Two of the nine were missed on the first attempt, and both were gaps in the
+corpus rather than in the second implementation: nothing exercised a bound on
+the *final* part (`1.2.3.256`, not `256.1.1.1`), and no address had a single
+zero field to decline to compress (`2001:db8:0:1:1:1:1:1`). Both are now in the
+boundary literals, which is the argument for measuring a test suite this way
+rather than trusting that a corpus is broad because it is long.
+
+`block_edges()` and `slow_prefix_match()` — the string-prefix matcher §11.1.6
+built for the registry lookup — moved here from `test-classify.R`, since they
+are the same idea and were the worked example the rest was generalized from.
 
 ---
 
