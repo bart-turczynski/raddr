@@ -12,9 +12,10 @@ Entries: 1004
 Objects: 891
 Successes: 624
 Failures: 267
-HostRows: 99
-Bracketed: 41
-Numeric: 58
-Unreadable: 454
+HostRows: 103
+Bracketed: 42
+Numeric: 61
+Unreadable: 371
+ExtraRows: 14
 License: BSD-3-Clause
 Copyright: web-platform-tests contributors

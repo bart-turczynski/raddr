@@ -62,6 +62,7 @@ wpt_url <- paste0(
 # made inst/COPYRIGHTS unable to say which bytes are whose.
 json_path <- "tests/testthat/fixtures/wpt/urltestdata.json"
 csv_path <- "tests/testthat/fixtures/wpt-hosts.csv"
+extra_path <- "tests/testthat/fixtures/raddr_extra_urltestdata.json"
 provenance_path <- "data-raw/wpt-provenance.dcf"
 
 cli_args <- commandArgs(trailingOnly = TRUE)
@@ -148,8 +149,12 @@ wpt_host_token <- function(input) {
     return(NA_character_)
   }
   # Userinfo is delimited by the LAST "@", but percent-encoding can spell an "@"
-  # that is not a delimiter, so a row carrying both is ambiguous to a regex.
-  if (grepl("%", authority)) {
+  # that is not a delimiter, so an authority carrying BOTH is ambiguous to a
+  # regex. Only both: a "%" with no "@" in sight delimits nothing, and refusing
+  # it as well would throw away every zone-id row -- "%25eth0" is percent-
+  # encoded by construction -- which are the rows this corpus most wants.
+  if (grepl("@", authority, fixed = TRUE) &&
+        grepl("%", authority, fixed = TRUE)) {
     return(NA_character_)
   }
   host_port <- sub("^.*@", "", authority)
@@ -174,7 +179,7 @@ wpt_host_token <- function(input) {
 
 # --- build the derived corpus ------------------------------------------------
 
-build_corpus <- function(path) {
+build_corpus <- function(path, source) {
   entries <- jsonlite::fromJSON(path, simplifyVector = FALSE)
   objects <- Filter(is.list, entries)
 
@@ -206,7 +211,12 @@ build_corpus <- function(path) {
   keep <- bracketed | numeric
 
   out <- data.frame(
-    wpt_index = index[keep],
+    # The licence boundary, carried into the data. A row's terms are not a
+    # property anyone should have to recover by remembering which file it came
+    # from -- inst/COPYRIGHTS says fixtures/wpt/ is BSD-3 and the extras are
+    # raddr's MIT, and this column is what makes that statement checkable.
+    source = rep(source, sum(keep)),
+    index = index[keep],
     input = input[keep],
     base = base[keep],
     host = host[keep],
@@ -216,7 +226,7 @@ build_corpus <- function(path) {
     stringsAsFactors = FALSE
   )
   # A stable order, so a re-derivation diffs as content and never as ordering.
-  out <- out[order(out$wpt_index), , drop = FALSE]
+  out <- out[order(out$index), , drop = FALSE]
   rownames(out) <- NULL
 
   attr(out, "wpt_stats") <- c(
@@ -235,8 +245,17 @@ write_corpus <- function(corpus, path) {
   utils::write.csv(corpus, path, row.names = FALSE, na = "")
 }
 
-read_corpus <- function(path) {
-  utils::read.csv(path, colClasses = "character", na.strings = "")
+# Upstream first, then raddr's own, each keeping its own numbering. The two are
+# never interleaved: a re-sync that adds rows upstream must not renumber, move
+# or otherwise disturb a single raddr row, which is the point of the split.
+combined_corpus <- function() {
+  wpt_rows <- build_corpus(json_path, "wpt")
+  extra_rows <- build_corpus(extra_path, "raddr")
+  out <- rbind(wpt_rows, extra_rows)
+  rownames(out) <- NULL
+  attr(out, "wpt_stats") <- attr(wpt_rows, "wpt_stats")
+  attr(out, "extra_stats") <- attr(extra_rows, "wpt_stats")
+  out
 }
 
 # The comparison surface is the CSV's own text, on both sides. Comparing the
@@ -253,7 +272,7 @@ corpus_text <- function(corpus) {
 # --- --check: the committed artifacts must agree ----------------------------
 
 if (check_only) {
-  wanted <- c(json_path, csv_path, provenance_path)
+  wanted <- c(json_path, extra_path, csv_path, provenance_path)
   missing <- Filter(Negate(file.exists), wanted)
   if (length(missing)) {
     stop(
@@ -288,7 +307,7 @@ if (check_only) {
     ))
   }
 
-  rebuilt <- build_corpus(json_path)
+  rebuilt <- combined_corpus()
   if (!identical(corpus_text(rebuilt), readLines(csv_path, warn = FALSE))) {
     problems <- c(problems, sprintf(
       "%s disagrees with %s", csv_path, json_path
@@ -303,8 +322,9 @@ if (check_only) {
   }
 
   message(sprintf(
-    "WPT corpus is in sync (%d host rows from %s objects, wpt %s).",
-    nrow(rebuilt), recorded[["Objects"]], substr(wpt_commit, 1L, 7L)
+    "URL host corpus is in sync (%d rows: %d wpt %s, %d raddr).",
+    nrow(rebuilt), sum(rebuilt$source == "wpt"),
+    substr(wpt_commit, 1L, 7L), sum(rebuilt$source == "raddr")
   ))
   quit(status = 0L)
 }
@@ -323,8 +343,9 @@ if (is.null(input_dir)) {
   invisible(file.copy(from, json_path, overwrite = TRUE))
 }
 
-corpus <- build_corpus(json_path)
+corpus <- combined_corpus()
 stats <- attr(corpus, "wpt_stats")
+extra_stats <- attr(corpus, "extra_stats")
 write_corpus(corpus, csv_path)
 
 # --- provenance --------------------------------------------------------------
@@ -345,10 +366,11 @@ provenance <- c(
   Objects = as.character(stats[["objects"]]),
   Successes = as.character(stats[["successes"]]),
   Failures = as.character(stats[["failures"]]),
-  HostRows = as.character(nrow(corpus)),
+  HostRows = as.character(sum(corpus$source == "wpt")),
   Bracketed = as.character(stats[["bracketed"]]),
   Numeric = as.character(stats[["numeric"]]),
   Unreadable = as.character(stats[["unreadable"]]),
+  ExtraRows = as.character(sum(corpus$source == "raddr")),
   License = "BSD-3-Clause",
   Copyright = "web-platform-tests contributors"
 )
@@ -365,8 +387,11 @@ message("    entries:   ", stats[["entries"]], " (", stats[["objects"]],
         " objects, ", stats[["successes"]], " success / ",
         stats[["failures"]], " failure)")
 message("  ", csv_path)
-message("    host rows: ", nrow(corpus), " (", stats[["bracketed"]],
-        " bracketed, ", stats[["numeric"]], " numeric)")
+message("    wpt rows:   ", sum(corpus$source == "wpt"), " (",
+        stats[["bracketed"]], " bracketed, ", stats[["numeric"]], " numeric)")
+message("    raddr rows: ", sum(corpus$source == "raddr"), " (",
+        extra_stats[["bracketed"]], " bracketed, ",
+        extra_stats[["numeric"]], " numeric)")
 message("    unreadable authorities skipped: ", stats[["unreadable"]])
 message("  ", provenance_path)
 message("Run build-registry.R afterwards: inst/COPYRIGHTS reads this pin.")

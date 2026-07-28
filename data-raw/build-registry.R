@@ -7,7 +7,7 @@
 #   * inst/extdata/iana-ipv6-special-registry.csv  - exact upstream bytes
 #   * inst/extdata/iana-ipv4-address-space.csv     - exact upstream bytes
 #   * inst/extdata/iana-ipv6-address-space.csv     - exact upstream bytes
-#   * inst/NOTICE                                  - bundled-data attribution
+#   * inst/COPYRIGHTS                              - bundled-material licences
 #   * R/sysdata.rda                                - the parsed block tables
 #
 # Two registry PAIRS, kept apart on purpose (subissue RADD-pekbpche):
@@ -100,7 +100,28 @@ space_keys <- c("v4_space", "v6_space")
 all_keys <- c(special_keys, space_keys)
 
 sysdata_path <- "R/sysdata.rda"
-notice_path <- "inst/NOTICE"
+
+# inst/COPYRIGHTS, not inst/NOTICE, and the rename is load-bearing (O10, settled
+# in architecture.md section 12.1). Two reasons, one legal and one mechanical.
+#
+# LEGAL: the IANA registries are CC0, which waives everything, so provenance was
+# a courtesy. WPT's urltestdata.json is BSD-3, whose clause 1 binds SOURCE
+# redistributions -- and an R source tarball is one -- so its terms must travel
+# with the bytes. `License:` and `LICENSE` cannot carry them: measured against
+# `tools:::.license_component_is_for_stub_and_ok`, every way of writing BSD-3
+# into an `MIT + file LICENSE` stub fails the check. `inst/COPYRIGHTS` is the
+# instrument that can, and the name CRAN reviewers look for -- 10 of the 266
+# packages surveyed locally use it, against zero using `LICENSE.note`.
+#
+# MECHANICAL: this file is GENERATED, and the line at the bottom of this script
+# overwrites it wholesale. A licence notice appended to it by hand would survive
+# until the next registry rebuild and then vanish, turning a routine maintainer
+# action into a compliance failure with no error message. So the BSD-3 text is
+# an INPUT to this script -- read from data-raw/, which nothing generates -- and
+# not something the script is able to destroy.
+copyrights_path <- "inst/COPYRIGHTS"
+wpt_provenance_path <- "data-raw/wpt-provenance.dcf"
+wpt_license_path <- "data-raw/wpt-LICENSE.txt"
 
 cli_args <- commandArgs(trailingOnly = TRUE)
 check_only <- "--check" %in% cli_args
@@ -583,7 +604,7 @@ file_sha256 <- function(path) {
 if (check_only) {
   missing <- Filter(Negate(file.exists), c(
     vapply(sources, function(s) s$path, character(1)),
-    sysdata_path, notice_path
+    sysdata_path, copyrights_path
   ))
   if (length(missing)) {
     stop(
@@ -735,7 +756,7 @@ save(
   compress = "xz"
 )
 
-# --- bundled-data NOTICE ----------------------------------------------------
+# --- inst/COPYRIGHTS --------------------------------------------------------
 
 dir.create("inst", recursive = TRUE, showWarnings = FALSE)
 
@@ -747,15 +768,41 @@ notice_entry <- function(key) {
   )
 }
 
-notice <- paste(
+# The BSD-3 section is composed from two files this script only ever READS: the
+# pin that data-raw/vendor-wpt.R writes, and the licence text, which nothing
+# generates. Both must be present. Emitting a COPYRIGHTS without the WPT section
+# while the WPT bytes are in the tarball is the exact compliance failure section
+# 12.1 is about, so it is an error and never a warning.
+missing_wpt <- Filter(
+  Negate(file.exists), c(wpt_provenance_path, wpt_license_path)
+)
+if (length(missing_wpt)) {
+  stop(
+    "cannot compose ", copyrights_path, " without the WPT inputs: ",
+    paste(missing_wpt, collapse = ", "),
+    "\nrun: Rscript data-raw/vendor-wpt.R",
+    call. = FALSE
+  )
+}
+wpt <- read.dcf(wpt_provenance_path)[1, ]
+wpt_license <- readLines(wpt_license_path, warn = FALSE)
+
+copyrights <- paste(
   c(
-    "raddr bundled data NOTICE",
-    "=========================",
+    "raddr bundled material: copyright and licence notices",
+    "=====================================================",
     "",
     "The raddr package SOURCE CODE is licensed under the MIT License (see the",
     "top-level LICENSE file and the DESCRIPTION License field).",
     "",
-    "This package additionally BUNDLES four IANA address registries as data.",
+    "This package additionally bundles third-party material under two other",
+    "sets of terms, recorded below in full.",
+    "",
+    "",
+    "1. IANA address registries (CC0 1.0 Universal)",
+    "----------------------------------------------",
+    "",
+    "Four registries, vendored as two pairs that answer two questions.",
     "",
     "The two special-purpose registries, which answer policy:",
     "",
@@ -769,14 +816,50 @@ notice <- paste(
     "IANA registry data is dedicated to the public domain under CC0 1.0",
     "Universal <https://creativecommons.org/publicdomain/zero/1.0/>. The",
     "registries and every derived representation bundled here (the block and",
-    "address-space tables in R/sysdata.rda) carry that dedication.",
+    "address-space tables in R/sysdata.rda) carry that dedication. CC0 waives",
+    "the conditions a licence would impose, so the entry above records",
+    "provenance only.",
     "",
-    "raddr performs no network access. The registries are vendored, and are",
-    "regenerated by a maintainer running data-raw/build-registry.R."
+    "",
+    "2. web-platform-tests URL test data (BSD-3-Clause)",
+    "--------------------------------------------------",
+    "",
+    sprintf("  %s", wpt[["Path"]]),
+    sprintf("    Upstream:   %s", wpt[["Repository"]]),
+    sprintf("    Component:  %s", wpt[["Component"]]),
+    sprintf("    Commit:     %s", wpt[["Commit"]]),
+    sprintf("    Source URL: %s", wpt[["Source"]]),
+    sprintf("    Checksum:   %s", wpt[["Checksum"]]),
+    sprintf("    Bytes:      %s", wpt[["Bytes"]]),
+    "",
+    "Unlike CC0, BSD-3 clause 1 binds redistribution of source, and an R",
+    "source tarball is a source redistribution, so the terms below travel with",
+    "those bytes. They are reproduced verbatim from the upstream LICENSE.md at",
+    "the commit named above.",
+    "",
+    "raddr's own additions to the corpus are NOT covered by these terms, and",
+    "are kept outside that directory, in",
+    "tests/testthat/fixtures/raddr_extra_urltestdata.json, under raddr's MIT",
+    "licence. The directory boundary is what makes this sentence checkable.",
+    "",
+    strrep("-", 74),
+    "",
+    wpt_license,
+    strrep("-", 74),
+    "",
+    "",
+    "Regeneration",
+    "------------",
+    "",
+    "raddr performs no network access. Everything above is vendored, and is",
+    "regenerated by a maintainer running data-raw/vendor-wpt.R and then",
+    "data-raw/build-registry.R, which composes this file. The BSD-3 text is an",
+    "input to that script, read from data-raw/wpt-LICENSE.txt, and not",
+    "something the script can overwrite."
   ),
   collapse = "\n"
 )
-writeLines(notice, notice_path)
+writeLines(copyrights, copyrights_path)
 
 # --- report -----------------------------------------------------------------
 

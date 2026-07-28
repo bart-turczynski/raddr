@@ -1,0 +1,28 @@
+[
+  "raddr's own additions to the URL host corpus. NOT web-platform-tests material: this file is raddr's, under raddr's MIT licence, and it is kept OUTSIDE fixtures/wpt/ so that the directory boundary is also the licence boundary and an upstream re-sync stays a file swap. See inst/COPYRIGHTS and docs/architecture.md section 12.1.",
+  "Schema is WPT's, so the two files merge without a translation step. Only the fields data-raw/vendor-wpt.R reads are given: input, base, hostname, failure.",
+  "PROVENANCE OF THE EXPECTATIONS. Every `hostname` and every `failure` below was MEASURED against a real WHATWG implementation -- Node v26.3.1, whose URL parser is ada, the same implementation section 11.6 already uses as an oracle -- and not reasoned out from the specification. A hand-written expectation is a second implementation with no tests.",
+  "WHY THESE ROWS. Each fills a gap measured in the vendored corpus at wpt 181476a rather than a gap imagined: the search strings below return zero matching inputs upstream. WPT tests the URL parser, so it has no reason to cover the IPv6 special-purpose space; raddr's whole subject is that space.",
+
+  "-- the sign bit. 0x80000000 is NA_integer_ in an R word, which is the bug this package already carries a regression test for (RADD-jrfprxyv) and the one filed against ipaddress (O11b). WPT has no input containing 2147483648 or 0x80000000 in any spelling.",
+  { "input": "http://2147483648/", "base": null, "hostname": "128.0.0.0" },
+  { "input": "http://0x80000000/", "base": null, "hostname": "128.0.0.0" },
+  { "input": "http://2147483647/", "base": null, "hostname": "127.255.255.255" },
+  { "input": "http://4294967295/", "base": null, "hostname": "255.255.255.255" },
+
+  "-- uppercase 0X standing alone. WPT spells it only inside reg-names (0X7F.0.0.0X7G, foo.0XFfFfFfFfFfFfFfFfFfAcE123), never as a numeric host in its own right. It is the discriminator between curl's two layers: CURLU rejects 0Xff and inet_aton accepts it (RADD-cdmoeadr).",
+  { "input": "http://0Xff/", "base": null, "hostname": "0.0.0.255" },
+  { "input": "http://0X7F.0.0.1/", "base": null, "hostname": "127.0.0.1" },
+
+  "-- the wrapper prefixes raddr extracts embedded IPv4 from (section 8.1). WPT has no input containing '::ffff:', '64:ff9b', or '2002:'. The expected hostnames are RFC 5952 renderings, so they also pin that the compression WPT's serializer applies is the one raddr's renderer applies.",
+  { "input": "http://[::ffff:127.0.0.1]/", "base": null, "hostname": "[::ffff:7f00:1]" },
+  { "input": "http://[64:ff9b::192.0.2.33]/", "base": null, "hostname": "[64:ff9b::c000:221]" },
+  { "input": "http://[2002:c000:204::]/", "base": null, "hostname": "[2002:c000:204::]" },
+  { "input": "http://[0:0:0:0:0:5efe:192.0.2.1]/", "base": null, "hostname": "[::5efe:c000:201]" },
+  { "input": "http://[::1.2.3.4]/", "base": null, "hostname": "[::102:304]" },
+
+  "-- link-local and the zone. WPT has no input containing 'fe80'. The two zone rows are the point: a zone is legal in a getaddrinfo literal and is NOT legal in a URL host, which is why raddr keeps the zone in its own field and out of the bits (O2, section 5.1). Both spellings fail, percent-encoded or not.",
+  { "input": "http://[fe80::1]/", "base": null, "hostname": "[fe80::1]" },
+  { "input": "http://[fe80::1%25eth0]/", "base": null, "failure": true },
+  { "input": "http://[fe80::1%eth0]/", "base": null, "failure": true }
+]
