@@ -49,25 +49,70 @@ prefix_word_plan <- function(len, space) {
   plan
 }
 
-# The matcher's view of a prefix table: for each block, the word/divisor/target
-# triples that decide containment. Sorted by DESCENDING prefix length, so
-# walking it in order and keeping the first hit is longest-prefix-match.
+# The matcher's view of a prefix table: the blocks grouped by space and prefix
+# length, the groups ordered longest prefix first.
+#
+# Every block of one length reduces its addresses to the same key -- the top
+# `len` bits -- so a whole group costs one hash lookup however many blocks it
+# holds, and the pass count over the address vector becomes the number of
+# distinct lengths rather than the number of blocks. The 276-row address-space
+# table has nine of them, because its 256 IPv4 rows are all /8. Section 11.1.6
+# measures this against the descending-length walk it replaced, a sorted masked
+# vector and a `triebeard` trie; R/within.R is the same regrouping answering the
+# containment question.
+#
+# Longest-first is what keeps it longest-prefix-match: an address matched by one
+# group is finished, because every group after it is shorter by construction.
+# `order(decreasing = TRUE)` is stable and `split()` keeps each group's rows in
+# ascending table order, so two blocks of the same length carrying the same key
+# resolve to the earlier row -- the tie-break the walk had, unchanged.
 build_prefix_index <- function(space, prefix_len, w1, w2, w3, w4) {
-  ord <- order(prefix_len, decreasing = TRUE)
-  words <- lapply(list(w1, w2, w3, w4), function(w) widen_word(w[ord]))
+  words <- lapply(list(w1, w2, w3, w4), widen_word)
+  groups <- split(seq_along(prefix_len), paste(space, prefix_len))
 
-  prefix_len <- prefix_len[ord]
-  space <- space[ord]
+  lens <- vapply(groups, function(rows) prefix_len[[rows[[1L]]]], integer(1L))
+  groups <- unname(groups[order(lens, decreasing = TRUE)])
 
-  checks <- lapply(seq_along(ord), function(i) {
-    plan <- prefix_word_plan(prefix_len[[i]], space[[i]])
-    lapply(plan, function(step) {
-      step$target <- words[[step$word]][[i]] %/% step$divisor
-      step
-    })
+  lapply(groups, function(rows) {
+    at <- rows[[1L]]
+    plan <- prefix_word_plan(prefix_len[[at]], space[[at]])
+    list(
+      space = space[[at]],
+      plan = plan,
+      rows = rows,
+      targets = lapply(plan, function(step) {
+        words[[step$word]][rows] %/% step$divisor
+      })
+    )
   })
+}
 
-  list(row = ord, space = space, checks = checks)
+# The key columns for every address under one group's plan. `sel` restricts the
+# work to the addresses still in play. Shared with R/within.R, which reduces its
+# blocks to keys the same way.
+prefix_keys <- function(words, plan, sel) {
+  lapply(plan, function(step) words[[step$word]][sel] %/% step$divisor)
+}
+
+# Which target row each key row equals, or NA where none does. This is
+# `keys_in_targets()` in R/within.R asked for a position instead of a logical,
+# and the difference is the whole reason the regrouping answers
+# longest-prefix-match at all: containment only needs to know that a block
+# matched, the registry needs to know which one.
+keys_match_targets <- function(keys, targets) {
+  if (!length(keys)) {
+    # A /0 covers its whole space and has no words to compare, so every address
+    # in the group's space matches its first row. Scalar, and recycled by the
+    # caller, exactly as `keys_in_targets()` returns a scalar `TRUE`. No
+    # vendored table holds a /0; a hand-authored overlay could.
+    return(1L)
+  }
+  if (length(keys) == 1L) {
+    return(match(keys[[1L]], targets[[1L]]))
+  }
+  names(keys) <- paste0("k", seq_along(keys))
+  names(targets) <- paste0("k", seq_along(targets))
+  vec_match(new_data_frame(keys), new_data_frame(targets))
 }
 
 # The overlay stores its prefixes as text, because R/transition.R is
@@ -93,6 +138,20 @@ parse_blocks <- function(block) {
   )
 }
 
+# The four tables the matcher knows, in the pre-index form that
+# `build_prefix_index()` reads. Named rather than inlined into `prefix_index()`
+# because the tests and `bench/prefix.R` both need the table itself, not the
+# index built from it.
+prefix_table <- function(which) {
+  switch(
+    which,
+    special = raddr_registry_data$blocks,
+    space = raddr_registry_data$space,
+    transition = parse_blocks(raddr_transition_prefixes$block),
+    codes = parse_blocks(classify_code_blocks$block)
+  )
+}
+
 # Memoized rather than built at load, because top-level code in R/ runs while
 # the package is being installed and the order in which `R/sysdata.rda` becomes
 # visible is not something to depend on.
@@ -104,13 +163,7 @@ prefix_index <- function(which) {
     return(cached)
   }
 
-  table <- switch(
-    which,
-    special = raddr_registry_data$blocks,
-    space = raddr_registry_data$space,
-    transition = parse_blocks(raddr_transition_prefixes$block),
-    codes = parse_blocks(classify_code_blocks$block)
-  )
+  table <- prefix_table(which)
   index <- build_prefix_index(
     table$space, table$prefix_len,
     table$w1, table$w2, table$w3, table$w4
@@ -140,6 +193,13 @@ prefix_index <- function(which) {
 #'
 #' @noRd
 prefix_match <- function(x, which) {
+  prefix_match_index(x, prefix_index(which))
+}
+
+# The matcher itself, taking the index rather than the table's name, so that a
+# test can hand it a table the package does not ship.
+#' @noRd
+prefix_match_index <- function(x, index) {
   family <- field(x, "family")
   n <- length(family)
   out <- rep(NA_integer_, n)
@@ -159,22 +219,26 @@ prefix_match <- function(x, which) {
     function(nm) widen_word(field(x, nm))
   )
 
-  index <- prefix_index(which)
-
-  for (i in seq_along(index$row)) {
-    hit <- in_space[[index$space[[i]]]] & is.na(out)
-    if (!any(hit)) {
+  # Groups are longest prefix first, so an address already carrying a row is
+  # done: see `build_prefix_index()`.
+  for (group in index) {
+    sel <- in_space[[group$space]] & is.na(out)
+    if (!any(sel)) {
       next
     }
 
-    for (step in index$checks[[i]]) {
-      hit[hit] <- (words[[step$word]][hit] %/% step$divisor) == step$target
-      if (!any(hit)) {
-        break
-      }
+    row <- keys_match_targets(
+      prefix_keys(words, group$plan, sel),
+      group$targets
+    )
+    found <- !is.na(row)
+    if (!any(found)) {
+      next
     }
 
-    out[hit] <- index$row[[i]]
+    hit <- sel
+    hit[sel] <- found
+    out[hit] <- group$rows[row[found]]
   }
 
   out

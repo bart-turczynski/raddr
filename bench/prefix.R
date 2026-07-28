@@ -1,23 +1,32 @@
-# Longest-prefix-match over the registry tables: four ways of walking the same
-# blocks (O5, RADD-rivkgsza). See docs/architecture.md sections 7.1 and 11.1.5.
+# Longest-prefix-match over the registry tables: four ways of reading the same
+# blocks (O5, RADD-rivkgsza). See docs/architecture.md sections 7.1 and 11.1.6,
+# which is what this file measured.
 #
-# The shipped matcher in R/classify.R walks the blocks in descending
-# prefix-length order and keeps the first hit, which is one pass over the
-# address vector per block. RADD-ehyllbox found that for the *containment*
-# question the walk is avoidable -- group the blocks by prefix length and each
-# group costs one hash lookup -- but left open whether the same regrouping
-# answers longest-prefix match, which has to report *which* block matched
-# rather than whether one did.
+# `prefix_match()` used to walk the blocks in descending prefix-length order and
+# keep the first hit, which is one pass over the address vector per block.
+# RADD-ehyllbox found that for the *containment* question the walk is avoidable
+# -- group the blocks by prefix length and each group costs one hash lookup --
+# but left open whether the same regrouping answers longest-prefix match, which
+# has to report *which* block matched rather than whether one did.
+#
+# It does, and it now ships. `linear` below is the walk it replaced, kept here
+# in full: a benchmark that measured the shipped function against itself would
+# report 1.00x forever, and the number the design record quotes has to stay
+# reproducible.
 #
 # Four candidates, all returning the identical answer:
 #
-#   linear   the shipped walk, one pass per block
+#   linear   the walk this replaced, one pass per block
 #   grouped  one pass per distinct (space, prefix length), `vec_match()` for the
 #            row, groups visited longest-first so the first hit is still the
-#            longest one
+#            longest one -- what R/classify.R now does
 #   sorted   the same grouping, binary search over lexicographically sorted keys
 #            instead of a hash -- the "sorted masked vector" of O5
 #   trie     `triebeard`, keys are the binary prefix strings
+#
+# Every candidate is checked against the shipped `prefix_match()` before
+# anything is timed, `grouped` included: it is a copy, and a copy that has
+# drifted is worth catching.
 #
 # Run from the package root:
 #   Rscript bench/prefix.R
@@ -61,16 +70,8 @@ report_ms <- function(label, value) {
 
 # --- the tables ---------------------------------------------------------------
 
-# The four prefix tables `prefix_match()` knows, in their pre-index form.
-prefix_table <- function(which) {
-  switch(
-    which,
-    special = raddr_registry_data$blocks,
-    space = raddr_registry_data$space,
-    transition = parse_blocks(raddr_transition_prefixes$block),
-    codes = parse_blocks(classify_code_blocks$block)
-  )
-}
+# `prefix_table()` is R/classify.R's, which is why it is named there rather than
+# inlined into `prefix_index()`.
 
 # The addresses reduced once to what every candidate reads: the space each
 # searches and its four words as unsigned doubles. Shared so that no candidate
@@ -88,6 +89,52 @@ addr_view <- function(x) {
       function(nm) widen_word(field(x, nm))
     )
   )
+}
+
+# --- linear: the walk this replaced, one pass per block -----------------------
+
+# Verbatim `build_prefix_index()` and `prefix_match()` as of 25188dc, before the
+# regrouping landed. Sorted by DESCENDING prefix length, so walking in order and
+# keeping the first hit is longest-prefix-match.
+linear_index <- function(table) {
+  ord <- order(table$prefix_len, decreasing = TRUE)
+  words <- lapply(
+    list(table$w1, table$w2, table$w3, table$w4),
+    function(w) widen_word(w[ord])
+  )
+  prefix_len <- table$prefix_len[ord]
+  space <- table$space[ord]
+
+  checks <- lapply(seq_along(ord), function(i) {
+    plan <- prefix_word_plan(prefix_len[[i]], space[[i]])
+    lapply(plan, function(step) {
+      step$target <- words[[step$word]][[i]] %/% step$divisor
+      step
+    })
+  })
+
+  list(row = ord, space = space, checks = checks)
+}
+
+linear_match <- function(view, index) {
+  out <- rep(NA_integer_, view$n)
+  if (view$n == 0L) {
+    return(out)
+  }
+  for (i in seq_along(index$row)) {
+    hit <- view$in_space[[index$space[[i]]]] & is.na(out)
+    if (!any(hit)) {
+      next
+    }
+    for (step in index$checks[[i]]) {
+      hit[hit] <- (view$words[[step$word]][hit] %/% step$divisor) == step$target
+      if (!any(hit)) {
+        break
+      }
+    }
+    out[hit] <- index$row[[i]]
+  }
+  out
 }
 
 # --- grouped: one pass per distinct (space, prefix length) --------------------
@@ -348,7 +395,7 @@ for (which in c("special", "space", "transition", "codes")) {
     length(table$prefix_len), "blocks"
   )
   report(
-    sprintf("%s: groups the walk collapses to", which),
+    sprintf("%s: groups it collapses to", which),
     length(unique(paste(table$space, table$prefix_len))), "groups"
   )
 }
@@ -381,6 +428,7 @@ cat(sprintf(
 indexes <- list()
 for (which in tables) {
   indexes[[which]] <- list(
+    linear = linear_index(prefix_table(which)),
     grouped = grouped_index(prefix_table(which)),
     sorted = sorted_index(prefix_table(which)),
     trie = if (has_trie) trie_index(prefix_table(which))
@@ -394,6 +442,7 @@ for (case in checks) {
   want <- prefix_match(case$x, case$which)
 
   got <- list(
+    linear = linear_match(view, idx$linear),
     grouped = grouped_match(view, idx$grouped),
     sorted = sorted_match(view, idx$sorted)
   )
@@ -416,9 +465,7 @@ if (disagreements > 0L) {
 cat("\n== index build, once per table ==\n")
 for (which in tables) {
   table <- prefix_table(which)
-  report_ms(sprintf("linear index, %s", which), build_ms(build_prefix_index(
-    table$space, table$prefix_len, table$w1, table$w2, table$w3, table$w4
-  )))
+  report_ms(sprintf("linear index, %s", which), build_ms(linear_index(table)))
   report_ms(sprintf("grouped index, %s", which), build_ms(grouped_index(table)))
   report_ms(sprintf("sorted index, %s", which), build_ms(sorted_index(table)))
   if (has_trie) {
@@ -433,12 +480,17 @@ for (case in cases) {
   x <- case$x
   which <- case$which
 
-  linear <- timing(prefix_match(x, which), times = 5)
+  linear <- timing(linear_match(view, idx$linear), times = 5)
   grouped <- timing(grouped_match(view, idx$grouped), times = 5)
   sorted <- timing(sorted_match(view, idx$sorted), times = 5)
 
+  # `shipped` reads the memoized index and its own words rather than the shared
+  # view, so it is the same algorithm as `grouped` plus the per-call setup every
+  # caller pays. The gap between the two rows is that setup and nothing else.
+  shipped <- timing(prefix_match(x, which), times = 5)
+
   cat(sprintf("\n-- %s\n", case$label))
-  report("linear (shipped)", linear, "s")
+  report("linear (replaced)", linear, "s")
   report("grouped", grouped, "s")
   report("sorted", sorted, "s")
   if (has_trie) {
@@ -446,11 +498,14 @@ for (case in cases) {
     report("trie", trie, "s")
   }
 
+  report("prefix_match() (shipped)", shipped, "s")
+
   report("ratio, grouped / linear", grouped / linear, "x")
   report("ratio, sorted / linear", sorted / linear, "x")
   if (has_trie) {
     report("ratio, trie / linear", trie / linear, "x")
   }
+  report("ratio, shipped / linear", shipped / linear, "x")
 }
 
 cat("\n")

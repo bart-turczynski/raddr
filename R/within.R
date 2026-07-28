@@ -1,18 +1,22 @@
 # Containment: is this address inside that block? See docs/architecture.md
 # section 6.3.
 #
-# The matcher is the one in R/classify.R turned inside out. `prefix_match()`
-# walks a table of blocks in descending prefix-length order and keeps the first
-# hit, because it has to answer *which* block -- longest-prefix-match over the
-# IANA registry. A denylist asks a smaller question, "any at all", and pays for
-# the walk anyway: 200 blocks is 200 passes over the address vector.
+# The matcher is the one in R/classify.R asked a smaller question.
+# `prefix_match()` has to answer *which* block -- longest-prefix-match over the
+# IANA registry -- and a denylist only asks "any at all".
 #
-# So the blocks are grouped by prefix length instead. Every block of the same
-# length reduces its addresses to the same key -- the top `len` bits -- and
-# membership in the group is one hash lookup. The number of passes stops being
-# the number of blocks and becomes the number of *distinct lengths*, which for
-# IPv4 can never exceed 32 however long the list is. See section 11.1.5 for what
-# that is worth measured.
+# Both group the blocks by prefix length, because every block of the same length
+# reduces its addresses to the same key, the top `len` bits, and membership in
+# the group is one hash lookup. The number of passes stops being the number of
+# blocks and becomes the number of *distinct lengths*, which for IPv4 can never
+# exceed 32 however long the list is. Section 11.1.5 measures that against
+# `ipaddress`, which walks the list; 11.1.6 measures the registry side, where
+# the same regrouping replaced a walk of raddr's own.
+#
+# The one difference is which question the group answers: `keys_in_targets()`
+# here returns a logical, and `keys_match_targets()` there returns the row that
+# matched. Groups are visited in any order for containment and longest-first for
+# the registry, which is what makes the first hit the longest one.
 #
 # Same constraint as R/classify.R and for the same reason: no `bitwAnd`
 # anywhere. Section 5.1.1 makes a word a raw bit pattern in which `NA_integer_`
@@ -188,12 +192,6 @@ within_index <- function(parsed) {
   })
 }
 
-# The key columns for every address under one group's plan, as a list of
-# doubles. `sel` restricts the work to the addresses still in play.
-within_keys <- function(words, plan, sel) {
-  lapply(plan, function(step) words[[step$word]][sel] %/% step$divisor)
-}
-
 # Whether each key row appears among the target rows. One column is the common
 # case and the fast one -- every IPv4 plan has exactly one word, whatever the
 # prefix length -- so it skips the data frame entirely.
@@ -309,7 +307,7 @@ addr_within_any <- function(x, blocks) {
       next
     }
     hit <- keys_in_targets(
-      within_keys(addr$words, group$plan, sel),
+      prefix_keys(addr$words, group$plan, sel),
       group$targets
     )
     out[sel] <- out[sel] | hit
@@ -356,7 +354,7 @@ addr_within <- function(x, blocks) {
       parsed$words[[step$word]][[row]] %/% step$divisor
     })
     out[sel] <- keys_in_targets(
-      within_keys(addr$words, plan, xi[sel]),
+      prefix_keys(addr$words, plan, xi[sel]),
       targets
     )
   }

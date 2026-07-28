@@ -156,6 +156,107 @@ test_that("the zone does not affect the match", {
   expect_equal(matched_block("fe80::1"), "fe80::/10")
 })
 
+# --- every block edge, against an independent matcher (section 11.1.6) -------
+
+# The first and last address of one block, which is where an off-by-one in a
+# divisor lives. Same arithmetic as `mask_words()` pointed the other way: clear
+# the host bits for the first, set them all for the last.
+block_edges <- function(table) {
+  words <- lapply(
+    list(table$w1, table$w2, table$w3, table$w4),
+    function(w) widen_word(w)
+  )
+  len <- table$prefix_len
+  is_v4 <- table$space == "v4"
+
+  lo <- hi <- vector("list", 4L)
+  for (k in seq_len(4L)) {
+    bits <- pmin(pmax(len - 32L * (k - 1L), 0L), 32L)
+    bits[is_v4] <- if (k == 4L) pmin(pmax(len[is_v4], 0L), 32L) else 32L
+    lo[[k]] <- words[[k]]
+    hi[[k]] <- words[[k]] + (2^(32 - bits) - 1)
+  }
+  c(
+    words_to_addr(lo, ifelse(is_v4, 32L, 128L)),
+    words_to_addr(hi, ifelse(is_v4, 32L, 128L))
+  )
+}
+
+# An independent matcher: containment decided by string prefix rather than by
+# word arithmetic, longest wins, one address at a time. Far too slow to ship,
+# which is the point -- it shares nothing with `prefix_match()` except the
+# encoder, so a wrong divisor surfaces as a disagreement instead of as the same
+# wrong answer computed twice.
+slow_prefix_match <- function(x, table) {
+  bits <- addr_to_binary(x)
+  space <- ifelse(field(x, "family") == "v4", "v4", "v6")
+  base <- addr_to_binary(words_to_addr(
+    lapply(list(table$w1, table$w2, table$w3, table$w4), widen_word),
+    ifelse(table$space == "v4", 32L, 128L)
+  ))
+
+  vapply(seq_along(bits), function(i) {
+    if (is.na(space[[i]])) {
+      return(NA_integer_)
+    }
+    rows <- which(table$space == space[[i]])
+    len <- table$prefix_len[rows]
+    # `startsWith()` and not `substr(bits[[i]], 1L, len)`: `substr()` truncates
+    # `stop` to the length of `x`, so a length-1 address against a vector of
+    # prefix lengths silently uses only the first one.
+    hit <- startsWith(bits[[i]], substr(base[rows], 1L, len))
+    if (!any(hit)) {
+      return(NA_integer_)
+    }
+    # `which.max()` takes the first maximum, so blocks of equal length resolve
+    # to the earlier table row -- the tie-break `build_prefix_index()` states.
+    rows[hit][[which.max(len[hit])]]
+  }, integer(1))
+}
+
+test_that("the matcher agrees with a string matcher on every block edge", {
+  # Section 11.1.6 replaced the descending-length walk with blocks grouped by
+  # prefix length. The literals above cover the carve-outs a human thought to
+  # write down; this covers all 340 blocks of all four tables at both ends,
+  # which is the part of the space a random draw never lands on.
+  tables <- c("special", "space", "transition", "codes")
+  fast <- slow <- stats::setNames(vector("list", length(tables)), tables)
+
+  for (which in tables) {
+    table <- prefix_table(which)
+    edges <- block_edges(table)
+
+    fast[[which]] <- prefix_match(edges, which)
+    slow[[which]] <- slow_prefix_match(edges, table)
+
+    # Not a vacuous comparison: an address at either end of a block is inside
+    # that block, so every row has to match something.
+    expect_false(anyNA(fast[[which]]))
+    expect_length(fast[[which]], 2L * length(table$prefix_len))
+  }
+
+  expect_identical(fast, slow)
+})
+
+test_that("the grouped matcher keeps the walk's tie-break", {
+  # Two blocks of the same length and the same key can only come from a
+  # duplicated row, but the rule still has to be stated: the earlier row wins,
+  # which is what `order(decreasing = TRUE)` being stable gave the walk.
+  table <- prefix_table("transition")
+  doubled <- lapply(table, function(col) col[c(seq_along(col), seq_along(col))])
+
+  index <- build_prefix_index(
+    doubled$space, doubled$prefix_len,
+    doubled$w1, doubled$w2, doubled$w3, doubled$w4
+  )
+  n <- length(table$prefix_len)
+  edges <- block_edges(table)
+
+  hit <- prefix_match_index(edges, index)
+  expect_true(all(hit <= n))
+  expect_identical(hit, slow_prefix_match(edges, doubled))
+})
+
 # --- the address-space fallback and the record (sections 5.3 and 7.3) --------
 
 test_that("classification is total across both address spaces", {
