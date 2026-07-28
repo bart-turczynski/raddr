@@ -16,6 +16,7 @@ HostRows: 103
 Bracketed: 42
 Numeric: 61
 Unreadable: 371
+RefusalRules: 5
 ExtraRows: 25
 License: BSD-3-Clause
 Copyright: web-platform-tests contributors

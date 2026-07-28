@@ -1,0 +1,6 @@
+"rule","count"
+"ambiguous-userinfo",3
+"backslash-authority",8
+"multiple-colons",4
+"no-authority",333
+"pre-parse-removal",23

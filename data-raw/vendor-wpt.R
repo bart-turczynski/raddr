@@ -5,6 +5,7 @@
 # Maintainer-run. Regenerates, from one upstream file:
 #   * tests/testthat/fixtures/wpt/urltestdata.json  - exact upstream bytes
 #   * tests/testthat/fixtures/wpt-hosts.csv         - the derived host corpus
+#   * tests/testthat/fixtures/wpt-refusals.csv      - what the extractor refused
 #   * data-raw/wpt-provenance.dcf                   - the pin, for COPYRIGHTS
 #
 # Usage (from the package root):
@@ -37,9 +38,11 @@
 # URL layer and no reg-name concept (RADD-cdmoeadr), so re-implementing one here
 # to feed its own tests would make the corpus assert raddr's guess about URLs
 # rather than WPT's measurement of hosts. Instead the extractor refuses anything
-# it cannot read unambiguously, and the count it refused is recorded in the
-# provenance. The refusals are then visible and can be argued about; they cannot
-# grow silently.
+# it cannot read unambiguously, and every refusal is attributed to a named rule
+# and counted into wpt-refusals.csv. The refusals are then visible and can be
+# argued about; they cannot grow silently, and -- since a total is the one
+# number that can hold still while its membership turns over -- they cannot
+# change shape silently either (RADD-aitbetjb).
 
 # --- configuration ----------------------------------------------------------
 
@@ -62,8 +65,15 @@ wpt_url <- paste0(
 # made inst/COPYRIGHTS unable to say which bytes are whose.
 json_path <- "tests/testthat/fixtures/wpt/urltestdata.json"
 csv_path <- "tests/testthat/fixtures/wpt-hosts.csv"
+refusals_path <- "tests/testthat/fixtures/wpt-refusals.csv"
 extra_path <- "tests/testthat/fixtures/raddr_extra_urltestdata.json"
 provenance_path <- "data-raw/wpt-provenance.dcf"
+
+# WHY THE REFUSAL TABLE IS A FIXTURE AND NOT A PROVENANCE FIELD. `data-raw/` is
+# .Rbuildignored, so the .dcf is not in the tarball and the suite cannot read
+# it under `R CMD check`. The refusal counts have to be checkable there, because
+# the hand-written record in fixtures/expected_failures.txt is checked against
+# them and a check that skips is not a check.
 
 cli_args <- commandArgs(trailingOnly = TRUE)
 check_only <- "--check" %in% cli_args
@@ -122,9 +132,18 @@ wpt_last_label_looks_numeric <- function(host) {
   grepl("^[0-9]", last) || grepl("^0[xX]", last)
 }
 
-# Returns the host token, or NA when the authority cannot be read without
-# guessing. Every refusal below is a case where getting the answer right needs
-# the URL parser proper; none of them is a case the extractor merely finds hard.
+# Returns c(token, rule): the host token with no rule, or NA with the name of
+# the rule that refused the authority. Every refusal below is a case where
+# getting the answer right needs the URL parser proper; none of them is a case
+# the extractor merely finds hard.
+#
+# The rule name is not decoration. It is counted into wpt-refusals.csv and
+# checked against the hand-written account in fixtures/expected_failures.txt, so
+# each refusal has to be argued for once and then stays argued for. Renaming a
+# rule here is a corpus change and shows up as one.
+kept <- function(token) c(token, NA_character_)
+refused <- function(rule) c(NA_character_, rule)
+
 wpt_host_token <- function(input) {
   # Two removals happen BEFORE parsing: C0-or-space is stripped from both ends,
   # and tab/LF/CR are deleted everywhere. Rows exercising either are about the
@@ -134,19 +153,19 @@ wpt_host_token <- function(input) {
   # authority, is left alone, because a space in a host is a host-parse failure
   # and therefore exactly the kind of row worth keeping.
   if (grepl("^[[:cntrl:] ]|[[:cntrl:] ]$|[\t\r\n]", input)) {
-    return(NA_character_)
+    return(refused("pre-parse-removal"))
   }
   m <- regmatches(
     input, regexec("^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)", input)
   )[[1]]
   if (length(m) != 3L) {
-    return(NA_character_)
+    return(refused("no-authority"))
   }
   authority <- m[3]
   # A backslash terminates the authority under a special scheme and does not
   # under any other, so its presence makes the token scheme-dependent.
   if (grepl("\\\\", authority)) {
-    return(NA_character_)
+    return(refused("backslash-authority"))
   }
   # Userinfo is delimited by the LAST "@", but percent-encoding can spell an "@"
   # that is not a delimiter, so an authority carrying BOTH is ambiguous to a
@@ -155,7 +174,7 @@ wpt_host_token <- function(input) {
   # encoded by construction -- which are the rows this corpus most wants.
   if (grepl("@", authority, fixed = TRUE) &&
         grepl("%", authority, fixed = TRUE)) {
-    return(NA_character_)
+    return(refused("ambiguous-userinfo"))
   }
   host_port <- sub("^.*@", "", authority)
   if (startsWith(host_port, "[")) {
@@ -163,18 +182,18 @@ wpt_host_token <- function(input) {
     if (close_at < 0L) {
       # An unclosed bracket IS a host-parse failure and is worth keeping; the
       # whole remainder is the token, since there is no port to split off.
-      return(host_port)
+      return(kept(host_port))
     }
-    return(substr(host_port, 1L, close_at))
+    return(kept(substr(host_port, 1L, close_at)))
   }
   # Outside brackets a colon delimits the port and appears at most once. Two of
   # them is a malformed authority whose split is a parser decision, not a
   # lexical one.
   if (lengths(regmatches(host_port, gregexpr(":", host_port, fixed = TRUE))) >
         1L) {
-    return(NA_character_)
+    return(refused("multiple-colons"))
   }
-  sub(":[^:]*$", "", host_port)
+  kept(sub(":[^:]*$", "", host_port))
 }
 
 # --- build the derived corpus ------------------------------------------------
@@ -195,9 +214,16 @@ build_corpus <- function(path, source) {
     if (is.null(o$hostname)) NA_character_ else as.character(o$hostname)
   }, character(1))
 
-  host <- vapply(input, function(x) {
-    if (is.na(x)) NA_character_ else wpt_host_token(x)
-  }, character(1), USE.NAMES = FALSE)
+  read <- vapply(input, function(x) {
+    # A row with no `input` at all is not a refusal the extractor reasoned its
+    # way to, so it gets a rule of its own rather than being folded into one
+    # that has an argument attached. At this pin no such row exists, and if one
+    # arrives the account in expected_failures.txt will not cover it -- which
+    # is the rot check doing its job rather than a hole in it.
+    if (is.na(x)) refused("null-input") else wpt_host_token(x)
+  }, character(2), USE.NAMES = FALSE)
+  host <- read[1, ]
+  refusal <- read[2, ]
 
   # A row earns its place if the host token it carries is one raddr has an
   # opinion about: bracketed, which is the IPv6 literal syntax, or ending in a
@@ -274,11 +300,20 @@ build_corpus <- function(path, source) {
     bracketed = sum(bracketed),
     numeric = sum(numeric)
   )
+  # Sorted by rule name, not by count: a name is stable and a count is the
+  # thing under observation, so ordering by the latter would make one row
+  # moving past another look like two changes.
+  fired <- sort(refusal[!is.na(refusal)])
+  attr(out, "refusals") <- data.frame(
+    rule = names(table(fired)),
+    count = as.integer(table(fired)),
+    stringsAsFactors = FALSE
+  )
   out
 }
 
-write_corpus <- function(corpus, path) {
-  utils::write.csv(corpus, path, row.names = FALSE, na = "")
+write_derived <- function(df, path) {
+  utils::write.csv(df, path, row.names = FALSE, na = "")
 }
 
 # Upstream first, then raddr's own, each keeping its own numbering. The two are
@@ -287,10 +322,24 @@ write_corpus <- function(corpus, path) {
 combined_corpus <- function() {
   wpt_rows <- build_corpus(json_path, "wpt")
   extra_rows <- build_corpus(extra_path, "raddr")
+  # A refusal in the vendored file is a fact about upstream and gets recorded.
+  # A refusal in raddr's OWN additions is a mistake in the addition -- the
+  # extractor's limits are known when the row is written -- so it stops the
+  # build rather than joining the account.
+  extra_refused <- attr(extra_rows, "refusals")
+  if (nrow(extra_refused)) {
+    stop(
+      "the extractor refuses raddr's own rows (", extra_path, "): ",
+      paste(extra_refused$rule, extra_refused$count, sep = "=",
+            collapse = ", "),
+      call. = FALSE
+    )
+  }
   out <- rbind(wpt_rows, extra_rows)
   rownames(out) <- NULL
   attr(out, "wpt_stats") <- attr(wpt_rows, "wpt_stats")
   attr(out, "extra_stats") <- attr(extra_rows, "wpt_stats")
+  attr(out, "refusals") <- attr(wpt_rows, "refusals")
   out
 }
 
@@ -298,17 +347,51 @@ combined_corpus <- function() {
 # data frames instead would compare R's idea of the columns -- which is where
 # `failure` becomes logical and `base` becomes NA -- and would pass on a file
 # that no longer round-trips through read.csv().
-corpus_text <- function(corpus) {
+derived_text <- function(df) {
   tmp <- tempfile(fileext = ".csv")
   on.exit(unlink(tmp), add = TRUE)
-  write_corpus(corpus, tmp)
+  write_derived(df, tmp)
   readLines(tmp, warn = FALSE)
+}
+
+# --- provenance --------------------------------------------------------------
+
+# DCF because inst/COPYRIGHTS is composed by build-registry.R, which must read
+# these numbers without re-parsing the JSON -- and because a licence-relevant
+# pin should be readable by a human opening the file, not only by a parser.
+#
+# One function, used by both the write path and `--check`, so the field set has
+# a single definition and a new field cannot land unchecked.
+provenance_fields <- function(corpus) {
+  stats <- attr(corpus, "wpt_stats")
+  c(
+    Package = "web-platform-tests",
+    Component = "url/resources/urltestdata.json",
+    Path = json_path,
+    Repository = "https://github.com/web-platform-tests/wpt",
+    Commit = wpt_commit,
+    Source = wpt_url,
+    Checksum = file_sha256(json_path),
+    Bytes = as.character(file.size(json_path)),
+    Entries = as.character(stats[["entries"]]),
+    Objects = as.character(stats[["objects"]]),
+    Successes = as.character(stats[["successes"]]),
+    Failures = as.character(stats[["failures"]]),
+    HostRows = as.character(sum(corpus$source == "wpt")),
+    Bracketed = as.character(stats[["bracketed"]]),
+    Numeric = as.character(stats[["numeric"]]),
+    Unreadable = as.character(stats[["unreadable"]]),
+    RefusalRules = as.character(nrow(attr(corpus, "refusals"))),
+    ExtraRows = as.character(sum(corpus$source == "raddr")),
+    License = "BSD-3-Clause",
+    Copyright = "web-platform-tests contributors"
+  )
 }
 
 # --- --check: the committed artifacts must agree ----------------------------
 
 if (check_only) {
-  wanted <- c(json_path, extra_path, csv_path, provenance_path)
+  wanted <- c(json_path, extra_path, csv_path, refusals_path, provenance_path)
   missing <- Filter(Negate(file.exists), wanted)
   if (length(missing)) {
     stop(
@@ -318,35 +401,44 @@ if (check_only) {
     )
   }
 
-  recorded <- read.dcf(provenance_path)[1, ]
   problems <- character()
+  rebuilt <- combined_corpus()
 
-  want <- file_sha256(json_path)
-  if (!identical(want, unname(recorded[["Checksum"]]))) {
+  # EVERY generated field, not a chosen three. A pin that is only spot-checked
+  # has a hole exactly where nobody thought to look, and the field set grows:
+  # RefusalRules would have landed in one.
+  recorded <- read.dcf(provenance_path)[1, ]
+  derived <- provenance_fields(rebuilt)
+  # write.dcf wraps a long value onto a continuation line and read.dcf hands it
+  # back with the newline still in it, so the comparison is over collapsed
+  # whitespace. No field here has meaningful internal spacing.
+  flatten <- function(x) gsub("[[:space:]]+", " ", trimws(x))
+  for (field in names(derived)) {
+    if (!field %in% names(recorded)) {
+      problems <- c(problems, sprintf("%s: field absent", field))
+    } else if (!identical(flatten(recorded[[field]]),
+                          flatten(unname(derived[[field]])))) {
+      problems <- c(problems, sprintf(
+        "%s: recorded %s, derived %s", field,
+        flatten(recorded[[field]]), flatten(unname(derived[[field]]))
+      ))
+    }
+  }
+  for (field in setdiff(names(recorded), names(derived))) {
+    problems <- c(problems, sprintf("%s: field no longer generated", field))
+  }
+
+  if (!identical(derived_text(rebuilt), readLines(csv_path, warn = FALSE))) {
     problems <- c(problems, sprintf(
-      "%s: recorded %s, on disk %s", json_path,
-      recorded[["Checksum"]], want
+      "%s disagrees with %s", csv_path, json_path
     ))
   }
   if (!identical(
-    as.character(file.size(json_path)), unname(recorded[["Bytes"]])
+    derived_text(attr(rebuilt, "refusals")),
+    readLines(refusals_path, warn = FALSE)
   )) {
     problems <- c(problems, sprintf(
-      "%s: recorded %s bytes, on disk %d", json_path,
-      recorded[["Bytes"]], file.size(json_path)
-    ))
-  }
-  if (!identical(wpt_commit, unname(recorded[["Commit"]]))) {
-    problems <- c(problems, sprintf(
-      "pin drift: script says %s, provenance says %s",
-      wpt_commit, recorded[["Commit"]]
-    ))
-  }
-
-  rebuilt <- combined_corpus()
-  if (!identical(corpus_text(rebuilt), readLines(csv_path, warn = FALSE))) {
-    problems <- c(problems, sprintf(
-      "%s disagrees with %s", csv_path, json_path
+      "%s disagrees with %s", refusals_path, json_path
     ))
   }
 
@@ -382,35 +474,11 @@ if (is.null(input_dir)) {
 corpus <- combined_corpus()
 stats <- attr(corpus, "wpt_stats")
 extra_stats <- attr(corpus, "extra_stats")
-write_corpus(corpus, csv_path)
+refusals <- attr(corpus, "refusals")
+write_derived(corpus, csv_path)
+write_derived(refusals, refusals_path)
 
-# --- provenance --------------------------------------------------------------
-
-# DCF because inst/COPYRIGHTS is composed by build-registry.R, which must read
-# these numbers without re-parsing the JSON -- and because a licence-relevant
-# pin should be readable by a human opening the file, not only by a parser.
-provenance <- c(
-  Package = "web-platform-tests",
-  Component = "url/resources/urltestdata.json",
-  Path = json_path,
-  Repository = "https://github.com/web-platform-tests/wpt",
-  Commit = wpt_commit,
-  Source = wpt_url,
-  Checksum = file_sha256(json_path),
-  Bytes = as.character(file.size(json_path)),
-  Entries = as.character(stats[["entries"]]),
-  Objects = as.character(stats[["objects"]]),
-  Successes = as.character(stats[["successes"]]),
-  Failures = as.character(stats[["failures"]]),
-  HostRows = as.character(sum(corpus$source == "wpt")),
-  Bracketed = as.character(stats[["bracketed"]]),
-  Numeric = as.character(stats[["numeric"]]),
-  Unreadable = as.character(stats[["unreadable"]]),
-  ExtraRows = as.character(sum(corpus$source == "raddr")),
-  License = "BSD-3-Clause",
-  Copyright = "web-platform-tests contributors"
-)
-write.dcf(t(as.matrix(provenance)), provenance_path)
+write.dcf(t(as.matrix(provenance_fields(corpus))), provenance_path)
 
 # --- report ------------------------------------------------------------------
 
@@ -428,6 +496,13 @@ message("    wpt rows:   ", sum(corpus$source == "wpt"), " (",
 message("    raddr rows: ", sum(corpus$source == "raddr"), " (",
         extra_stats[["bracketed"]], " bracketed, ",
         extra_stats[["numeric"]], " numeric)")
-message("    unreadable authorities skipped: ", stats[["unreadable"]])
+message("  ", refusals_path)
+message("    authorities refused: ", stats[["unreadable"]], " under ",
+        nrow(refusals), " rules")
+for (i in seq_len(nrow(refusals))) {
+  message("      ", refusals$rule[i], ": ", refusals$count[i])
+}
 message("  ", provenance_path)
 message("Run build-registry.R afterwards: inst/COPYRIGHTS reads this pin.")
+message("A changed refusal table needs the account in")
+message("tests/testthat/fixtures/expected_failures.txt updated to match.")
