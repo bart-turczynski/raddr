@@ -2804,13 +2804,17 @@ The comparison surface is text on both sides — a fixed-width hex string, a
 family and a zone, which describes a `raddr_address` completely while reaching
 none of its constructors.
 
-`tests/testthat/test-slow.R` runs both over 2104 literals: the oracle fixtures,
-the boundaries an argument is about — every per-part bound from both sides, the
-elision in every illegal quantity, `fe80::/10` at both ends — and 1800 generated
-spellings, half of them valid by construction so the agreement cannot be
-vacuous. The renderers get 1175 addresses, most of them zero-heavy, because RFC
-5952 §4.2 is entirely about runs of zero fields and a uniform draw almost never
-produces one.
+`tests/testthat/test-slow.R` runs both over the 2139 literals of
+`helper-corpus.R`: the oracle fixtures, the boundaries an argument is about —
+every per-part bound from both sides, the elision in every illegal quantity,
+`fe80::/10` at both ends — and 1800 generated spellings, half of them valid by
+construction so the agreement cannot be vacuous. The renderers get 1175
+addresses, most of them zero-heavy, because RFC 5952 §4.2 is entirely about runs
+of zero fields and a uniform draw almost never produces one.
+
+The corpus is in a helper rather than in this test file because §11.4 runs over
+it too, and a second corpus would have made the weaker of the two answers
+quietly weaker still.
 
 **What it caught, measured by breaking the shipped code on purpose.** Nine
 mutations, each a plausible slip, run against the corpus:
@@ -2818,14 +2822,14 @@ mutations, each a plausible slip, run against the corpus:
 | mutation | disagreements |
 |---|---|
 | `ipv4_final_bounds`: last part off by one | 94 |
-| `ipv4_weights`: the short form off by a byte | 2457 |
+| `ipv4_weights`: the short form off by a byte | 2504 |
 | `ipv4_mod_digits`: decimal 32 → 16 | 15 |
 | `ipv4_digit_values`: hex alphabet off by one | 130 |
 | RFC 5952 §4.2.3: tie-break the last equal run | 25 |
 | RFC 5952 §4.2.2: compress a single zero field | 206 |
-| `ipv6_pieces`: group count off by one | 5912 |
+| `ipv6_pieces`: group count off by one | 6017 |
 | `format_v4`: octet shift off by a byte | 455 |
-| `addr_hextets`: high and low half swapped | 6966 |
+| `addr_hextets`: high and low half swapped | 7040 |
 
 All nine caught. A tenth — `ipv4_max_digits` for decimal widened from 10 to 11
 — is **not** caught, and should not be: an eleven-digit decimal is at least
@@ -2843,6 +2847,64 @@ rather than trusting that a corpus is broad because it is long.
 `block_edges()` and `slow_prefix_match()` — the string-prefix matcher §11.1.6
 built for the registry lookup — moved here from `test-classify.R`, since they
 are the same idea and were the worked example the rest was generalized from.
+
+### 11.4 The invariant suite **[implemented 2026-07-28]**
+
+§11.3 checks one surface against a second implementation of the same
+specification. `tests/testthat/test-invariants.R` checks **two surfaces against
+each other**, which needs no second implementation and no oracle: it states a
+relationship the package is supposed to keep, and it fails when either side
+drifts. That is the class of breakage the per-function files structurally cannot
+see, because each of them only ever looks at one surface.
+
+| property | the two surfaces |
+|---|---|
+| the four encodings decode to one address | base-10^6 arithmetic vs three octet readers (§6.5) |
+| ordering agrees with ordering the integers | `vec_proxy_compare()` by word vs the integer encoder |
+| an address integer never exceeds 39 digits | the encoder vs the ceiling its decoder rejects above |
+| a pointer name has the label count its tree fixes | the name vs the family (§6.2.1) |
+| `parse(format(x)) == x`, family and zone included | the renderer vs the parser (§5.1.3) |
+| canonicalization is a fixed point | the renderer against itself |
+| `addr_parse()` is total | the record vs its own input (P2) |
+| `rejected` carries codes and `not_an_address` does not | `outcome` vs `codes`, in both directions (§5.2.1) |
+| `status` is a function of the four outcomes | the derived status vs the columns it derives from |
+| the record's readings are the standalone parsers' | `addr_reading()` vs the six exported parsers (§3.2) |
+| classification never errors on a parser output | `addr_classify()` vs every reading of the hostile corpus |
+| every wrapper gives back the address it embeds | the extractor vs the RFCs' own spellings (§8.1) |
+| every address matches exactly one registry row | `prefix_match()`'s grouped keys vs `addr_within()` (§5.3) |
+| comparison is antisymmetric and total | `vec_compare()` against itself (§5.1.2) |
+| the zone stays out of `==` and out of the order | O2, restated as a property |
+
+Two corpora, because the questions differ. Properties *of addresses* run over
+400 random draws of both widths plus the literals that are hazards in their own
+right; properties *of parsing* run over §11.3's 2139 hostile literals, since a
+parser is only interestingly total on input nobody meant it to read. The
+registry property adds one address from every special-purpose block, so all 51
+rows are reached rather than only the ones a uniform draw lands in.
+
+**The wrapper round-trip builds its own wrappers, from the RFCs rather than from
+`raddr_transition_prefixes`.** A builder sharing the geometry table with the
+extractor round-trips through its own mistakes and reports agreement — so each
+wrapper is spelled the way its RFC spells it, including the /48 NAT64 case where
+RFC 6052 §2.2's reserved u octet splits the embedded address into two pairs of
+octets. Where §8.1's named examples pin the geometry against RFC 6052 §2.4's
+table, this quantifies over the **value**, which is where the two patterns that
+break bit-twiddling live: `0x80000000` is `NA_integer_` in a word (§5.1.1), and
+`0xffffffff` is the one value Teredo's complement sends to zero. The deprecated
+v4-compatible form is quantified over the values *above* 1, and its carve-out is
+asserted as the separate fact it is: `::` and `::1` embed nothing, because
+reading them as `0.0.0.0` and `0.0.0.1` would lose the unspecified and loopback
+addresses.
+
+**One thing it found, and it is not a bug.** The record and the standalone
+parsers spell a *missing* address two different ways: `addr_parse()` blanks all
+four words when the `getaddrinfo` whitespace rule refuses a literal, while
+`addr_getaddrinfo()` hands back whatever `pton` left behind. §5.1.1 puts
+missingness in `family` and makes the words meaningless once it is set, and
+every public surface — `==`, `unique()`, `vec_match()`, `format()`, all four
+encoders — reads both as the same missing address. So the invariant is asserted
+over the address, not over the bytes, and the difference is recorded here rather
+than normalized away in code that has no observable reason to change.
 
 ---
 

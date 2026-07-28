@@ -23,12 +23,15 @@ source("tests/testthat/helper-dialects.R")
 source("tests/testthat/helper-slow.R")
 
 # The test file reaches for its fixtures through testthat's path helper, which
-# resolves against the working directory when the suite is not running.
+# resolves against the working directory when the suite is not running, so this
+# has to be defined before the corpus helper is sourced.
 test_path <- function(...) file.path("tests", "testthat", ...)
 
-# Everything in test-slow.R that is not a `test_that()` call: the corpora, and
-# only the corpora. Read from the test file rather than copied, so the two
-# cannot drift apart into measuring different things.
+source("tests/testthat/helper-corpus.R")
+
+# Everything in test-slow.R that is not a `test_that()` call: the render corpus,
+# and only that. Read from the test file rather than copied, so the two cannot
+# drift apart into measuring different things.
 for (expression in parse("tests/testthat/test-slow.R")) {
   is_test <- is.call(expression) &&
     identical(expression[[1L]], as.name("test_that"))
@@ -37,7 +40,7 @@ for (expression in parse("tests/testthat/test-slow.R")) {
   }
 }
 
-literals <- slow_literals()
+literals <- corpus_literals()
 addresses <- slow_render_corpus
 parts <- slow_render_parts(addresses)
 
