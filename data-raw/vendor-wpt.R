@@ -210,6 +210,40 @@ build_corpus <- function(path, source) {
     }, logical(1), USE.NAMES = FALSE)
   keep <- bracketed | numeric
 
+  # WHAT WPT'S ANSWER IS ACTUALLY ABOUT, which is not the same question as
+  # whether the row passed. A row's `failure` flag is about the whole URL: WPT
+  # marks `http://[1::2]:3:4` a failure because ":3:4" is not a port, and its
+  # host is perfectly well formed. Reading `failure` as a host verdict would
+  # require raddr to reject `1::2`, which would be wrong.
+  #
+  # The successes say more than the failures do, because the serialized
+  # `hostname` reveals WHICH parser the URL parser reached: a dotted quad means
+  # the IPv4 reading fired, brackets mean the IPv6 one did, and anything else
+  # means the host is a REG-NAME and no address parser ran at all. raddr has no
+  # reg-name concept, so "regname" is the class where the right answer from
+  # raddr is to decline -- `0x7f.0.0.0x7g` is a valid host and not an address.
+  #
+  # The failures are left unclassified on purpose. Separating a host failure
+  # from a port or scheme failure needs the expected-failure bookkeeping of
+  # RADD-aitbetjb, and guessing here would bake the guess into the corpus.
+  serialized <- ifelse(is.na(hostname), "", hostname)
+  expect <- ifelse(
+    failure, "url-failure",
+    ifelse(
+      startsWith(serialized, "["), "ipv6",
+      ifelse(
+        grepl("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$", serialized),
+        "ipv4", "regname"
+      )
+    )
+  )
+
+  # A percent-encoded host is text the URL parser DECODES before any address
+  # parser sees it, so raddr is looking at different bytes than WPT is. Flagged
+  # rather than dropped: the row is a true fact about the URL layer, and the
+  # flag is what stops the suite from reading it as a fact about raddr.
+  pct <- !is.na(host) & grepl("%", host, fixed = TRUE)
+
   out <- data.frame(
     # The licence boundary, carried into the data. A row's terms are not a
     # property anyone should have to recover by remembering which file it came
@@ -223,6 +257,8 @@ build_corpus <- function(path, source) {
     kind = ifelse(bracketed[keep], "bracketed", "numeric"),
     failure = failure[keep],
     hostname = hostname[keep],
+    expect = expect[keep],
+    pct_encoded = pct[keep],
     stringsAsFactors = FALSE
   )
   # A stable order, so a re-derivation diffs as content and never as ordering.
