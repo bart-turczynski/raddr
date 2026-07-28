@@ -2076,6 +2076,103 @@ four files are **not** served with one timestamp: three carry
 caveat (§7.1) applies more strongly here, since these two registries' editorial
 dates are known to differ from what they are served with (`RADD-lfgkjvfv`).
 
+### 7.4 What the registry pins, asserted **[implemented 2026-07-28]**
+
+`tests/testthat/test-harvest.R`. Everything below was checked against the
+vendored snapshot before it was written down, and the two normative claims
+against the RFCs rather than against memory of them.
+
+**The one cross-column rule.** RFC 6890 §2.2.1 states exactly one implication:
+`Destination = False` requires `Forwardable` and `Global` to be false too. It
+ties `Source` to nothing at all, and it says this in a lowercase descriptive
+"must" — §2.2.1 does not invoke RFC 2119 for the attribute definitions, so this
+is a consistency property of the registry and not a conformance requirement on
+an implementation. Checked over all 51 blocks; it holds.
+
+**Which is why no column is the answer.** Six rows prove any single "is this
+usable" boolean would be lossy. `255.255.255.255/32` is the registry's *only*
+`Source = False, Destination = True` row — written to, never from. Five rows go
+the other way (`0.0.0.0/8`, `0.0.0.0/32`, `::/128`, `192.0.0.8/32`,
+`100:0:0:1::/64`), and two of those five carry `reserved_by_protocol` while two
+do not, on otherwise identical policy. That is the five-independent-columns
+shape §4 chose, now pinned rather than asserted in prose.
+
+**A withdrawn row reports `NA`, not `False`.** `192.88.99.0/24` and
+`2001:10::/28` are terminated, IANA prints nothing in their policy columns, and
+raddr keeps that as missing. A blank is not a denial, which is the whole "facts,
+not verdicts" position in one assertion.
+
+**Longest-prefix-match regressions.** Each of these is *wrong* under
+first-match-in-file-order, which is what a naive scan of the registry CSV
+produces:
+
+| address | must resolve to | not |
+|---|---|---|
+| `0.0.0.0` | `0.0.0.0/32` | `0.0.0.0/8` |
+| `255.255.255.255` | `255.255.255.255/32` | `240.0.0.0/4` — they differ in `destination` |
+| `192.88.99.2` | the live `/32` | the terminated `/24`, whose policy is blank |
+| `100::1` / `100:0:0:1::1` | discard / dummy | each other, one hex digit apart |
+| `5f00::1` | `5f00::/16` (SRv6 SIDs) | `4000::/3`, the reserved block it nests in |
+
+The `5f00::/16` row is also a layering test: the inner block is in the
+special-purpose registry and the outer one in the address-space registry, so it
+pins IANA's own precedence note (§7.3) as well as the match.
+
+**Boundaries, in both directions.** `192.0.0.0/29` is `.0` through `.7` and
+nothing else; `.8`, `.9`, `.10`, `.170` and `.171` each have their own row and
+their own policy, so an off-by-one in the prefix arithmetic silently swaps five
+protocols' semantics — and every one of those addresses matches *something*
+either way, which is why it would be silent. The `/29` is also
+`Forwardable = True` inside a `Forwardable = False` `/24`: a more-specific block
+that **widens** a permission its parent withholds, which is why containment
+cannot be shortcut to "the shortest match decides".
+
+`2001:db8::/32` is **not** inside `2001::/23`. The `/23` spans `2001:0000::`
+through `2001:01ff:ffff:…`, and reading it as "everything under `2001:`" would
+fold the documentation prefix into IETF protocol assignments. Asserted at both
+edges from both sides.
+
+**And one prefix that must never match.** RFC 5180 §8 as printed names
+`2001:0200::/48` for IPv6 benchmarking. Errata ID 1752 — **Verified**,
+2009-04-27 — corrects it to `2001:0002::/48`, because the printed prefix was
+never in the RFC 4773 pool. `2001:200::/48` is real, allocated, globally routed
+APNIC space, so matching the typo would be worse than missing the prefix.
+`2001:2::1` is `benchmarking`; `2001:200::1` is `global`.
+
+**Ten corpus literals that had no fixture**, from
+`docs/research/delta-c-parsers.md`:
+
+- `fe80::a%25en1`, `fe80::1%25lo0` — the RFC 6874 percent-encoded zone spelling,
+  which RFC 9844 obsoleted. raddr is not a URI parser and never percent-decodes,
+  so the zone is the literal text `25en1`.
+- `::1%1]foo.bar baz'"` — the zone runs to the end of the string, delimiters
+  included, because Apple's `inet_pton` takes everything after the first `%`
+  (§5.1). Implementations that truncate at `]`, whitespace or a quote read a
+  different host. It also lands on `getaddrinfo`'s whitespace gate covering the
+  address and not the zone (§3.2).
+- `0x8.0X8.010.8` — hex, hex, octal and decimal **in one literal**. Nothing says
+  the parts share a radix; each is a separate base-0 `strtoul`.
+- `0129.0.0.1` — CVE-2021-29418, an invalid octal digit in the *first* part.
+  `netmask` read it as `0.0.0.1` and lost the part entirely. Under raddr it is
+  `129.0.0.1` or a rejection, and never `0.0.0.1` or `127.0.0.1`.
+- `2002:7f00:1::` (6to4 carrying `127.0.0.1`, the Symfony CVE-2026-48736
+  string), `64:ff9b::a00:1` (the NAT64 well-known prefix carrying `10.0.0.1` — a
+  globally reachable prefix around a private payload, simultaneously), and
+  `::ffff:169.254.169.254` (IPv4-mapped link-local, the metadata bypass every
+  surveyed guard misses). In all three the outer block and the inner address
+  disagree about danger, and §8.1's position is that raddr reports both.
+- `100.100.100.200` — Alibaba's metadata endpoint, inside CGNAT and outside
+  every link-local rule. raddr has no opinion about metadata endpoints (§1.1);
+  what it must not do is call it global.
+- `[::]` — URL authority syntax. Stripping brackets is the URL layer's job, so
+  every dialect rejects it.
+
+`1.2.3.4junk` is the one row in the harvest raddr **cannot settle**: glibc
+accepts it, Apple and musl reject it, and the fixture records Apple only. The
+test asserts rejection under every dialect — which is what raddr's model claims
+— and says so: until `RADD-xrgomyhx` gives the fixture a per-libc column, a pass
+there is a statement about Apple and nothing else.
+
 ---
 
 ## 8. Scope for v0.1
