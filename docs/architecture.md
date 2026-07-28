@@ -148,12 +148,32 @@ separate parsers **[verified 2026-07-26]**:
 
 ```
 addr_getaddrinfo  =  pton, falling back to aton
-addr_curl         =  aton, falling back to pton
+addr_curl         =  aton, falling back to pton     <- wrong for IPv6, see below
 ```
 
 Every measured row falls out of those two orderings. They are implemented as
 literal compositions of the exported primitives, so a precedence change upstream
 is an argument swap, not a rewrite.
+
+**The `curl` ordering was derived, not measured, until 2026-07-28 [§11.6].**
+"Verified 2026-07-26" above covered `getaddrinfo`; no `data-raw` script invoked
+curl at all, so the `curl` column of §3.3 was produced by the composition it was
+being read as evidence for. Running real curl (8.20.0) says:
+
+- **IPv4 — the ordering holds**, on all 78 rows that can be asked. curl's URL
+  layer normalizes a numeric host itself, `aton`-style, before the resolver is
+  reached, which is why the `aton`-first precedence is right.
+- **IPv6 — the ordering is wrong.** `aton` rejects every IPv6 literal, so the
+  composition *is* its fallback, and the fallback should be `getaddrinfo`.
+  curl's URL layer does not normalize an IPv6 literal, so the text reaches
+  `getaddrinfo`, which lifts an embedded scope out of a link-local address where
+  `inet_pton` does not (§3.5.3). Ten rows differ, all inside `fe80::/10` with a
+  non-zero second hextet.
+
+`aton` falling back to **`getaddrinfo`** fits both families with no divergence,
+because once `aton` has rejected an IPv4 literal `getaddrinfo` reduces to `pton`
+anyway. That one-argument fix is `RADD-puzhycev`; until it lands the defect is
+pinned by name in `test-ipv6.R` so it cannot spread.
 
 **One leak, found while implementing Epic C [verified 2026-07-26].** The
 `getaddrinfo` composition is exact except for whitespace. `inet_aton` stops at
@@ -2310,7 +2330,7 @@ the decisions are not relitigated.
 | O10 | WPT vendoring licence mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analogue. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a licence notice appended there is deleted by the next registry rebuild |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
-| O13 | The `curl` = aton-then-pton composition for **IPv6** | **Unverified against real curl.** The IPv4 composition was measured; the IPv6 half is derived, and since `aton` rejects every IPv6 literal it reduces to a claim that curl reaches `inet_pton` rather than `getaddrinfo` for a bracketed literal. Those two now disagree (§3.5.3), so the claim is testable and worth testing |
+| O13 | The `curl` = aton-then-pton composition for **IPv6** | **Settled 2026-07-28 by running it, and the answer is no — see §11.6.** curl reaches **`getaddrinfo`**, not `inet_pton`, on all 88 IPv6 rows that can be asked through a URL at all; the derived half was wrong on the 10 rows where Apple's `getaddrinfo` lifts an embedded scope and `inet_pton` does not. The item's own premise was also wrong: the IPv4 composition had never been measured either — no `data-raw` script invoked curl before `RADD-xpmuxafb`, so §3.3's `curl` column was derived from the composition it was being used to support. Measured now, IPv4 holds on all 78 rows. `addr_curl()`'s fallback is `RADD-puzhycev` |
 | O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
 | O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
 | O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | 5.7 s against 2.5 s per 1e6 **[verified 2026-07-27, §11.1.1]**, which the flat-per-row theory does not explain. The suspicion, unmeasured, is `derive_status()`: for an IPv6 vector `aton`'s reading is missing on every row, so `readings_agree()` runs `vec_equal()` against an all-missing address and enters `blank_missing()`'s `proxy[is.na(code), ] <- NA` over a million rows and six columns — a path an all-accepted IPv4 vector never takes. If that is it, the fix is to skip dialects that accepted nothing, and it is small. Profile before touching anything |
@@ -3007,6 +3027,65 @@ against memoized code measures the cache unless it clears it.
 
 ---
 
+### 11.6 The ahead-of-time oracles **[implemented 2026-07-28]**
+
+Differential testing, never at runtime. Each oracle runs in `data-raw/` on a
+maintainer's machine, writes a golden CSV, and the suite reads the CSV — so the
+tests need no Go toolchain, no `adaR`, and no curl, and a CRAN check machine
+without them still runs every assertion.
+
+| Oracle | Measures | Written by |
+|---|---|---|
+| Apple libc | `pton`, `aton`, `getaddrinfo`, the scope lift | `oracle-ipv{4,6}.py` |
+| CPython `ipaddress` | the `strict` dialect, on paper | `oracle-ipv6.py` |
+| ada, via `adaR` | the `whatwg` dialect, as browsers ship it | `oracle-ipv{4,6}.R` |
+| **Go `net/netip`** | `strict` again, a second implementation | `oracle-netip.go` |
+| **real curl** | the one dialect raddr composes rather than reads | `oracle-tools.R` |
+
+The last two are new, and each falsified something.
+
+**Go `netip` — §3.1's grouping is not quite one dialect.** The table files
+Python, Go and Rust together under `strict`. On 125 of the 126 recorded IPv6
+literals Go and Python agree exactly, address and zone. The exception is
+`fe80::1%lo0%en0`: Go splits at the **first** `%` and takes the entire remainder
+as the zone, yielding `lo0%en0`, where Python rejects the literal. raddr sides
+with Python. One row is not a refutation of the grouping, but it is the
+difference between a grouping that was checked and one that was assumed.
+
+**curl — see §3.2.** The IPv4 ordering holds on every measurable row; the IPv6
+ordering is wrong and is now `RADD-puzhycev`.
+
+**Measuring curl means measuring curl's resolver, and that is easy to get
+wrong.** Two traps were hit and are worth recording, because both produced
+confident, wrong numbers:
+
+- **`curl_parse_url()` is the wrong layer.** It answers about curl's *URL*
+  parser. `addr_curl()` models the resolver. Comparing them measures neither.
+- **Blocking DNS changes the answer.** `--doh-url` pointed at a dead port looks
+  like the careful way to keep an oracle offline. It removes `getaddrinfo`, and
+  `getaddrinfo` *is* curl's leniency: under it curl appears to reject
+  `4294967296`, `0X7F000001`, `0x.1` and `040000000000`, and §3.2's composition
+  appears to fail on 11 IPv4 rows. All 11 were the instrument. There is no
+  verbose output that separates "read numerically" from "resolved as a name"
+  either, because in curl they are one `getaddrinfo` call.
+
+So the probe lets DNS work and **checks the resolver is honest instead**: a
+random `.invalid` label (RFC 2606) must not resolve, or the run aborts. A
+resolver that hijacks NXDOMAIN would otherwise turn every rejection into a
+fabricated address, silently. A literal is asked through a URL, so anything the
+URL layer would eat first — whitespace, `%` zones, the authority delimiters — is
+recorded as **not measurable** rather than as a result raddr should match, which
+is the same caveat the `adaR` probes carry.
+
+**A NUL-delimited wire, so no escaping grammar is agreed twice.** The fixtures
+escape control characters to stay plain ASCII, and `unescape_control()` is
+sequential rather than single-pass. Reimplementing that in Go would be a second
+thing to get wrong, so R unescapes and hands over raw bytes with a delimiter no
+literal contains. R cannot hold a NUL inside a string, which is why the reply is
+split as a raw vector.
+
+---
+
 ## 12. Dependencies
 
 Target: **`vctrs` + `rlang`, and argue about anything else.**
@@ -3021,6 +3100,8 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 | `hedgehog` | Suggests only |
 | `ipaddress` | **No.** Would import its `is_global` semantics and its gaps |
 | `adaR` | **No.** Oracle in `data-raw/`, not a runtime dep |
+| Go toolchain | **No.** Oracle in `data-raw/` (§11.6). The suite reads the CSV it wrote |
+| `curl`, the CLI | **No.** Oracle in `data-raw/` (§11.6), and the only one that touches DNS |
 | `rurl` | **No.** raddr must not depend on rurl; the dependency runs the other way |
 | `triebeard` | Probably unnecessary at this table size (O5) |
 | Rcpp / BH / AsioHeaders | **No** |

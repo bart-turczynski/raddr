@@ -176,10 +176,11 @@ test_that("every row of the section 3.3 table is reproduced", {
 # --- the measured dialects, against the recorded oracle ----------------------
 #
 # data-raw/oracle-ipv4.py and data-raw/oracle-ipv4.R regenerate this fixture
-# from Apple libc and from ada. If a libc upgrade changes a row, this fails and
-# the model gets revisited rather than silently drifting.
+# from Apple libc, ada, Go net/netip and real curl. If a libc, libcurl or Go
+# upgrade changes a row, this fails and the model gets revisited rather than
+# silently drifting.
 
-test_that("pton, aton, getaddrinfo and whatwg match the recorded oracle", {
+test_that("every measured dialect matches the recorded oracle", {
   oracle <- read.csv(
     test_path("fixtures", "ipv4-oracle.csv"),
     colClasses = "character",
@@ -187,7 +188,7 @@ test_that("pton, aton, getaddrinfo and whatwg match the recorded oracle", {
   )
   input <- unescape_control(oracle$input)
 
-  for (dialect in c("pton", "aton", "getaddrinfo", "whatwg")) {
+  for (dialect in c("pton", "aton", "getaddrinfo", "whatwg", "curl")) {
     expected <- oracle[[dialect]]
     # "-" marks a row the oracle could not measure for that dialect, which
     # data-raw/oracle-ipv4.R explains.
@@ -200,6 +201,23 @@ test_that("pton, aton, getaddrinfo and whatwg match the recorded oracle", {
       label = dialect
     )
   }
+})
+
+test_that("Go net/netip reads IPv4 exactly as strict does", {
+  # Section 3.1 files Python ipaddress, Go and Rust under one "strict" dialect.
+  # Python is measured as the pyip column of the IPv6 fixture; Go is measured
+  # here. The grouping is an assertion about three implementations, so it is
+  # worth one that actually runs them: a row where Go and raddr's strict part
+  # company falsifies the grouping rather than the parser.
+  oracle <- read.csv(
+    test_path("fixtures", "ipv4-oracle.csv"),
+    colClasses = "character",
+    na.strings = NULL
+  )
+  input <- unescape_control(oracle$input)
+  expected <- oracle$netip
+  expected[!nzchar(expected)] <- NA_character_
+  expect_identical(format(addr_strict(input)), expected)
 })
 
 test_that("inet_aton stops at the first whitespace and ignores the rest", {

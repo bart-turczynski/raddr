@@ -1,16 +1,21 @@
-# Measure the WHATWG reading of the same inputs data-raw/oracle-ipv4.py covers.
+# Measure the readings data-raw/oracle-ipv4.py cannot: WHATWG, Go and curl.
 #
 # adaR wraps ada, the URL parser Node and several browsers ship, so it stands in
 # for "what browsers do" (section 3.1). adaR is a data-raw oracle only and never
-# a runtime dependency (section 12).
+# a runtime dependency (section 12). Go net/netip is the second implementation
+# of the "strict" dialect, and curl is the one dialect raddr composes rather
+# than measures -- see data-raw/oracle-tools.R for both.
 #
 #     Rscript data-raw/oracle-ipv4.R
 #
-# Recorded with adaR 0.3.5 on 2026-07-26.
+# Recorded with adaR 0.3.5, go1.26.5 and curl 8.20.0 (libcurl/8.20.0) on
+# 2026-07-28. Re-run after any upgrade to those three or to libc; the fixture
+# is asserted by tests/testthat/test-ipv4.R, so drift fails loudly.
 
 stopifnot(requireNamespace("adaR", quietly = TRUE))
 
 source("tests/testthat/helper-dialects.R")
+source("data-raw/oracle-tools.R")
 
 libc <- read.csv(
   "tests/testthat/fixtures/ipv4-libc.csv",
@@ -48,6 +53,8 @@ whatwg_one <- function(literal) {
 
 literal <- unescape_control(libc$input)
 libc$whatwg <- vapply(literal, whatwg_one, character(1), USE.NAMES = FALSE)
+libc$netip <- netip_readings(literal, 4L)$addr
+libc$curl <- curl_readings(literal, 4L)
 
 write.csv(
   libc,

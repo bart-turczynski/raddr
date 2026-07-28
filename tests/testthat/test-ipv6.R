@@ -133,6 +133,84 @@ test_that("getaddrinfo matches Apple libc bit for bit", {
   expect_identical(address_only(addr_getaddrinfo(oracle$literal)), expected)
 })
 
+test_that("real curl reaches getaddrinfo for IPv6, which settles O13", {
+  # O13 asked whether curl reaches inet_pton or getaddrinfo for a bracketed
+  # literal. For IPv6 aton rejects everything, so section 3.2's composition
+  # reduces to exactly that claim, and section 3.5.3 made the two disagree about
+  # the embedded scope -- so the claim became testable. It had never been run:
+  # no data-raw script invoked curl before RADD-xpmuxafb, so the curl column of
+  # section 3.3 was derived from the composition rather than measured.
+  #
+  # Measured, the answer is getaddrinfo, on all 88 rows that can be asked
+  # through a URL at all. The derived half was wrong.
+  oracle <- ipv6_oracle()
+  # "-" marks a row that cannot be asked: a zone needs %25, and whitespace and
+  # the authority delimiters never reach the resolver.
+  keep <- oracle$curl != "-"
+  expected <- oracle$curl[keep]
+  expected[!nzchar(expected)] <- NA_character_
+  expect_identical(
+    address_only(addr_getaddrinfo(oracle$literal[keep])),
+    expected
+  )
+})
+
+test_that("addr_curl() is wrong for IPv6 on the lift rows (RADD-puzhycev)", {
+  # This test pins a KNOWN DEFECT so it cannot spread quietly, and it fails the
+  # moment addr_curl() is corrected -- which is the point, because the fix is
+  # meant to delete it.
+  #
+  # addr_curl() composes aton then pton. Real curl composes aton then
+  # getaddrinfo, and the two part company wherever Apple's getaddrinfo lifts an
+  # embedded scope out of a link-local address and inet_pton does not. Every
+  # such row is inside fe80::/10 and carries a non-zero second hextet. The
+  # measured column above is the truth; these ten are raddr disagreeing with it.
+  oracle <- ipv6_oracle()
+  keep <- oracle$curl != "-"
+  measured <- oracle$curl[keep]
+  measured[!nzchar(measured)] <- NA_character_
+
+  wrong <- which(address_only(addr_curl(oracle$literal[keep])) != measured)
+  expect_identical(
+    oracle$literal[keep][wrong],
+    c(
+      "fe80:abcd::1", "fe80:1::1", "fe80:ffff::1", "fe80:abcd:1234::1",
+      "fe80:1:2:3:4:5:6:7", "fe81:1::1", "fe8f:1::1", "fe90:1::1",
+      "fea0:1::1", "febf:1::1"
+    )
+  )
+
+  # And the shape of the error is one thing, not ten: aton rejects every IPv6
+  # literal, so swapping the fallback from pton to getaddrinfo removes all of
+  # them and changes nothing raddr currently gets right.
+  expect_identical(
+    address_only(addr_getaddrinfo(oracle$literal[keep])),
+    measured
+  )
+})
+
+test_that("Go net/netip and Python ipaddress are one dialect, except once", {
+  # Section 3.1 groups them, and on 125 of the 126 recorded literals they do
+  # agree. The exception is a zone ID carrying a second "%": Go splits at the
+  # first one and takes the whole remainder as the zone, where Python rejects
+  # the literal outright. Named rather than pattern-matched, so that a change to
+  # the set is visible [verified 2026-07-28, go1.26.5 and CPython 3.14.6].
+  oracle <- ipv6_oracle()
+  split_zone <- "fe80::1%lo0%en0"
+
+  disagree <- oracle$netip != oracle$pyip |
+    oracle$netip_zone != oracle$pyip_zone
+  expect_identical(oracle$literal[disagree], split_zone)
+
+  row <- oracle[oracle$literal == split_zone, ]
+  expect_identical(row$netip_zone, "lo0%en0")
+  expect_identical(row$pyip, "")
+
+  # raddr sides with Python: section 3.5 reads the zone as everything after the
+  # first "%", and a "%" is not a legal character inside one.
+  expect_true(is.na(addr_strict(split_zone)))
+})
+
 # --- the core parser: hextets and the "::" elision ---------------------------
 
 test_that("the elision expands at either end and in the middle", {
