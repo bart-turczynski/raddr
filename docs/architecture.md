@@ -2307,7 +2307,7 @@ the decisions are not relitigated.
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
-| O10 | WPT vendoring licence mechanics under CRAN | BSD-3 should be fine; `LICENSE.note` handling needs checking |
+| O10 | WPT vendoring licence mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analogue. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a licence notice appended there is deleted by the next registry rebuild |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
 | O13 | The `curl` = aton-then-pton composition for **IPv6** | **Unverified against real curl.** The IPv4 composition was measured; the IPv6 half is derived, and since `aton` rejects every IPv6 literal it reduces to a claim that curl reaches `inet_pton` rather than `getaddrinfo` for a bracketed literal. Those two now disagree (§3.5.3), so the claim is testable and worth testing |
@@ -3024,6 +3024,89 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 | `rurl` | **No.** raddr must not depend on rurl; the dependency runs the other way |
 | `triebeard` | Probably unnecessary at this table size (O5) |
 | Rcpp / BH / AsioHeaders | **No** |
+
+### 12.1 Bundled third-party material **[settled 2026-07-28]**
+
+§12 governs what raddr **imports at runtime**. This section governs what it
+**carries in its tarball**, which is a separate question with separate
+obligations. O10 asked it about WPT and is closed here.
+
+Two bodies of third-party material, under two licences that demand different
+things:
+
+| Material | Licence | What redistribution requires |
+|---|---|---|
+| the four IANA registries, `inst/extdata/*.csv` | CC0 1.0 | nothing — CC0 waives |
+| WPT `urltestdata.json` (§8; RADD-xdgfyznt) | BSD-3-Clause, "web-platform-tests contributors" | clause 1: retain the copyright notice, the three conditions, and the disclaimer |
+
+**That difference is the whole of O10.** CC0 asks for nothing, so `inst/NOTICE`
+records provenance only — URL, sha256, byte count — and carries no licence
+text. BSD-3 clause 1 binds **source** redistributions, and an R source tarball
+is one, so with WPT the terms have to travel with the bytes. This is the first
+bundled material for which attribution is an obligation rather than a courtesy.
+
+**`License:` and `LICENSE` do not change, and cannot.**
+`tools:::.license_component_is_for_stub_and_ok` is the function `R CMD check`
+uses to validate a `+ file LICENSE` stub; for MIT it requires `LICENSE` to
+parse as DCF with **exactly** the field set `{YEAR, COPYRIGHT HOLDER}`.
+Measured, rather than assumed:
+
+| `LICENSE` content under `MIT + file LICENSE` | result |
+|---|---|
+| the bare two-line template (what raddr ships) | **0 — OK** |
+| template + a prose paragraph | 2 — unreadable as DCF |
+| template + an extra DCF field | 3 — wrong field set |
+| template + the full BSD-3 text | 2 — unreadable as DCF |
+| template + `ORGANIZATION` | 3 — wrong field set |
+
+A blank line makes DCF start a second record, so appended prose does not merely
+look wrong — it stops parsing. There is no way to write the BSD-3 terms into
+`LICENSE`, which is why they need a file of their own.
+
+**The file is `inst/COPYRIGHTS`, not `LICENSE.note`.** O10's original wording
+named `LICENSE.note`; a survey of the 266 packages installed locally found it in
+**none** of them, against 10 carrying `inst/COPYRIGHTS` (and 3 more using
+`AUTHORS` for the same purpose). `fs` and `vroom` are
+the precedent worth copying — MIT R packages bundling third-party
+permissive-licensed material, each reproducing the upstream licence **in full**
+in `inst/COPYRIGHTS` and naming the upstream holder in `Authors@R` as
+`person(..., role = "cph", comment = "<what they hold>")`. Copy the structure,
+not the text: both files open by claiming GPL-3 terms that contradict their own
+`MIT + file LICENSE` field, which is a copy-paste wart in `r-lib`, not a
+convention.
+
+**The generated-file hazard, which is the part worth knowing.** `inst/NOTICE`
+is not hand-maintained — `data-raw/build-registry.R` composes it and ends with
+`writeLines(notice, notice_path)`, overwriting the file wholesale. A BSD-3
+notice appended to it would survive until the next registry rebuild and then
+vanish, turning a routine maintainer action into a licence-compliance failure
+with no error message. So the WPT terms may **not** live in a
+build-script-owned file. The resolution is that `build-registry.R` composes
+`inst/COPYRIGHTS` from its generated IANA provenance section plus a static
+third-party section it *reads* from `data-raw/`, so the licence text is an
+input to the script and not something the script can destroy. `inst/NOTICE` is
+retired into that one file, which is also the name CRAN reviewers look for.
+
+**The `raddr_extra_*.json` split is a licence boundary, not just a re-sync
+convenience.** RADD-xdgfyznt keeps local additions out of the vendored file so
+upstream re-sync stays a file swap; the same split is what lets
+`inst/COPYRIGHTS` say which bytes are BSD-3 and which are raddr's own MIT work.
+Mixing them would make the boundary unstateable.
+
+**Clause 3 constrains how raddr describes itself.** Neither the holder's name
+nor its contributors' may be used to endorse or promote. Recording that the
+suite runs against WPT vectors is fact and is fine; "validated by
+web-platform-tests", in `DESCRIPTION` or `README`, would read as endorsement.
+
+**The vendored JSON needs §7.1's formatting exemption too.** The lesson the
+IANA CSVs taught — `.gitattributes` and the whitespace pre-commit hooks rewrite
+vendored bytes and thereby falsify the sha256 just recorded — applies to any
+byte-pinned upstream file. `urltestdata.json` gets the same `-text` treatment
+and the same hook exclusions when it lands, or its pin is a lie.
+
+Implementation lands with the data in RADD-xdgfyznt rather than here: the
+`Authors@R` `cph` entry would otherwise name a copyright holder for material
+the package does not yet contain.
 
 ---
 
