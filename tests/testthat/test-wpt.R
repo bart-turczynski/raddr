@@ -37,12 +37,52 @@ wpt_corpus <- function() {
 # the address, so the brackets come off first.
 unbracket <- function(x) sub("^\\[(.*)\\]$", "\\1", x)
 
-# Rows whose bytes raddr and WPT do not both see. A percent-encoded host is
-# decoded by the URL parser before any address parser runs, so raddr is reading
-# different characters; asserting over these would measure a decoder raddr
-# deliberately does not have.
+# The expected-failure record: every place raddr and the corpus disagree, with
+# the disagreement argued for once (RADD-aitbetjb). The file itself carries the
+# grammar and the arguments; this reads it, and the rot check below is what
+# stops it from becoming a wish list.
+expected_failures <- function() {
+  lines <- readLines(test_path("fixtures", "expected_failures.txt"))
+  lines <- lines[!grepl("^[[:space:]]*(#|$)", lines)]
+  fields <- regmatches(
+    lines, regexec("^(\\S+)\\s+(\\S+)\\s+(\\S.*\\S|\\S)$", lines)
+  )
+  # An unparseable line is a silent exemption if it is skipped, so it stops the
+  # suite instead.
+  if (any(lengths(fields) != 4L)) {
+    stop("unparseable expected_failures.txt line(s):\n  ",
+         paste(lines[lengths(fields) != 4L], collapse = "\n  "))
+  }
+  field <- function(i) vapply(fields, `[`, character(1), i)
+  data.frame(
+    class = field(2L), subject = field(3L), detail = field(4L),
+    stringsAsFactors = FALSE
+  )
+}
+
+# The corpus is keyed by (source, input): see the file's header for why not by
+# index. A single space joins them because `source` is "wpt" or "raddr" and
+# neither contains one, so the key stays unambiguous while printing legibly
+# when a check fails.
+corpus_key <- function(source, input) paste(source, input)
+
+# Rows a class of the record exempts from a given check.
+without <- function(d, classes) {
+  e <- expected_failures()
+  e <- e[e$class %in% classes, , drop = FALSE]
+  keys <- corpus_key(d$source, d$input)
+  d[!keys %in% corpus_key(e$subject, e$detail), , drop = FALSE]
+}
+
+# Rows of the readings named, minus the ones the record excuses. Percent-encoded
+# rows are no longer dropped wholesale: a host the URL parser decodes before any
+# address parser runs is text raddr never sees, but only two of the six rows
+# actually turn on that, and the other four were getting a free pass.
 comparable <- function(d, kinds) {
-  d[d$expect %in% kinds & !d$pct_encoded, , drop = FALSE]
+  without(
+    d[d$expect %in% kinds, , drop = FALSE],
+    c("reads-failed-url", "declines-pct-encoded")
+  )
 }
 
 test_that("the corpus is present, pinned, and covers both readings", {
@@ -105,15 +145,18 @@ test_that("WPT's serializer and RFC 5952 disagree only on the v4-mapped form", {
   d <- comparable(wpt_corpus(), c("ipv4", "ipv6"))
 
   rendered <- format(addr_whatwg(unbracket(d$host)))
-  divergent <- d$host[rendered != unbracket(d$hostname)]
+  divergent <- corpus_key(d$source, d$input)[rendered != unbracket(d$hostname)]
 
   # RFC 5952 section 5 says a v4-mapped address SHOULD be written with the
   # dotted quad; the WHATWG host serializer has no such case and prints the
   # hextets. Both are right about their own specification, so raddr reports what
-  # RFC 5952 asks for and this test states the difference rather than hiding it.
-  # Pinned as an exact set: a NEW divergence is a regression, and it would
-  # otherwise arrive looking like this known one.
-  expect_equal(divergent, "[::ffff:127.0.0.1]")
+  # RFC 5952 asks for and the record states the difference rather than hiding
+  # it. Pinned as an exact set, from the record rather than from a literal here:
+  # a NEW divergence is a regression, and it would otherwise arrive looking like
+  # this known one.
+  e <- expected_failures()
+  e <- e[e$class == "format-divergence", , drop = FALSE]
+  expect_setequal(divergent, corpus_key(e$subject, e$detail))
   expect_equal(format(addr_whatwg("::ffff:127.0.0.1")), "::ffff:127.0.0.1")
 
   # And the disagreement really is only about text. The two spellings are the
@@ -121,7 +164,7 @@ test_that("WPT's serializer and RFC 5952 disagree only on the v4-mapped form", {
   expect_equal(addr_whatwg("::ffff:127.0.0.1"), addr_whatwg("::ffff:7f00:1"))
 })
 
-test_that("raddr declines the URL failures, bar the one with a bad port", {
+test_that("raddr declines every URL failure the record does not excuse", {
   d <- wpt_corpus()
   failures <- comparable(d, "url-failure")
   expect_gt(nrow(failures), 50)
@@ -136,20 +179,14 @@ test_that("raddr declines the URL failures, bar the one with a bad port", {
   # are the ones that must NOT parse.
   #
   # A URL failure is not by itself a host verdict -- WPT fails
-  # `http://[1::2]:3:4` on the port ":3:4" while its host is well formed -- so
-  # the exceptions are pinned as an exact set rather than waved at. Exact in
-  # both directions: a row LEAVING the set means raddr started rejecting a good
-  # host, and a row entering it means raddr started accepting a bad one. That
-  # is RADD-aitbetjb's bidirectional rot check in miniature, over one class; the
-  # general version, over the whole 267-row expected-failure set and with
-  # unmatched-entry detection, is that ticket's job.
-  port_at_fault <- "http://[1::2]:3:4"
-
+  # `http://[1::2]:3:4` on the port ":3:4" while its host is well formed. So the
+  # exceptions live in expected_failures.txt, each with its reason, and this
+  # test asserts over what is left: no exceptions at all.
   read <- !is.na(addr_family(addr_whatwg(unbracket(failures$host))))
-  expect_equal(failures$input[read], port_at_fault)
+  expect_equal(failures$input[read], character())
 
-  # And the exception is an exception for the stated reason: the host really is
-  # well formed, so declining it would be the bug.
+  # And the one exception is an exception for the stated reason: the host really
+  # is well formed, so declining it would be the bug.
   expect_equal(format(addr_whatwg("1::2")), "1::2")
 
   # Over the whole class, percent-encoded rows included: raddr never errors.
@@ -190,4 +227,109 @@ test_that("raddr's own additions carry the readings WPT has no row for", {
   # opposite of what O2 says.
   expect_equal(addr_zone(addr_pton("fe80::1%eth0")), "eth0")
   expect_true(addr_pton("fe80::1%eth0") == addr_pton("fe80::1"))
+})
+
+# --- the expected-failure record ---------------------------------------------
+
+test_that("every entry in the record names a row the corpus still has", {
+  d <- wpt_corpus()
+  e <- expected_failures()
+
+  # A closed vocabulary, so a typo in a class name cannot invent an exemption
+  # nothing checks. `without()` matches on the class, and a misspelt class
+  # matches nothing and therefore excuses nothing -- which would be silent were
+  # it not for this.
+  #
+  # One direction only. Requiring every known class to still be POPULATED would
+  # mean that fixing the last divergence in a class turns the suite red until
+  # someone re-adds an entry, which is the exact opposite of what this file is
+  # for: an empty class is the good outcome.
+  known <- c("reads-failed-url", "declines-pct-encoded", "format-divergence",
+             "extractor-refusal")
+  expect_equal(setdiff(unique(e$class), known), character())
+
+  # (source, input) has to be a key, or "the row this entry names" is not a
+  # question with one answer.
+  keys <- corpus_key(d$source, d$input)
+  expect_equal(anyDuplicated(keys), 0L)
+
+  # LEFTOVERS. An entry naming a row the corpus no longer has stops exempting
+  # anything the moment the row leaves, and nothing else notices: the suite goes
+  # on passing, and the entry sits there looking like live coverage. This is the
+  # direction an upstream re-sync breaks, and the reason the key is the input
+  # rather than the index -- a renumbering must not read as 128 departures.
+  rows <- e[e$class != "extractor-refusal", , drop = FALSE]
+  listed <- corpus_key(rows$subject, rows$detail)
+  expect_equal(listed[!listed %in% keys], character())
+})
+
+test_that("the record is exact in both directions on every reading", {
+  d <- wpt_corpus()
+  rows <- expected_failures()
+  rows <- rows[rows$class != "extractor-refusal", , drop = FALSE]
+  keys <- corpus_key(d$source, d$input)
+
+  # The naive expectation, over the WHOLE corpus and with nothing excluded:
+  # raddr reaches an address exactly where WPT's output shows one. Every
+  # departure from that has to be written down, and only the departures.
+  read <- !is.na(addr_family(addr_whatwg(unbracket(d$host))))
+  want_read <- d$expect %in% c("ipv4", "ipv6")
+
+  # Each class names a direction, and the direction is checked too: filing a row
+  # under the wrong class would otherwise buy the same exemption for free.
+  observed <- list(
+    "reads-failed-url" = keys[read & !want_read],
+    "declines-pct-encoded" = keys[!read & want_read]
+  )
+
+  # The class is pasted onto the reported rows so a failure says which claim
+  # broke without the reader going to the line numbers. paste() recycles a
+  # zero-length vector up to length one, which would turn every clean run into a
+  # failure, hence the guard.
+  tagged <- function(cls, x) {
+    if (length(x)) paste0(cls, ": ", x) else character()
+  }
+
+  for (cls in names(observed)) {
+    stated <- corpus_key(rows$subject, rows$detail)[rows$class == cls]
+    # A REGRESSION: raddr disagrees with WPT on a row nobody argued for.
+    expect_equal(tagged(cls, setdiff(observed[[cls]], stated)), character())
+    # An UNEXPECTED SUCCESS: raddr agrees now, so the entry is stale. Reported
+    # apart from the regression because it calls for the opposite action --
+    # delete the entry, do not fix the parser.
+    expect_equal(tagged(cls, setdiff(stated, observed[[cls]])), character())
+  }
+
+  # Non-vacuity: there have to be rows with an address in them for the check to
+  # be a check at all, and this file's whole subject is a record that quietly
+  # stopped meaning anything.
+  expect_gt(sum(want_read), 30)
+})
+
+test_that("every extractor refusal is accounted for, by rule and by count", {
+  stated <- expected_failures()
+  stated <- stated[stated$class == "extractor-refusal", , drop = FALSE]
+
+  # The suite cannot re-derive these: they are a fact about the JSON, and
+  # reading JSON needs a parser raddr does not depend on (section 11.7). What it
+  # can do is hold the hand-written account against the GENERATED one.
+  # vendor-wpt.R counts each refusal under the rule that caused it, and
+  # `vendor-wpt.R --check` re-derives that table from the vendored bytes and
+  # fails on drift. So the chain closes: the bytes fix the CSV, and this fixes
+  # the account against the CSV.
+  derived <- read.csv(
+    test_path("fixtures", "wpt-refusals.csv"),
+    colClasses = c("character", "integer")
+  )
+  expect_gt(nrow(derived), 0L)
+  expect_true(all(derived$count > 0L))
+
+  # Both directions again. A rule stated here that no longer fires is a
+  # leftover; a rule that fires without an entry here is a refusal nobody
+  # argued for, and the refusals are what the corpus does not cover.
+  expect_setequal(stated$subject, derived$rule)
+  expect_equal(
+    as.integer(stated$detail[order(stated$subject)]),
+    derived$count[order(derived$rule)]
+  )
 })

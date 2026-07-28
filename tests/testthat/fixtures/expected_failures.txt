@@ -1,0 +1,129 @@
+# Every place raddr and the WPT corpus do not line up, written down as a claim
+# the suite re-checks. RADD-aitbetjb; see docs/architecture.md section 11.7.
+#
+# A record like this rots in three directions, and all three are faults:
+#
+#   an entry that stopped being true    raddr agrees now, so the exemption is
+#                                       stale -- an UNEXPECTED SUCCESS
+#   a disagreement nobody wrote down    a regression
+#   an entry matching no row at all     the row it names left the corpus, so
+#                                       the entry has been exempting nothing
+#                                       since -- a LEFTOVER
+#
+# test-wpt.R checks all three separately, because they call for different
+# actions and a harness reporting only "these two sets differ" leaves the
+# reader to work out which way round it went. The third is the one an
+# expected-failures file usually lacks and the one an upstream re-sync
+# triggers: a row that goes away takes its own check with it, silently.
+#
+# GRAMMAR. Blank lines and lines starting with `#` are comments. Every other
+# line is
+#
+#     <class>  <subject>  <detail>
+#
+# split on whitespace into exactly three fields, the third running to the end
+# of the line (so it may contain spaces, and an input does).
+#
+# ROWS ARE KEYED BY (source, input), NEVER BY INDEX. An index is a position and
+# shifts under any upstream insertion, which would turn one re-sync into 128
+# leftovers and teach everyone to ignore the check. `input` is the identity WPT
+# itself uses, and the suite asserts the pair is unique before relying on it.
+#
+# Each class also states a DIRECTION, and the direction is checked: filing a
+# row under the wrong class would otherwise buy the same exemption for free.
+
+
+# --- reading: raddr reads a row WPT failed -----------------------------------
+#
+# WPT's `failure` flag is a verdict on the WHOLE URL and not on the host. This
+# row is the one that makes the file necessary: a flat list of the 267 failures
+# would demand raddr reject a good address.
+
+# ":3:4" is not a port, and that is the whole of the failure. The host `1::2`
+# is well formed and raddr reads it, which is correct.
+reads-failed-url  wpt  http://[1::2]:3:4
+
+
+# --- reading: raddr declines a row WPT read ----------------------------------
+#
+# `%30%78%63%30%2e%30%32%35%30` decodes to `0xc0.0250`, so WPT's host parser
+# reads `0xc0.0250.01` and serializes 192.168.0.1. raddr is handed the encoded
+# bytes and declines them, because percent-decoding happens in the URL parser
+# before any address parser runs and raddr has no URL layer (section 13). The
+# two are not disagreeing about an address; they are reading different text.
+#
+# Listed row by row rather than excluded wholesale by the corpus's
+# `pct_encoded` column, which is what the suite used to do. Four of the six
+# percent-encoded rows agree, and the blanket exclusion was giving those four a
+# free pass -- nothing would have caught raddr starting to read
+# `http://[::%31]` as an address.
+
+declines-pct-encoded  wpt  http://%30%78%63%30%2e%30%32%35%30.01
+declines-pct-encoded  wpt  http://%30%78%63%30%2e%30%32%35%30.01%2e
+
+
+# --- serialization: same address, different text -----------------------------
+#
+# Consulted only by the serializer test. The row still takes part in the
+# reading comparison and passes it, because the disagreement is about text.
+
+# RFC 5952 section 5 says a v4-mapped address SHOULD be written with the dotted
+# quad, and raddr does. The WHATWG host serializer has no such case and prints
+# `[::ffff:7f00:1]`. Both are right about their own specification. Pinned as an
+# exact set so that a NEW divergence cannot arrive disguised as this known one.
+#
+# A raddr row, not a WPT one: no input at pin 181476a contains `::ffff:`, so the
+# only reason this divergence is visible at all is that raddr went looking. Its
+# expectation was measured against Node v26.3.1, whose URL parser is ada.
+format-divergence  raddr  http://[::ffff:127.0.0.1]/
+
+
+# --- extraction: authorities that never became rows --------------------------
+#
+# 371 of WPT's 891 objects are not in the corpus at all. Recovering a host token
+# from a whole URL means implementing enough of the URL parser to know where the
+# authority ends, and data-raw/vendor-wpt.R refuses rather than guesses
+# (section 11.7). The refusals used to be pinned only as that total, and a total
+# is the one number that can hold still while its membership turns over.
+#
+# The counts below are checked against tests/testthat/fixtures/wpt-refusals.csv,
+# which vendor-wpt.R derives from the JSON and `vendor-wpt.R --check` re-derives
+# and diffs. So the chain closes without the suite needing a JSON parser: the
+# bytes fix the CSV, and the CSV fixes this account. Both directions, again -- a
+# rule here that no longer fires is a leftover, and a rule that fires without an
+# entry here is an unargued refusal.
+#
+# These lines are a cost, not a boundary. Each one says what raddr's suite is
+# choosing not to see.
+
+# No `scheme://` at the front, so there is no authority for a regex to take.
+# The largest class and mostly the dullest -- 169 have no scheme colon at all
+# and are relative-URL rows resolved against `base` -- but not harmless: 46 are
+# a special scheme with a bare colon, and WHATWG does give `http:foo.com` the
+# host `foo.com`. Those 46 are lost hosts. All are reg-names at this pin.
+extractor-refusal  no-authority  333
+
+# A tab, CR or LF anywhere, or a C0-or-space at either end: text the URL parser
+# removes BEFORE parsing. A row exercising the removal is a row about the
+# removal. Note this refuses only what the pre-parse steps touch -- an ordinary
+# space further in is kept, because a space in a host is a host-parse failure
+# and so exactly the kind of row worth having.
+extractor-refusal  pre-parse-removal  23
+
+# A backslash terminates the authority under a special scheme and does not under
+# any other, so the token is scheme-dependent and no lexical rule can pick it.
+extractor-refusal  backslash-authority  8
+
+# Two or more colons outside brackets: the host/port split stops being lexical
+# and becomes a parser decision. The most expensive refusal per row --
+# `http://2001::1`, `http://2001::1]` and `http://2001::1]:80` are unbracketed
+# or half-bracketed IPv6 that WHATWG must reject, which is precisely the shape
+# raddr's own gate has to get right. Worth revisiting if this file ever grows a
+# way to state an expected host token by hand.
+extractor-refusal  multiple-colons  4
+
+# Both an `@` and a `%` in the authority: percent-encoding can spell an `@` that
+# does not delimit userinfo, so "userinfo ends at the last @" stops being true.
+# Only both -- a `%` alone delimits nothing, and refusing that too would throw
+# away every zone-id row, which are the rows this corpus most wants.
+extractor-refusal  ambiguous-userinfo  3
