@@ -365,3 +365,126 @@ test_that("bit64's integer64 is read exactly", {
     "::ffff:192.0.2.1"
   )
 })
+
+# --- fuzzing the fast-path seam ----------------------------------------------
+#
+# The 15-digit boundary in decimal_words() is family-independent and silent when
+# wrong: a bad `nchar` comparison sends a value down a path that is exact for
+# other values, so nothing errors and the address is simply the wrong one. The
+# tests above pin named points on the seam; these two sweep it.
+
+test_that("the seam survives a fuzz of both paths", {
+  set.seed(915L)
+  vals <- unique(c(
+    # Every power of ten from 10^13 to 10^17 and its immediate neighbours,
+    # so the boundary is crossed at a value and at value +/- 1.
+    unlist(lapply(10^(13:17), function(p) sprintf("%.0f", p + -2:2))),
+    # The 2^53 limit of an exact double, and the 2^32 family boundary.
+    sprintf("%.0f", 2^53 + -2:2),
+    sprintf("%.0f", 2^32 + -2:2),
+    # Runs of nines and powers of ten at every width an address can hold.
+    vapply(1:39, function(k) strrep("9", k), character(1L)),
+    vapply(1:38, function(k) paste0("1", strrep("0", k)), character(1L)),
+    # Dense random draws either side of 10^15.
+    sprintf("%.0f", floor(stats::runif(2000L, 9.99e14, 1.001e15))),
+    # And the far end, where 39 digits stop being an address.
+    c(
+      "340282366920938463463374607431768211454",
+      "340282366920938463463374607431768211455",
+      "340282366920938463463374607431768211456"
+    )
+  ))
+
+  # Runs of nines overshoot 2^128 - 1 well before they run out of digits, so
+  # the corpus is split by value rather than by width.
+  ceiling128 <- "340282366920938463463374607431768211455"
+  padded <- paste0(strrep("0", decimal_max_digits - nchar(vals)), vals)
+  fits <- padded <= ceiling128
+  expect_true(any(fits) && any(!fits))
+
+  # Decoding and re-encoding uses the two directions independently: the fast
+  # path is only in the decoder, so a seam bug cannot cancel itself out.
+  expect_identical(
+    addr_to_integer(integer_to_addr(vals[fits], "v6")),
+    vals[fits]
+  )
+  expect_true(all(is.na(integer_to_addr(vals[!fits], "v6"))))
+})
+
+test_that("the path is picked by the digit count after the zeros come off", {
+  # A padded value is as wide as the padding says until the zeros come off, and
+  # only the stripped width may decide the path. These two are 42 characters
+  # each and land on opposite sides of the seam.
+  padded <- c(
+    paste0(strrep("0", 27L), strrep("9", 15L)),
+    paste0(strrep("0", 26L), strrep("9", 16L))
+  )
+  expect_identical(
+    addr_to_integer(integer_to_addr(padded, "v6")),
+    c(strrep("9", 15L), strrep("9", 16L))
+  )
+})
+
+# --- adversarial input to the decoder ----------------------------------------
+
+test_that("only ASCII digits are digits", {
+  # The digit scan is the one regex in the package without `perl = TRUE`, so
+  # what `[0-9]` means is worth asserting rather than assuming. It is a range of
+  # code points, and no other script's digits fall inside it.
+  other_scripts <- c(
+    "١٢٣", # Arabic-Indic
+    "１２３", # full-width
+    "१२३" # Devanagari
+  )
+  expect_true(all(is.na(integer_to_addr(other_scripts, "v4"))))
+})
+
+test_that("whitespace is trimmed from the ends and nowhere else", {
+  expect_identical(addr_format(integer_to_addr(" 12\n", "v4")), "0.0.0.12")
+  expect_identical(addr_format(integer_to_addr("\t12\r\n", "v4")), "0.0.0.12")
+  # An interior newline is not surrounding whitespace, and `$` must not be
+  # allowed to match in front of it.
+  expect_true(is.na(integer_to_addr("1\n2", "v4")))
+  expect_true(is.na(integer_to_addr("12\n34", "v4")))
+})
+
+test_that("negative zero is zero", {
+  # IEEE negative zero passes every range test -- `-0 >= 0` and
+  # `identical(-0, 0)` are both TRUE -- but `sprintf("%.0f", -0)` writes "-0",
+  # which the digit scan would then reject. `0 * -1` is an ordinary way to
+  # arrive here, so the two zeros must decode alike.
+  expect_identical(
+    addr_format(integer_to_addr(0 * -1, "v4")),
+    addr_format(integer_to_addr(0, "v4"))
+  )
+  expect_identical(addr_format(integer_to_addr(0 * -1, "v6")), "::")
+})
+
+test_that("a raw vector is a type error rather than a hex misreading", {
+  # `as.character(as.raw(16))` is "10", so reading a raw as text would decode
+  # byte 0x10 as the number ten and return 0.0.0.10 without a word about it.
+  expect_error(integer_to_addr(as.raw(16), "v4"), class = "raddr_error_type")
+  expect_error(integer_to_addr(as.raw(0), "v4"), class = "raddr_error_type")
+  expect_error(integer_to_addr(raw(), "v4"), class = "raddr_error_type")
+})
+
+test_that("types that are not numbers are NA rather than a guess", {
+  expect_true(is.na(integer_to_addr(TRUE, "v4")))
+  expect_true(is.na(integer_to_addr(complex(real = 1), "v4")))
+  expect_true(is.na(integer_to_addr(3.5, "v4")))
+  expect_true(is.na(integer_to_addr(Inf, "v4")))
+  expect_true(is.na(integer_to_addr(NaN, "v4")))
+  # A factor of digits is read, being one of the things whose as.character()
+  # is decimal -- this is what makes addr_family()'s own factor work.
+  expect_identical(
+    addr_format(integer_to_addr(factor("3221225985"), "v4")),
+    "192.0.2.1"
+  )
+})
+
+test_that("an absurdly long input is rejected on its length, not chewed", {
+  # The 39-digit ceiling is checked against the stripped string, so a megabyte
+  # of digits is a missing address and not a minute of arithmetic.
+  expect_true(is.na(integer_to_addr(strrep("9", 1e6L), "v4")))
+  expect_true(is.na(integer_to_addr(strrep("x", 1e6L), "v6")))
+})

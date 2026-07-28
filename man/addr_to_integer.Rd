@@ -13,7 +13,7 @@ integer_to_addr(x, family)
 \item{x}{For \code{addr_to_integer()}, a \code{raddr_address} vector. For
 \code{integer_to_addr()}, a character vector of decimal digits, a numeric
 vector, or anything whose \code{as.character()} is decimal digits -- a
-\code{bignum::biginteger()}, for instance.}
+\code{bignum::biginteger()}, for instance. Not a \code{raw} vector; see below.}
 
 \item{output}{One of \code{"character"} (the default), \code{"double"} or \code{"bignum"}.}
 
@@ -111,7 +111,11 @@ nearest representable number instead. Leading zeros and surrounding
 whitespace are accepted, being unambiguous in a decimal integer.
 
 Like the other decoders in \code{\link[=addr_to_bytes]{addr_to_bytes()}}, \code{integer_to_addr()} signals
-nothing: the answer for an input it cannot read is a missing address.
+nothing about a \emph{value} it cannot read: the answer is a missing address. A
+wrong \emph{type} is a different matter and errors, as it does everywhere else in
+raddr. A \code{raw} vector is the case worth naming, because its \code{as.character()}
+is hexadecimal -- reading \code{as.raw(16)} as a number would silently yield
+\verb{0.0.0.10}. Bytes go to \code{\link[=bytes_to_addr]{bytes_to_addr()}}, which knows they are bytes.
 }
 
 \examples{

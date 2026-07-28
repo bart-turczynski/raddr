@@ -1484,6 +1484,17 @@ addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 `tests/testthat/test-reverse.R` is graded against it — both RFCs publish a
 worked example, so those are the first two tests.
 
+**Cross-checked against CPython, not against `ipaddress`** **[verified
+2026-07-28]**. 6029 addresses — 3000 random IPv4, 3000 random IPv6 drawn as raw
+bytes, plus both ends of both families, the 4-in-6 forms and the `0x80000000`
+word in each position — agree with Python 3.14.6's `ipaddress` on
+`.reverse_pointer` and on `int()`, with **zero** mismatches on either surface.
+Ours differs from Python's pointer by exactly two documented things: the
+trailing dot, and lowercase. The R `ipaddress` package is **not** a usable
+oracle for either surface (O18, and `ip_to_integer()` cannot run at all without
+`bignum`), which is why the oracle is a different language rather than a
+different R package.
+
 **The suffix is the only thing that can say which tree a name is in.** A label
 `9` is legal in both and means octet 9 under `in-addr.arpa`, nibble 9 under
 `ip6.arpa` (research 08 gotcha 9). So the family picks the tree here exactly as
@@ -1674,8 +1685,18 @@ anything, so without that package the function errors — including for IPv4,
 where no arbitrary-precision arithmetic is involved at all **[verified
 2026-07-28, 1.0.3]**. raddr does the arithmetic itself, so both
 default-reachable outputs encode and decode either family with nothing
-installed. `has_bignum()` exists as a seam so that is tested with the package
-hidden rather than asserted.
+installed. `has_bignum()` exists as a seam so the branch is testable without
+uninstalling anything.
+
+That mock proves the branch and not the claim, so the claim was checked against
+the world **[verified 2026-07-28]**: with `bignum` and `bit64` moved out of the
+library entirely, the suite is 1174 passing and **6 skipped** with no errors,
+and `R CMD check --as-cran` is clean but for the pre-existing new-submission
+NOTE. `R CMD check` refuses a complete check when a `Suggests` package is
+missing unless `_R_CHECK_FORCE_SUGGESTS_=false` — which is what CRAN itself
+sets on a machine that lacks one, and how the run above was made. A mocked
+`has_bignum()` cannot catch a `bignum::` call reached by another route, and this
+is what says there is none.
 
 **`output = "bignum"` errors when `bignum` is missing, and that is not a
 retreat from "degrade, never error".** The subissue's complaint is about being
@@ -1709,12 +1730,26 @@ object again. `ipaddress::integer_to_ip()` takes `is_ipv6 = NULL` and infers
 one. The argument takes the factor from `addr_family()` directly, so the round
 trip reads `integer_to_addr(addr_to_integer(a), addr_family(a))`.
 
-Two input traps are handled rather than inherited. A `bignum` vector **is** a
+Four input traps are handled rather than inherited. A `bignum` vector **is** a
 character vector underneath and its `as.character()` is the rounded display form
 — 2^128 − 1 comes back as `"3.402824e+38"` — so the decoder asks for
 `notation = "dec"`. And a `double` above 2^53 is refused rather than decoded,
 because it has already lost the value it was meant to carry; the same number
 given as digits is fine.
+
+The other two were found by the adversarial pass of **[verified 2026-07-28]**,
+after the pair had already shipped green. A **`raw` vector is a type error**,
+because `as.character()` on a raw is *hexadecimal*: the fallback branch read
+`as.raw(16)` as the number ten and returned `0.0.0.10` silently, and only raws
+above `0x99` escaped by failing the digit scan. Bytes go to `bytes_to_addr()`,
+which is the pair that knows they are bytes — the same redirection §6.5.1 makes
+for a bare `raw` vector. And **IEEE negative zero decodes as zero**: `-0` passes
+every range test (`-0 >= 0` and `identical(-0, 0)` are both TRUE) but
+`sprintf("%.0f", -0)` writes `"-0"`, which the digit scan then rejected, so
+`0 * -1` and `0` disagreed. Adding zero normalizes the sign.
+
+The type/value line these two draw is the one §6.5.1 already draws: a wrong
+**value** is a missing address and signals nothing, a wrong **type** errors.
 
 ### 6.6 Prefix
 

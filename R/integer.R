@@ -124,6 +124,19 @@ decimal_words <- function(s) {
 # rather than decoding whatever the nearest representable number happens to be
 # -- the same refusal as the width rule in section 6.5.1.
 integer_digits <- function(x) {
+  if (is.raw(x)) {
+    # `as.character()` on a raw is *hex*, so the fallback branch below would
+    # read `as.raw(16)` as the number 10 and hand back 0.0.0.10 without a word.
+    # Bytes are the other pair's input, and they carry their own width rule.
+    abort(
+      c(
+        "`x` must be a number or decimal digits, not a <raw> vector.",
+        i = "A raw vector is bytes rather than digits: use `bytes_to_addr()`."
+      ),
+      class = "raddr_error_type"
+    )
+  }
+
   if (inherits(x, "bignum_biginteger")) {
     # Two traps in one line. A `biginteger` stores its digits as text, so
     # `is.character()` on one is TRUE and the branch below would keep the class;
@@ -136,7 +149,11 @@ integer_digits <- function(x) {
     v <- as.numeric(x)
     ok <- !is.na(v) & is.finite(v) & v >= 0 & v <= 2^53 & v == floor(v)
     s <- rep(NA_character_, length(v))
-    s[ok] <- sprintf("%.0f", v[ok])
+    # Adding zero is what normalizes IEEE negative zero, which `0 * -1` and
+    # `as.numeric("-0")` both produce. It passes every test above -- `-0 >= 0`
+    # is TRUE and `identical(-0, 0)` is TRUE -- but `sprintf("%.0f", -0)` writes
+    # "-0", which the digit scan below would then reject. Zero is zero.
+    s[ok] <- sprintf("%.0f", v[ok] + 0)
   } else {
     # Anything else that can say what its digits are, `bit64::integer64`
     # included; its `as.character()` is exact.
@@ -231,12 +248,16 @@ integer_digits <- function(x) {
 #' whitespace are accepted, being unambiguous in a decimal integer.
 #'
 #' Like the other decoders in [addr_to_bytes()], `integer_to_addr()` signals
-#' nothing: the answer for an input it cannot read is a missing address.
+#' nothing about a *value* it cannot read: the answer is a missing address. A
+#' wrong *type* is a different matter and errors, as it does everywhere else in
+#' raddr. A `raw` vector is the case worth naming, because its `as.character()`
+#' is hexadecimal -- reading `as.raw(16)` as a number would silently yield
+#' `0.0.0.10`. Bytes go to [bytes_to_addr()], which knows they are bytes.
 #'
 #' @param x For `addr_to_integer()`, a `raddr_address` vector. For
 #'   `integer_to_addr()`, a character vector of decimal digits, a numeric
 #'   vector, or anything whose `as.character()` is decimal digits -- a
-#'   `bignum::biginteger()`, for instance.
+#'   `bignum::biginteger()`, for instance. Not a `raw` vector; see below.
 #' @param output One of `"character"` (the default), `"double"` or `"bignum"`.
 #' @param family The family the number is to be read as: `"v4"`, `"v6"` or
 #'   `"v6_4in6"`, length 1 or `length(x)`. Required.
