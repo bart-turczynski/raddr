@@ -3106,6 +3106,98 @@ thing to get wrong, so R unescapes and hands over raw bytes with a delimiter no
 literal contains. R cannot hold a NUL inside a string, which is why the reply is
 split as a raw vector.
 
+### 11.7 The WPT URL host corpus **[implemented 2026-07-29]**
+
+`url/resources/urltestdata.json` from `web-platform-tests`, pinned at commit
+`181476a` — 891 objects, 624 success / 267 failure, `sha256:355c9f1e…`, 228 373
+bytes. The pin is a **commit** with the sha256 of the bytes it served recorded
+beside it, because the two fail differently: a moved branch changes the first, a
+truncated download only the second.
+
+The suite reads a **derived CSV**, not the JSON, for the same reason §11.6's
+oracles do. Parsing JSON needs a parser, and `jsonlite` in `Suggests` would work
+on a developer machine and then *skip* on a check without it — which is exactly
+the failure `RADD-oqevkuzo` names, since a corpus that skips is not a corpus.
+`vendor-wpt.R --check` re-derives the CSV from the vendored bytes and fails on
+drift.
+
+**The corpus is read through what WPT's output reveals, not through whether the
+row passed.** A `failure` flag is about the whole URL: WPT fails
+`http://[1::2]:3:4` on the port, and its host is well formed. The successes say
+more, because the serialized `hostname` reveals which parser the URL parser
+reached. Hence a derived `expect` column:
+
+| `expect` | what it means | what raddr must do |
+|---|---|---|
+| `ipv4` / `ipv6` | an address parser ran and serialized an address | reach the same address |
+| `regname` | no address parser ran; the host is a reg-name | **decline** |
+| `url-failure` | the URL failed | decline, bar a pinned exception |
+
+`regname` is the class worth having. `0x7f.0.0.0x7g` ends in something that
+looks like a number and is not one, so WHATWG's gate admits it, the IPv4 parser
+rejects it, and the URL parser keeps it as a **valid host**. raddr has no
+reg-name concept, so `NA` is its whole answer and the right one — and reading
+that row's success as "raddr must parse it" is the mistake `RADD-cdmoeadr`
+found waiting for anyone delegating `rurl`'s host layer.
+
+**Addresses are compared as addresses, never as text**, because WPT's serializer
+and RFC 5952 §5 disagree on exactly one form — `::ffff:7f00:1` against
+`::ffff:127.0.0.1`. Pinning to text would turn one real divergence into 17
+unrelated failures. The divergence is instead pinned as an *exact set*, so a new
+one cannot arrive disguised as the known one.
+
+**What the mutation run found, and it changed the design.** Comparing a hostile
+spelling against the canonical form it means is blind to a parser that is too
+**permissive**: under a widened rule both sides are still addresses, so both
+sides still agree. Measured, by breaking the shipped code on purpose:
+
+| mutation | caught by the success rows | caught overall |
+|---|---|---|
+| final part's bound 255 → 256 | no | yes, after the boundary rows |
+| hex width 8 → 9 digits | no | yes |
+| three-part form's bound off by a byte | no | yes |
+| octal width 11 → 12 digits | no | **no — equivalent mutant** |
+
+Only the rows that must **not** parse catch a permissive parser, and asserting
+those needs the exceptions pinned exactly: one in 69, the bad port above. That
+is `RADD-aitbetjb`'s bidirectional rot check in miniature over a single class —
+a row *leaving* the set means raddr started rejecting a good host, a row
+entering it means raddr started accepting a bad one.
+
+The final-bounds mutation survived even then, because WPT has no four-part host
+whose last part is exactly 256; a bound is only checked by the two values that
+straddle it, which is §11.3's lesson arrived at a second time by the same route.
+Eleven boundary rows closed it. The octal survivor is genuinely equivalent — a
+12-digit octal is at least 8¹¹ > 2³², so the modular accumulation flags the
+overflow whether or not the width check does, exactly as §11.3 records for the
+decimal case.
+
+**raddr's own additions are a separate file, and the split is a licence boundary
+rather than a convenience** (§12.1). `fixtures/wpt/` holds nothing but upstream
+BSD-3 bytes, so a re-sync stays a file swap and `inst/COPYRIGHTS` can say which
+bytes are whose; `fixtures/raddr_extra_urltestdata.json` is raddr's own MIT work.
+The derived CSV carries a `source` column so that claim is checkable in the data
+and not merely recoverable by remembering which file a row came from. The 25
+raddr rows fill gaps **measured** in the vendored file rather than imagined ones
+— at `181476a` no input contains `2147483648`, `0x80000000`, `fe80`, `::ffff:`,
+`64:ff9b` or `2002:`, and uppercase `0X` is spelled only inside reg-names. Every
+expectation was measured against Node v26.3.1, whose URL parser is ada, already
+an oracle above; a hand-written expectation is a second implementation with no
+tests.
+
+**Two extraction rules that are raddr's own judgment, recorded because they are
+the parts a reader would otherwise have to reverse-engineer.** Row selection
+does *not* call `ends_in_a_number()` and errs inclusive: a corpus selected by the
+gate can never contain a row the gate gets wrong. And authority extraction
+refuses what it cannot read without implementing a URL parser — 371 rows — with
+the refusal count recorded in the provenance so it cannot grow silently.
+
+**The ticket's row counts did not fully reproduce.** `RADD-xdgfyznt` said "43
+numeric-IPv4 authorities, 44 bracketed IPv6". Bracketed reproduces exactly on the
+first natural definition; numeric does not reproduce under any of six tried
+(58 / 55 / 49 / 35 / 57 / 20). The measured figures are what is recorded, rather
+than a filter bent to hit a remembered number.
+
 ---
 
 ## 12. Dependencies
@@ -3210,6 +3302,25 @@ and the same hook exclusions when it lands, or its pin is a lie.
 Implementation lands with the data in RADD-xdgfyznt rather than here: the
 `Authors@R` `cph` entry would otherwise name a copyright holder for material
 the package does not yet contain.
+
+**[implemented 2026-07-29.]** All four changes landed as written. Two details
+this section did not anticipate, both discovered while executing it:
+
+- **The licence boundary works better as a directory than as a filename
+  prefix.** O10 assumed `raddr_extra_*.json` beside the vendored file. Putting
+  the upstream bytes alone under `fixtures/wpt/` instead makes the `-text`
+  attribute and the three whitespace-hook exemptions one-line rules over a path,
+  and lets `inst/COPYRIGHTS` name a directory rather than enumerate filenames
+  that will change. The extras keep the `raddr_extra_` name, outside it.
+- **`inst/COPYRIGHTS` is composed by `build-registry.R` but the WPT pin is
+  written by `vendor-wpt.R`,** so the file has two upstreams. The rule that keeps
+  §12.1's guarantee is that the *licence text* — `data-raw/wpt-LICENSE.txt` — is
+  written by hand and generated by nothing, while only the numbers are generated.
+  Missing WPT inputs are an **error** and never a warning, because emitting a
+  `COPYRIGHTS` with no WPT section while the WPT bytes ship in the tarball is
+  precisely the silent compliance failure this section exists to prevent.
+
+See §11.7 for the corpus itself.
 
 ---
 
