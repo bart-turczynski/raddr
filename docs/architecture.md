@@ -2205,7 +2205,7 @@ the decisions are not relitigated.
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
-| O5 | Trie vs sorted masked vector for the 53 IANA rows plus the transition overlay | Benchmark; probably neither a trie nor `triebeard` |
+| O5 | Trie vs sorted masked vector for the 51 IANA rows plus the transition overlay | **Measured 2026-07-28, see §11.1.6.** Neither, and not the shipped walk either: grouping the blocks by prefix length — §11.1.5's containment trick, with `vec_match()` in place of `vec_in()` so the group reports *which* row — wins every case, by **53x** on the 276-row address-space table. The sorted masked vector is *slower* than the walk on `special`; the trie pays to re-encode 1e6 addresses as bit strings on every call |
 | O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only, and §3.5 raises the stakes: the IPv6 leading-zero rule, the fold and the lift are all Apple behaviors |
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
@@ -2489,6 +2489,65 @@ of them.
 `bench/record.R` reports a disagreement count against `ipaddress` beside each
 ratio, on all 1e6 rows of both families, because a ratio between two functions
 that answer differently is not a measurement of anything. Both are **0**.
+
+### 11.1.6 Longest-prefix-match, 1e6 addresses — O5 settled
+**[verified 2026-07-28]**
+
+`bench/prefix.R`, best of five. O5 asked whether the registry lookup wants a
+trie or a sorted masked vector instead of `prefix_match()`'s walk over blocks
+sorted by descending prefix length. The answer is **neither**, and it is not the
+walk either: the regrouping §11.1.5 built for containment answers
+longest-prefix-match too, and it is the fastest of the four everywhere measured.
+
+Four candidates over the same tables, all returning the identical row:
+
+| | linear (shipped) | grouped | sorted masked | trie (`triebeard`) |
+|---|---|---|---|---|
+| `special`, IPv4 random | 0.280 s | **0.175 s** (0.63x) | 0.545 s (1.95x) | 0.852 s (3.04x) |
+| `special`, IPv6 random | 0.309 s | **0.211 s** (0.68x) | 0.924 s (2.99x) | 1.600 s (5.18x) |
+| `special`, IPv4 inside blocks | 0.352 s | **0.156 s** (0.44x) | 0.556 s (1.58x) | 0.521 s (1.48x) |
+| `special`, IPv6 inside blocks | 0.409 s | **0.216 s** (0.53x) | 0.764 s (1.87x) | 1.467 s (3.59x) |
+| `space`, IPv4 random | 1.637 s | **0.031 s** (0.019x) | 0.499 s (0.31x) | 0.903 s (0.55x) |
+| `space`, IPv6 random | 0.810 s | **0.152 s** (0.19x) | 0.610 s (0.75x) | 1.561 s (1.93x) |
+
+Index build is once per table and irrelevant at this size — every candidate is
+between 0.04 ms and 0.92 ms, the whole spread smaller than one lookup's noise.
+
+**The `space` row is the finding.** It is the address-space pair of §7.3, and
+`addr_classify()` reads it on every call beside `special`. Its 276 rows collapse
+to **9** groups, because its 256 IPv4 rows are all `/8` and every block of one
+length is one hash lookup — so 256 passes over a million-row logical vector
+become one, and the operation goes from 1.637 s to 0.031 s. **53x.** The 51-row
+`special` table collapses 51 to 20 and wins a more ordinary 1.6x to 2.3x.
+
+What makes the regrouping answer *which* block rather than only whether one
+exists is that `vec_match()` returns the position of the hit where `vec_in()`
+returns a logical. Visiting the groups longest-first then keeps the same
+first-hit-wins rule the walk had, because anything matched later is shorter by
+construction. Ties resolve identically on both sides: `order(decreasing = TRUE)`
+is stable and `split()` keeps each group ascending, so two blocks with the same
+length and the same key both resolve to the earlier table row.
+
+The two rejected candidates lose for reasons worth keeping:
+
+- **Sorted masked vector** is 1.6x to 3.0x *slower* than the walk it was meant
+  to replace on `special`. A binary search is `log2(m)` passes over the address
+  vector where the hash is one, and `m` here is at most 256 — 8 passes to save
+  what one `match()` already does in C. Vectorized binary search in R pays the
+  n-sized `ifelse()` on every step, which is the whole cost.
+- **The trie** is the only candidate that cannot read the words. `triebeard`
+  wants character keys, so every call re-encodes 1e6 addresses into 1e6 binary
+  strings — 32 characters each for IPv4 and 128 for IPv6, which is why its IPv6
+  rows are its worst. That encoding is inside the timed region deliberately: it
+  is not overhead the design could amortize, it is what the data structure
+  costs. O5's guess that it would be neither a trie nor `triebeard` was right,
+  for a reason O5 did not name.
+
+`bench/prefix.R` gates its own timings on an agreement check, as `bench/record.R`
+does: all four candidates against the shipped `prefix_match()` over 6e6 random
+rows **and** over the first and last address of every block in all four tables
+(680 rows — random draws exercise the middle of a block and say nothing about a
+divisor that is off by one). All 30 counts are **0**.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**
