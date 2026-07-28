@@ -283,6 +283,13 @@ levels. This is the single largest classification-vocabulary hole in the repo.
 24. **`curl` is the opposite precedence (`aton`-then-`pton`), which is why
     `192.0.048.1` reaches a host under curl that a browser refuses to dial.**
     `docs/architecture.md:169`, `R/dialects.R:78-80`.
+    **Second half retracted 2026-07-28 (RADD-hnczgkcf).** The precedence claim
+    holds; the consequence does not. curl's URL parser gates the host before the
+    resolver sees it, so `curl http://192.0.048.1/` looks up a *name* and never
+    dials `192.0.48.1`. Measured against curl 8.20.0 over a 35-host numeric
+    sweep, there is no input the URL parser admits that `whatwg` refuses. The
+    `curl` dialect is the resolver, and `0177.0.0.1` (`127.0.0.1` here,
+    `177.0.0.1` under `getaddrinfo`) is the divergence it actually shows.
 25. **`inet_aton` has no IPv6 reading at all** — `AF_INET` by signature — so
     for IPv6 both compositions collapse onto their `pton` half. Measured, not
     assumed, because both compositions lean on it.

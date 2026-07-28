@@ -7,7 +7,7 @@ wherever the two disagree; the scratch documents remain the authority for
 **Provenance.** Decisions below were settled in a review session on 2026-07-26.
 Empirical claims marked **[verified 2026-07-26]** were measured on this machine:
 macOS Darwin 25.4.0 arm64, R 4.6.0, `ipaddress` 1.0.3, `adaR` 0.3.5,
-`curl` 7.1.0 / libcurl 8.14.1, Python 3.x, Apple libc.
+libcurl 8.14.1, Python 3.x, Apple libc.
 
 Claims marked **[verified 2026-07-27]** were measured on the same machine during
 Epic E, and additionally against Python 3.9.6 / 3.12.13 / 3.14.6, Rust 1.91.1,
@@ -218,8 +218,18 @@ right, the entry point does something extra around it.
 
 Two rows carry most of the package's value:
 
-- **`192.0.048.1`** — curl reaches a host a browser refuses to dial.
+- **`0177.0.0.1`** — `getaddrinfo` and `curl` order the same two primitives
+  differently, so one string is two different hosts on one machine.
 - **`4294967296`** — `aton` wraps modulo 2^32 to `0.0.0.0`; the standards reject.
+
+The `getaddrinfo` and `curl` columns are the **resolver**, not URL parsers.
+curl's own URL parser gates the host before the resolver sees it and admits
+strictly less than the `curl` column does: over a 35-host numeric sweep it
+refused `192.0.048.1`, `4294967296`, `09.1.1.1` and `0x100000000` as *names*,
+never admitted anything the `curl` column rejects, and never disagreed with it
+on an address they both admit. There is no input in that sweep where curl's URL
+parser reaches a host `whatwg` refuses — the divergence this table shows is
+between resolvers, not between curl and a browser. **[verified 2026-07-28]**
 
 **Both reality dialects are platform-dependent**, not just `pton`.
 
