@@ -21,6 +21,7 @@
 #' @importFrom vctrs vec_assign
 #' @importFrom vctrs vec_chop
 #' @importFrom vctrs vec_data
+#' @importFrom vctrs vec_in
 #' @importFrom vctrs vec_recycle_common
 #' @importFrom vctrs vec_slice
 #' @importFrom vctrs vec_size

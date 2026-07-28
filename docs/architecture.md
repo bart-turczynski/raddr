@@ -1570,6 +1570,48 @@ and wrong for someone who wants to read `globally_reachable`.
 `raddr_embedding()` constructor: they come out of classification and are not
 built by hand.
 
+#### 6.3.1 Containment **[implemented 2026-07-28]**
+
+`R/within.R`. `addr_within()` tests each address against the block in the same
+position, recycling as any pair of vctrs arguments does; `addr_within_any()`
+tests every address against every block and answers whether *any* contains it.
+The second is the denylist question and the one with the performance target
+(§11.1.5).
+
+**A block is the question being asked, so a bad block errors.** This is the one
+place raddr's decoders do not return `NA` for input they cannot read, and the
+reason is that the two failures are not alike. A malformed *address* is data,
+and a missing answer is the honest report. A malformed *block* is a hole in the
+denylist that the caller has no way to see: it silently matches nothing, and
+nothing about the result says so. So a missing block, a prefix length outside
+`0:32` or `0:128`, an unparseable address and a block with **host bits set** all
+abort with `raddr_error_block`. A missing *address* is still `NA`, never `FALSE`.
+
+**`192.168.1.1/24` is refused rather than masked**, because it is equally likely
+to be a typo for the network and a host that wanted `/32`. Guessing between them
+is the silent reinterpretation §6.5.2 refuses for a double above 2^53. Python's
+`ip_network()` refuses it too; the error names the masked form.
+
+**Blocks are read by `addr_strict()`, not `addr_pton()`.** §3.2 records that
+`pton` is the one dialect whose behaviour varies by platform — raddr models
+Apple libc, which strips leading zeros, so it reads `010.0.0.0` as `10.0.0.0`
+where glibc rejects the text outright. A block that denotes different networks
+on different machines is worse than one that is refused, and CIDR text is
+written in the RFC grammar in the first place.
+
+**The family decides the space, and a mismatch is `FALSE` rather than an
+error**, because a denylist holding both families is an ordinary thing to hold.
+A `v6_4in6` address searches the **IPv6** space: `::ffff:10.0.0.1` is inside
+`::ffff:0:0/96` and is *not* inside `10.0.0.0/8`. That is §6.5.1's width rule in
+its containment form — the address is 128 bits that happen to embed an IPv4 one,
+and the embedding is the separate fact `embeddings` reports (§5.3.5).
+
+**No `bitwAnd`, for the third time.** §5.1.1 makes a word a raw bit pattern in
+which `NA_integer_` *is* `0x80000000`, so a bitwise matcher reads
+`2620:4f:8000::/48` — the AS112 direct-delegation prefix — as missing and never
+matches it, and cannot spell a `/1` mask at all. Keys are integer division of
+unsigned doubles, as in §5.3's matcher. `test-within.R` pins both cases.
+
 `addr_classify()` also refuses a `raddr_parse`, which is P1 one step further in.
 Four readings may be four different addresses, and §4 puts the choice in a
 function name — so the error names `addr_reading()` and the four primitives
@@ -2419,6 +2461,34 @@ way.
 variance on this machine is around 10%, so treat them the way §11.1.2 treats its
 own 2.96x: passing today, and evidence for §8's deferred compiled path rather
 than against it.
+
+### 11.1.5 Containment, 1e6 addresses x 200 blocks **[verified 2026-07-28]**
+
+`bench/record.R`, best of five. The target `RADD-ehyllbox` states is 3x, and
+this is the operation the target was written for.
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_within_any()`, IPv4, 200 blocks / 25 lengths | 0.677 s | 0.706 s | **0.96x** | <= 3x |
+| `addr_within_any()`, IPv6, 200 blocks / 8 lengths | 0.236 s | 0.995 s | **0.24x** | <= 3x |
+| `addr_within()`, IPv4, one block | 0.065 s | — | — | |
+
+Both meet it and the IPv6 row beats the C++ baseline by **4.2x**, which is a
+statement about the algorithm rather than about R. `ipaddress::is_within_any()`
+walks the block list; `addr_within_any()` groups the blocks by prefix length,
+because every block of the same length reduces its addresses to the same key and
+membership is then one hash lookup. So the pass count is the number of
+**distinct lengths**, not the number of blocks — 25 and 8 above, against 200 of
+each — and it cannot exceed 32 for IPv4 or 128 for IPv6 however long the
+denylist grows. That is why the IPv6 row is the faster of the two despite moving
+four times the words: its eight lengths are eight passes. The gap widens with
+the list, and the row-walk `prefix_match()` uses is right for the registry,
+which asks *which* block, and wrong for a denylist, which asks only whether any
+of them.
+
+`bench/record.R` reports a disagreement count against `ipaddress` beside each
+ratio, on all 1e6 rows of both families, because a ratio between two functions
+that answer differently is not a measurement of anything. Both are **0**.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**

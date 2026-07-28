@@ -280,4 +280,82 @@ if (!is.null(ip)) {
   }
 }
 
+cat("\n== containment ==\n")
+
+# RADD-ehyllbox's target: 1e6 x 200 blocks within 3x. The block count is not
+# the cost -- `addr_within_any()` groups blocks by prefix length, so what it
+# pays for is the number of *distinct lengths* (section 11.1.5). Both are
+# reported so the difference is visible in the output rather than only in prose.
+mask_block <- function(octets, len, width) {
+  keep <- len %/% 8L
+  rem <- len %% 8L
+  if (keep < width) {
+    octets[[keep + 1L]] <- if (rem == 0L) {
+      0L
+    } else {
+      (octets[[keep + 1L]] %/% 2^(8L - rem)) * 2^(8L - rem)
+    }
+    if (keep + 2L <= width) {
+      octets[(keep + 2L):width] <- 0L
+    }
+  }
+  paste0(addr_format(bytes_to_addr(list(as.raw(octets)))), "/", len)
+}
+
+nb <- 200L
+len4 <- sample(8:32, nb, replace = TRUE)
+blocks4 <- unique(vapply(seq_len(nb), function(i) {
+  mask_block(sample(0:255, 4L, replace = TRUE), len4[[i]], 4L)
+}, character(1L)))
+len6 <- sample(c(16L, 24L, 32L, 48L, 56L, 64L, 96L, 128L), nb, replace = TRUE)
+blocks6 <- unique(vapply(seq_len(nb), function(i) {
+  mask_block(sample(0:255, 16L, replace = TRUE), len6[[i]], 16L)
+}, character(1L)))
+
+report("blocks, IPv4", length(blocks4), "blocks")
+report("distinct lengths, IPv4", length(unique(len4)), "lengths")
+report("blocks, IPv6", length(blocks6), "blocks")
+report("distinct lengths, IPv6", length(unique(len6)), "lengths")
+
+within4 <- timing(addr_within_any(v4, blocks4), times = 5)
+within6 <- timing(addr_within_any(v6, blocks6), times = 5)
+report("addr_within_any, IPv4", within4, "s")
+report("addr_within_any, IPv6", within6, "s")
+report(
+  "addr_within, IPv4, one block",
+  timing(addr_within(v4, blocks4[[1L]]), times = 5), "s"
+)
+
+if (!is.null(ip)) {
+  # `ip` above is its own random draw, which is fine for timing an operation
+  # and not fine for comparing two answers. Both sides read the same addresses
+  # here, so the disagreement count below means something.
+  net4 <- ipaddress::ip_network(blocks4)
+  ip4 <- ipaddress::ip_address(addr_format(v4))
+  theirs4 <- timing(ipaddress::is_within_any(ip4, net4), times = 5)
+  report("ipaddress::is_within_any, IPv4", theirs4, "s")
+  report("ratio, IPv4 / ipaddress", within4 / theirs4, "x")
+
+  net6 <- ipaddress::ip_network(blocks6)
+  ip6a <- ipaddress::ip_address(addr_format(v6))
+  theirs6 <- timing(ipaddress::is_within_any(ip6a, net6), times = 5)
+  report("ipaddress::is_within_any, IPv6", theirs6, "s")
+  report("ratio, IPv6 / ipaddress", within6 / theirs6, "x")
+
+  # The ratios mean nothing unless the two agree, so this is checked rather
+  # than assumed -- at 1e6 rows, every time the benchmark runs.
+  report(
+    "disagreements, IPv4",
+    sum(addr_within_any(v4, blocks4) != ipaddress::is_within_any(ip4, net4),
+      na.rm = TRUE),
+    "rows"
+  )
+  report(
+    "disagreements, IPv6",
+    sum(addr_within_any(v6, blocks6) != ipaddress::is_within_any(ip6a, net6),
+      na.rm = TRUE),
+    "rows"
+  )
+}
+
 cat("\n")
