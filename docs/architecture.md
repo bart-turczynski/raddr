@@ -3160,9 +3160,10 @@ sides still agree. Measured, by breaking the shipped code on purpose:
 
 Only the rows that must **not** parse catch a permissive parser, and asserting
 those needs the exceptions pinned exactly: one in 69, the bad port above. That
-is `RADD-aitbetjb`'s bidirectional rot check in miniature over a single class —
+was `RADD-aitbetjb`'s bidirectional rot check in miniature over a single class —
 a row *leaving* the set means raddr started rejecting a good host, a row
-entering it means raddr started accepting a bad one.
+entering it means raddr started accepting a bad one. §11.8 is the general
+version.
 
 The final-bounds mutation survived even then, because WPT has no four-part host
 whose last part is exactly 256; a bound is only checked by the two values that
@@ -3189,14 +3190,87 @@ tests.
 the parts a reader would otherwise have to reverse-engineer.** Row selection
 does *not* call `ends_in_a_number()` and errs inclusive: a corpus selected by the
 gate can never contain a row the gate gets wrong. And authority extraction
-refuses what it cannot read without implementing a URL parser — 371 rows — with
-the refusal count recorded in the provenance so it cannot grow silently.
+refuses what it cannot read without implementing a URL parser — 371 rows — each
+attributed to a named rule and counted, so the refusals can neither grow nor
+change shape silently (§11.8).
 
 **The ticket's row counts did not fully reproduce.** `RADD-xdgfyznt` said "43
 numeric-IPv4 authorities, 44 bracketed IPv6". Bracketed reproduces exactly on the
 first natural definition; numeric does not reproduce under any of six tried
 (58 / 55 / 49 / 35 / 57 / 20). The measured figures are what is recorded, rather
 than a filter bent to hit a remembered number.
+
+### 11.8 The expected-failure record **[implemented 2026-07-29]**
+
+`tests/testthat/fixtures/expected_failures.txt`, `RADD-aitbetjb`. Every place
+raddr and the WPT corpus do not line up, written down once with its reason and
+re-checked by the suite. Three entries about rows, one class about extraction:
+
+| class | claim | rows at this pin |
+|---|---|---|
+| `reads-failed-url` | WPT failed the URL; raddr reads the host, because the failure is not the host's | 1 |
+| `declines-pct-encoded` | WPT reached an address; raddr declines, because the URL parser decoded before it | 2 |
+| `format-divergence` | same address, different text | 1 |
+| `extractor-refusal` | rows that never became corpus rows, per rule | 5 rules, 371 rows |
+
+**A record like this rots three ways, and the third is the one such files
+usually miss.** An entry that stopped being true is an *unexpected success* and
+the fix is to delete it; a disagreement nobody wrote down is a *regression* and
+the fix is the parser; and an entry naming a row the corpus no longer has is a
+**leftover** — it stops exempting anything the moment the row leaves, silently,
+while the suite goes on passing and the entry goes on looking like coverage.
+Each is its own expectation, because a harness that reports "these two sets
+differ" has left the reader to work out which way round it went and therefore
+what to do. Each class also states a **direction**, and the direction is
+checked: filing a row under the wrong class would otherwise buy the same
+exemption for free.
+
+**Rows are keyed by `(source, input)` and never by index.** An index is a
+position and shifts under any upstream insertion, so an index key would turn one
+re-sync into 128 leftovers and teach everyone to ignore the check. `input` is
+the identity WPT itself uses. The suite asserts the pair is unique before
+relying on it.
+
+**Percent-encoded rows stopped being excluded wholesale, and that is the
+strengthening.** The suite used to drop all six on the `pct_encoded` column.
+Only **two** of them actually turn on the decode — `%30%78%63%30%2e%30%32%35%30`
+is `0xc0.0250`, so WPT serializes 192.168.0.1 from bytes raddr never sees — and
+the other four were getting a free pass: nothing would have caught raddr
+starting to read `http://[::%31]` as an address. Listing the two by name puts
+the other four back under assertion. The blanket-exclusion instinct is the
+thing to distrust here; an exclusion should be as narrow as its reason.
+
+**The refusal counts close a loop the suite cannot close alone.** They are a
+fact about the JSON, and reading JSON needs a parser raddr does not depend on.
+So `vendor-wpt.R` attributes each refusal to a named rule, writes the table to
+`fixtures/wpt-refusals.csv`, and `--check` re-derives it from the vendored bytes
+and fails on drift; the suite then holds the hand-written account against that
+generated table, in both directions. The bytes fix the CSV and the CSV fixes the
+account. It is a **fixture and not a provenance field** because `data-raw/` is
+`.Rbuildignore`d and so absent under `R CMD check` — and a check that skips is
+not a check, the same rule §11.7 applies to the corpus itself.
+
+`--check` also stopped spot-checking the provenance. It compared three fields;
+it now compares every generated field and reports fields that are absent or no
+longer generated. A pin that is only spot-checked has a hole exactly where
+nobody thought to look, and the new `RefusalRules` field would have landed in
+one.
+
+**Measured, by breaking the record on purpose.** Eight perturbations, all
+caught, each naming its own fault: a deleted entry (regression), an entry for a
+row that agrees (unexpected success), an entry pointing at a row that is not
+there (leftover), a row filed under the wrong direction, a mistyped class name,
+a hand-edited refusal count, a refusal rule dropped from the account, and an
+unparseable line. The run also found a defect in the check itself — the class
+vocabulary was asserted set-equal, which would have turned the suite red the
+day someone *fixed* the last divergence in a class and removed its entry. It is
+one-directional now: unknown classes are rejected, empty ones are the good
+outcome.
+
+One entry was wrong when first written — the v4-mapped divergence was filed
+under `wpt` and the row is one of raddr's own additions, since no input at
+`181476a` contains `::ffff:` at all. The leftover check caught it on the first
+run, which is the only reason it is worth mentioning.
 
 ---
 
