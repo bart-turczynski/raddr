@@ -1654,6 +1654,51 @@ The decoders return a missing address rather than signalling, matching the
 single-dialect parsers of §6.1 — P2 is a promise about `addr_parse()`, not about
 every shortcut.
 
+#### 6.5.2 The integer pair **[implemented 2026-07-28]**
+
+`R/integer.R`. The awkward pair, because **R has no unsigned integer type and no
+128-bit one**. Its `integer` is signed 32-bit, so `128.0.0.0` upward — over half
+the IPv4 space — does not fit and `as.integer(4294967295)` is `NA` rather than a
+wrap; its `double` is exact to 2^53, which covers IPv4 with room to spare and
+misses IPv6 by twenty-five orders of magnitude (research 08 gotchas 26 and 27).
+
+So the default carrier is a **decimal string**, which always works, and
+`output = "double"` is offered because a double is exactly right for IPv4 and is
+the only R-native numeric that is. It is `NA` for every IPv6 row, the 4-in-6
+family included, on the §6.5.1 grounds: 128 bits is 128 bits, and nothing close
+is offered in place of the value.
+
+**The `bignum` dependency is optional in fact, not only in `DESCRIPTION`.**
+`ipaddress::ip_to_integer()` calls `check_installed("bignum")` before it does
+anything, so without that package the function errors — including for IPv4,
+where no arbitrary-precision arithmetic is involved at all **[verified
+2026-07-28, 1.0.3]**. raddr does the arithmetic itself and touches `bignum` only
+for `output = "bignum"`; asking for that without the package returns the
+character vector instead of raising. `has_bignum()` exists as a seam so the
+degrade path is tested rather than asserted.
+
+**The arithmetic is base 10^6 over the four words**, which is the widest chunk
+keeping every intermediate under 2^53 and therefore exact in a double: the
+division's dividend is `rem * 2^32 + word` and the multiplication's product is
+`word * 10^6 + carry`, both bounded by 4.295e15. 2^128 − 1 is 39 digits, so
+seven chunks span any address and a 40-digit number is out of range on its
+length alone. Values of 15 digits or fewer skip the chunked path entirely — that
+is every IPv4 address, and it is worth 4x on the decode (§11.1.4).
+
+**`family` is required, with no default**, because research 08 round-trip
+failure 2 is exactly this pair's problem: `3221225985` is `192.0.2.1` as IPv4
+and the deprecated `::192.0.2.1` as 128 bits, and `::ffff:192.0.2.1` is a fourth
+object again. `ipaddress::integer_to_ip()` takes `is_ipv6 = NULL` and infers
+one. The argument takes the factor from `addr_family()` directly, so the round
+trip reads `integer_to_addr(addr_to_integer(a), addr_family(a))`.
+
+Two input traps are handled rather than inherited. A `bignum` vector **is** a
+character vector underneath and its `as.character()` is the rounded display form
+— 2^128 − 1 comes back as `"3.402824e+38"` — so the decoder asks for
+`notation = "dec"`. And a `double` above 2^53 is refused rather than decoded,
+because it has already lost the value it was meant to carry; the same number
+given as digits is fine.
+
 ### 6.6 Prefix
 
 `addr_` throughout. Measured **[verified 2026-07-26]**: `ipaddress` exports 29
@@ -2287,6 +2332,41 @@ The IPv6 number is 2.3x the IPv4 one for 8x the labels, which is the shape the
 implementation predicts: the 256-entry table renders each octet as *both* its
 nibble labels, so the assembling `paste()` takes 16 pieces rather than 32 and
 the per-address work is one table lookup per octet either way.
+
+### 11.1.4 The integer pair, 1e6 addresses **[verified 2026-07-28]**
+
+`bench/record.R`, best of seven after a warm-up. `ipaddress` returns a
+`biginteger` where raddr returns a character vector, so the forward direction is
+measured twice: the default, and the one that builds the same type they do.
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_to_integer()`, IPv4 | 0.306 s | 1.442 s | **0.21x** | <= 3x |
+| `addr_to_integer(output = "bignum")`, IPv4 | 1.063 s | 1.442 s | **0.74x** | <= 3x |
+| `integer_to_addr()`, IPv4 | 0.703 s | 1.112 s | **0.63x** | <= 3x |
+| `addr_to_integer()`, IPv6 | 3.906 s | 1.726 s | 2.26x | <= 3x |
+| `addr_to_integer(output = "bignum")`, IPv6 | 5.038 s | 1.726 s | 2.92x | <= 3x |
+| `integer_to_addr()`, IPv6 | 4.220 s | 1.426 s | 2.96x | <= 3x |
+
+All six meet the target and **three beat the C++ baseline outright**, which is
+the same shape as §11.1.2's `bytes_to_addr()` result and has the same cause: the
+comparison is not only arithmetic. `ipaddress` must construct a `biginteger` on
+every row whatever the family, so for IPv4 it pays 128-bit machinery for a
+32-bit value while raddr pays one `sprintf()`. Our own `output = "bignum"` row
+is the price of that construction, measured: 0.76 s of the 1.063 s is
+`biginteger()` itself.
+
+**The 15-digit fast path is worth 4x on the IPv4 decode.** Before it, every row
+went through seven chunked multiplications regardless of magnitude and the IPv4
+decode ran at 2.747 s, a 2.38x ratio; routing values under 2^50 through
+`as.numeric()` took it to 0.703 s. §11.1's lesson inverted for once — here the
+cost really was arithmetic, because the allocation is one string vector either
+way.
+
+**The two IPv6 rows at 2.92x and 2.96x are inside by a hair.** Run-to-run
+variance on this machine is around 10%, so treat them the way §11.1.2 treats its
+own 2.96x: passing today, and evidence for §8's deferred compiled path rather
+than against it.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**

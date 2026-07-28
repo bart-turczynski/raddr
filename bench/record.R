@@ -222,6 +222,40 @@ for (name in names(encodings)) {
   }
 }
 
+cat("\n== integers ==\n")
+
+# `ipaddress` returns a `bignum::biginteger` and raddr returns a character
+# vector, so two forward numbers are reported: the default, and the one that
+# builds the same type they do. Their whole pair requires `bignum` -- for IPv4
+# too -- which is the wart this pair exists to avoid (section 6.5.2).
+for (family in c("v4", "v6")) {
+  ours_addr <- if (family == "v4") v4 else v6
+  digits <- addr_to_integer(ours_addr)
+
+  forward <- timing(addr_to_integer(ours_addr))
+  forward_big <- timing(addr_to_integer(ours_addr, output = "bignum"))
+  backward <- timing(integer_to_addr(digits, family))
+  report(sprintf("addr_to_integer, %s", family), forward, "s")
+  report(sprintf("addr_to_integer bignum, %s", family), forward_big, "s")
+  report(sprintf("integer_to_addr, %s", family), backward, "s")
+
+  if (is.null(ip) || !requireNamespace("bignum", quietly = TRUE)) {
+    next
+  }
+  theirs_addr <- if (family == "v4") ip else ip6
+  theirs_int <- ipaddress::ip_to_integer(theirs_addr)
+  t_forward <- timing(ipaddress::ip_to_integer(theirs_addr))
+  t_backward <- timing(
+    ipaddress::integer_to_ip(theirs_int, is_ipv6 = family == "v6")
+  )
+  report(sprintf("ratio, to_integer / ipaddress, %s", family),
+         forward / t_forward, "x")
+  report(sprintf("ratio, to_integer bignum / ipaddress, %s", family),
+         forward_big / t_forward, "x")
+  report(sprintf("ratio, integer_to / ipaddress, %s", family),
+         backward / t_backward, "x")
+}
+
 cat("\n== reverse pointers ==\n")
 
 ours4 <- timing(addr_reverse_pointer(v4))

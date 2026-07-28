@@ -28,6 +28,8 @@ X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
     inet-aton, whatwg-url, cidr, iana, special-purpose-registry, nat64,
     teredo, 6to4, r, rstats, r-stats, r-package
 Suggests:
+    bignum,
+    bit64,
     knitr,
     rmarkdown,
     testthat (>= 3.0.0)

@@ -3,6 +3,7 @@
 
 ## usethis namespace: start
 #' @importFrom rlang abort
+#' @importFrom rlang arg_match0
 #' @importFrom rlang is_string
 #' @importFrom vctrs field
 #' @importFrom vctrs new_data_frame
