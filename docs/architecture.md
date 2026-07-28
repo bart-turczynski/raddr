@@ -2847,6 +2847,9 @@ rather than trusting that a corpus is broad because it is long.
 `block_edges()` and `slow_prefix_match()` — the string-prefix matcher §11.1.6
 built for the registry lookup — moved here from `test-classify.R`, since they
 are the same idea and were the worked example the rest was generalized from.
+`slow_bits_step()` and `block_probes()` joined them for §11.5, and are the same
+idea again applied to a block rather than to a literal: a block's geometry
+written out as characters, sharing no divisor with the code that matches it.
 
 ### 11.4 The invariant suite **[implemented 2026-07-28]**
 
@@ -2905,6 +2908,102 @@ every public surface — `==`, `unique()`, `vec_match()`, `format()`, all four
 encoders — reads both as the same missing address. So the invariant is asserted
 over the address, not over the bytes, and the difference is recorded here rather
 than normalized away in code that has no observable reason to change.
+
+### 11.5 The block boundaries **[implemented 2026-07-28]**
+
+§11.4's registry property says every address matches exactly one row and that
+the address-space layer partitions each family's space. Both stay true of a
+block that is **one address too wide**. Totality is a statement about coverage
+and says nothing about where a block stops, which is the only place prefix
+arithmetic is ever wrong.
+
+`tests/testthat/test-boundary.R` gives every block of all four tables six probe
+addresses — 340 blocks, 2040 addresses:
+
+| probe | where it is | what it pins |
+|---|---|---|
+| `start`, `end` | the block's two ends | the block reaches its own edges |
+| `below`, `above` | one address outside each end | it reaches no further |
+| `middle` | the first address of the upper half | a proper subnet is inside it |
+| `sibling` | the other half of the supernet | one bit of prefix is a real difference |
+
+**The probes are built from the block's text, in binary, and that is the whole
+design.** `block_edges()` derives an edge from the stored words using the same
+`pmin(pmax(len - 32 * (k - 1), 0), 32)` step `mask_words()` uses to decide
+containment — copied, line for line. A wrong step there moves the edge and the
+matcher's idea of the block *together*, and the two agree about the wrong block.
+So `block_probes()` truncates the base address to `len` characters and pads it
+out, and a neighbour is a ripple carry over the same string: no divisor, no
+word, and no arithmetic the shipped code also does. Agreement is the null
+result, and two copies of one formula cannot produce it.
+
+`block_edges()` is then checked against that construction rather than trusted,
+which hardens §11.1.6's 340-block matcher agreement too — that test stands on
+the same primitive.
+
+**The escape hatch, because blocks abut.** The natural expectation is that the
+address past the end of a registry block is outside the registry. It is false
+for **20 of the 51** special-purpose blocks, and ten of those are followed
+*immediately* by another block:
+
+| block | its successor's block |
+|---|---|
+| `192.0.0.0/29` | `192.0.0.8/32` |
+| `192.0.0.8/32` | `192.0.0.9/32` |
+| `192.0.0.9/32` | `192.0.0.10/32` |
+| `192.0.0.170/32` | `192.0.0.171/32` |
+| `::/128` | `::1/128` |
+| `100::/64` | `100:0:0:1::/64` |
+| `2001:1::1/128` | `2001:1::2/128` |
+| `2001:1::2/128` | `2001:1::3/128` |
+| `2001:10::/28` | `2001:20::/28` |
+| `2001:20::/28` | `2001:30::/28` |
+
+So contiguity is **computed from the table** and the pairs are pinned, rather
+than a list of blocks hand-excused from a rule that was wrong for them. The
+sound assertion is not "the neighbour matches nothing"; it is "the neighbour
+never matches *this* block", which holds regardless of what else is next door.
+
+The address-space pair is the opposite case and the same test says so: it is a
+partition, so every one of its blocks that has a successor at all — 274 of 276 —
+is followed immediately by another. That is gaplessness read off the boundary,
+where §7.3's partition check reads it off the tiling arithmetic.
+
+**Four blocks have no neighbour on one side**, and they are pinned by name for a
+reason: a `+1` that wrapped around instead of answering `NA` would leave every
+neighbour assertion passing about the wrong address, at exactly the four places
+the arithmetic is hardest. They are `0.0.0.0/8`, `0.0.0.0/32` and `::/128` at
+the bottom, `240.0.0.0/4` and `255.255.255.255/32` at the top of the
+special-purpose pair; `0.0.0.0/8`, `::/8`, `255.0.0.0/8` and `ff00::/8` in the
+address-space pair; and `::/96` in the overlay.
+
+**§7.4's five hand-picked addresses, quantified.** That section's argument is
+that `192.0.0.0/29` is `.0` through `.7` while `.8`, `.9`, `.10`, `.170` and
+`.171` each carry their own policy, so an off-by-one silently swaps five
+protocols' semantics — silently, because every one of those addresses still
+classifies to something well formed. The boundary suite runs that question over
+all 51 blocks through `addr_classify()`: at an edge the record names this block
+or one nested inside it and always answers from the policy layer; just outside,
+it never names this block.
+
+**What it caught, measured the same way §11.3 was.** Five mutations, each a slip
+someone could make, run against this file alone:
+
+| mutation | tests failed |
+|---|---|
+| `mask_words`: one bit of prefix ignored | 6 of 11 |
+| `prefix_word_plan`: match key one bit too short | 7 of 11 |
+| `build_prefix_index`: shortest prefix wins | 3 of 11 |
+| `block_edges`: last address off by one | 1 of 11 |
+| `slow_bits_step`: wraps instead of answering `NA` | 2 of 11 |
+
+All five caught, and the last two by the tests written for them specifically.
+
+One measurement caveat worth recording, because anyone repeating this will hit
+it: `prefix_index()` **memoizes**, so a mutation underneath it is invisible until
+`prefix_index_cache` is emptied. The `build_prefix_index` reversal read as a
+missed mutant on the first run for that reason alone. A mutation campaign
+against memoized code measures the cache unless it clears it.
 
 ---
 

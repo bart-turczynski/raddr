@@ -569,6 +569,127 @@ block_edges <- function(table) {
   )
 }
 
+# --- the block boundaries, in binary (section 11.5) --------------------------
+#
+# `block_edges()` above derives a block's two ends from the stored words, using
+# the same `pmin(pmax(len - 32 * (k - 1), 0), 32)` step `mask_words()` uses to
+# decide containment. That is enough to hand the matcher two addresses to agree
+# about, and it is worth nothing as a statement about the block's *size*: a
+# wrong step moves the edge and the matcher's idea of the block together, and
+# both sides then agree about a block one address too wide.
+#
+# So the probes below are built from the block's other stored form -- its text
+# -- as characters. The base address is truncated to `len` bits and padded out,
+# and a neighbour is a ripple carry over the same string. No divisor, no word,
+# and no arithmetic the shipped code also does, which is what makes a
+# disagreement mean something.
+
+# The bit string one below or one above, or NA where there is none. Adding one
+# turns a trailing run of 1s into 0s and the 0 above it into a 1; subtracting
+# one is the same sentence with the digits swapped.
+#
+# Carrying off the end is NA and not a wrap. The first address of a space has no
+# predecessor and the last has no successor, and a suite that quietly wrapped
+# them around would be testing the wrong pair of addresses at the four places
+# where the arithmetic is hardest.
+slow_bits_step <- function(bits, by) {
+  ch <- slow_chars(bits)
+  run <- if (by > 0L) "1" else "0"
+  other <- if (by > 0L) "0" else "1"
+
+  i <- length(ch)
+  while (i >= 1L && ch[[i]] == run) {
+    ch[[i]] <- other
+    i <- i - 1L
+  }
+  if (i < 1L) {
+    return(NA_character_)
+  }
+  ch[[i]] <- run
+  paste(ch, collapse = "")
+}
+
+# Every probe one block calls for, as bit strings. Six addresses: the two ends
+# the block contains, the two just outside them, one drawn from a proper subnet
+# and one drawn from the other half of the supernet.
+slow_block_probes <- function(block) {
+  at <- regexpr("/", block, fixed = TRUE)
+  # `addr_strict()`, for `parse_within_blocks()`'s reason: a block is a
+  # specification, so its text has to mean one thing on every platform.
+  base <- addr_to_binary(addr_strict(substr(block, 1L, at - 1L)))
+  len <- as.integer(substring(block, at + 1L))
+  width <- nchar(base)
+  head <- substr(base, 1L, len)
+
+  start <- paste0(head, strrep("0", width - len))
+  end <- paste0(head, strrep("1", width - len))
+
+  # The upper half of the block: an address that is inside the block and inside
+  # a strictly longer block the table need not contain. A host route has none.
+  middle <- if (len < width) {
+    paste0(head, "1", strrep("0", width - len - 1L))
+  } else {
+    NA_character_
+  }
+
+  # The other half of the supernet: one bit of prefix away from the block and
+  # outside it, which is the difference a prefix length off by one cannot see.
+  # A /0 has no supernet, and no vendored block is one.
+  sibling <- if (len > 0L) {
+    flipped <- if (substr(head, len, len) == "0") "1" else "0"
+    paste0(substr(head, 1L, len - 1L), flipped, strrep("0", width - len))
+  } else {
+    NA_character_
+  }
+
+  list(
+    len = len,
+    width = width,
+    start = start,
+    end = end,
+    below = slow_bits_step(start, -1L),
+    above = slow_bits_step(end, 1L),
+    middle = middle,
+    sibling = sibling,
+    parent = if (len > 0L) {
+      paste0(substr(head, 1L, len - 1L), strrep("0", width - len + 1L))
+    } else {
+      NA_character_
+    }
+  )
+}
+
+# The same six probes over a vector of blocks: the addresses decoded, and the
+# subnet and supernet as block text ready for `addr_within()`. A block whose
+# probe does not exist is NA on both sides rather than absent, so every vector
+# here stays parallel to `blocks`.
+block_probes <- function(blocks) {
+  parts <- lapply(blocks, slow_block_probes)
+  bits <- function(nm) vapply(parts, `[[`, character(1), nm)
+  len <- vapply(parts, `[[`, integer(1), "len")
+
+  middle <- binary_to_addr(bits("middle"))
+  block_text <- function(x, len) {
+    text <- addr_format(x)
+    ifelse(is.na(text) | is.na(len), NA_character_, paste0(text, "/", len))
+  }
+
+  list(
+    len = len,
+    width = vapply(parts, `[[`, integer(1), "width"),
+    start = binary_to_addr(bits("start")),
+    end = binary_to_addr(bits("end")),
+    below = binary_to_addr(bits("below")),
+    above = binary_to_addr(bits("above")),
+    middle = middle,
+    sibling = binary_to_addr(bits("sibling")),
+    # The two blocks those last two are drawn from: this block's upper half, and
+    # the block one bit shorter holding this block and its sibling.
+    subnet = block_text(middle, len + 1L),
+    supernet = block_text(binary_to_addr(bits("parent")), len - 1L)
+  )
+}
+
 # An independent matcher: containment decided by string prefix rather than by
 # word arithmetic, longest wins, one address at a time. Far too slow to ship,
 # which is the point -- it shares nothing with `prefix_match()` except the
