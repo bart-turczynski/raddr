@@ -1477,6 +1477,66 @@ addr_family(a)  addr_zone(a)  addr_embedded(a)  addr_embedded_kind(a)
 addr_format(a)  addr_expand(a)  addr_reverse_pointer(a)
 ```
 
+#### 6.2.1 Reverse pointers **[implemented 2026-07-28]**
+
+`R/reverse.R`, one export and no decoder.
+`docs/research/08-encoding-reverse.md`'s first half is the specification, and
+`tests/testthat/test-reverse.R` is graded against it — both RFCs publish a
+worked example, so those are the first two tests.
+
+**The suffix is the only thing that can say which tree a name is in.** A label
+`9` is legal in both and means octet 9 under `in-addr.arpa`, nibble 9 under
+`ip6.arpa` (research 08 gotcha 9). So the family picks the tree here exactly as
+it picks the width in §6.5.1, and nothing sniffs the labels.
+
+**IPv4 reverses octets, IPv6 reverses nibbles.** Research 08 gotcha 1: the two
+granularities are different, and reversing IPv6 by octet is a classic bug that
+produces a name of the right length, made of legal labels, pointing somewhere
+else. `test-reverse.R` spells the wrong name out next to the right one rather
+than asserting the difference in the abstract.
+
+**The name is never built from the text form.** An `ip6.arpa` name is always 32
+labels — no `::`, no suppressed leading zeros, no mixed 4-in-6 spelling — and
+every one of those is something §5.1.3's renderers are *required* to do. So the
+implementation reads the octet matrix, and reusing `addr_format()` or
+`addr_expand()` would be gotcha 2 exactly. The one place the expanded form does
+appear is as a second opinion inside the tests, where it shares no code with
+what it checks.
+
+**The trailing dot is emitted; the case is a choice.** Research 08 round-trip
+failure 9: the absolute form is unambiguous, and the relative one is the same
+name but not the same string, so raddr picks one. Lowercase follows RFC 5952
+§4.3 by analogy — `UNVERIFIED` that any RFC mandates it for `ip6.arpa` labels
+specifically, and RFC 1035 §3.1's case-insensitive comparison rule means it
+cannot matter to a resolver.
+
+**The 4-in-6 form gets the mechanical answer.** No RFC settles whether
+`::ffff:192.0.2.1` maps into `ip6.arpa` or into `in-addr.arpa` (research 08
+gotcha 24, `UNVERIFIED`). raddr returns the `ip6.arpa` name because the address
+is an IPv6 address, documents that the *useful* name is usually the
+`in-addr.arpa` one, and leaves reaching it to naming the embedded address —
+the same refusal to demote as §6.5.1's width rule.
+
+**The zone is dropped, and a zoned address still renders.** A zone index is
+strictly local to a node (RFC 4007 §6) and the grammar has nowhere to put it.
+The second half of that sentence is the point: §3.5.2 records that CPython
+*raises* on `IPv6Address("fe80::1%lo0").reverse_pointer`, and §3.5.2's warning
+that Epic K inherits the bug is discharged by a test.
+
+**There is no pointer-to-address function.** Research 08 round-trip failure 10:
+`ip6.arpa` → address is bijective but `in-addr.arpa` → address is not, because
+a partial name is a prefix — `10.in-addr.arpa.` is a /8, from RFC 1035 §3.5's
+own gateway-lookup example. The general answer is a prefix and §6.6 does not
+exist yet, so the decoder waits for it rather than shipping a version that
+silently requires exactly four labels.
+
+Three forms are never emitted, all three for reasons the research note
+documents: `ip6.int` (deprecated by RFC 3152 §2, retired by RFC 4159), RFC 2673
+bitstring labels (made Experimental by RFC 3363, whose §3 found the hex text
+form sufficient), and RFC 2317 classless delegation names (an operator
+convention down to the separator character, so generate-only and never
+round-tripping).
+
 ### 6.3 Classify
 
 ```r
@@ -2018,6 +2078,7 @@ the decisions are not relitigated.
 | O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
 | O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
 | O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | 5.7 s against 2.5 s per 1e6 **[verified 2026-07-27, §11.1.1]**, which the flat-per-row theory does not explain. The suspicion, unmeasured, is `derive_status()`: for an IPv6 vector `aton`'s reading is missing on every row, so `readings_agree()` runs `vec_equal()` against an all-missing address and enters `blank_missing()`'s `proxy[is.na(code), ] <- NA` over a million rows and six columns — a path an all-accepted IPv4 vector never takes. If that is it, the fix is to skip dialects that accepted nothing, and it is small. Profile before touching anything |
+| O18 | **`davidchall/ipaddress` bugs to file (fourth and fifth), both in `reverse_pointer()`** | **[verified 2026-07-28, 1.0.3]** (a) every IPv6 name ends in **`ip.arpa`**, not `ip6.arpa` — `reverse_pointer(ip_address("2001:db8::1"))` is one character short of RFC 3596 §2.5's suffix, and `ip.arpa` is not a registered `.arpa` sub-zone at all (research 08 gotcha 7), so every IPv6 answer the function has ever returned is a wrong name that looks right. (b) the IPv6 branch **accumulates**: element *k* of the result carries the labels of elements 1..*k*, so `reverse_pointer(ip_address(c("::1", "2001:db8::1")))[[2]]` has 64 labels. Cost is quadratic in vector length (§11.1.3). IPv4 is correct on both counts, modulo the trailing dot, which is a choice. Joins the O11/O16 list |
 | O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
 
 ---
@@ -2195,6 +2256,37 @@ Nothing here changes the v0.1 decision. §8 defers `src/` with the API frozen,
 and four operations at 4x on a pure-R implementation of a C++ baseline is the
 same evidence §11.2 already records, one epic later and an order of magnitude
 smaller.
+
+### 11.1.3 Reverse pointers, 1e6 addresses **[verified 2026-07-28]**
+
+`bench/record.R`, best of seven after a warm-up.
+
+| | raddr | `ipaddress` | ratio | target |
+|---|---|---|---|---|
+| `addr_reverse_pointer()`, IPv4 | 0.737 s | 0.400 s | 1.84x | <= 3x |
+| `addr_reverse_pointer()`, IPv6 | 1.674 s | — | — | <= 3x |
+
+IPv4 meets the target against a C++ baseline. **The IPv6 row has no baseline,
+and the reason is O18**: `ipaddress` 1.0.3 accumulates its IPv6 output across
+the vector, so the run cannot finish at 1e6. Measured on this machine
+**[verified 2026-07-28]**, best of three:
+
+| n | `ipaddress` | raddr |
+|---|---|---|
+| 2 500 | 0.181 s | 0.003 s |
+| 5 000 | 0.904 s | 0.005 s |
+| 10 000 | 3.093 s | 0.010 s |
+
+Doubling the input multiplies their time by 5.0 and then by 3.4, which brackets
+the 4x of a quadratic; raddr's doubles. Extrapolating their curve to 1e6 is
+about eight hours, and the last element alone would be a 64 MB string, so this
+is not a slow baseline — it is one that does not terminate. The 13.2 s measured
+at n = 20 000 was where the comparison was abandoned.
+
+The IPv6 number is 2.3x the IPv4 one for 8x the labels, which is the shape the
+implementation predicts: the 256-entry table renders each octet as *both* its
+nibble labels, so the assembling `paste()` takes 16 pieces rather than 32 and
+the per-address work is one table lookup per octet either way.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**
