@@ -46,26 +46,42 @@ available, exact for both families.}
 4-in-6 family, whose value is 128 bits like any other address. A double
 cannot carry an IPv6 address, so raddr returns nothing rather than
 something close.}
-\item{\code{"bignum"}}{A \code{bignum::biginteger()}, when that package is installed.
-When it is not, you get the \code{"character"} result instead -- see below.}
+\item{\code{"bignum"}}{A \code{bignum::biginteger()}. The only output that needs an
+installed package, and the only one that can fail -- see below.}
 }
 }
 
 \section{The bignum dependency is optional, and actually optional}{
 
 
-\code{bignum} is in \code{Suggests}, and every part of this page works without it. The
-comparison worth stating: \code{ipaddress::ip_to_integer()} calls
+\code{bignum} is in \code{Suggests}, and the two default-reachable outputs never touch
+it. The comparison worth stating: \code{ipaddress::ip_to_integer()} calls
 \code{check_installed("bignum")} before doing anything, so without that package it
 errors -- including for IPv4, where no arbitrary-precision arithmetic is
 needed at all (verified 2026-07-28, ipaddress 1.0.3). raddr does its own
-arithmetic in base 10^6 over the four 32-bit words and reaches for \code{bignum}
-only when you ask for it.
+arithmetic in base 10^6 over the four 32-bit words, so you can encode and
+decode every address of either family with nothing installed.
 
-Asking for \code{output = "bignum"} without the package installed therefore
-returns the character vector rather than raising: degrade, never error. The
-fallback is silent by design, and it is the value \code{bignum::biginteger()}
-would have been handed anyway.
+\code{output = "bignum"} does require the package, and \strong{errors} when it is
+missing rather than quietly handing back the character vector. The digits
+would be right and the answers would not: character ordering is
+lexicographic, so \code{max()} of \code{c("9", "16777216")} is \code{"9"} and \code{sort()} puts
+10 before 9. A caller who asked for numbers and silently received text gets a
+wrong answer out of the first thing they do with it. The error names the
+install command and the \code{"character"} alternative.
+}
+
+\section{What bignum shows you is not what it stores}{
+
+
+\code{bignum} displays 7 significant figures by default, and its \code{as.character()}
+and \code{format()} follow the display -- so a \code{biginteger} holding
+\code{42540766411282592856903984951653826561} prints, formats, coerces and
+\code{write.csv()}s as \code{"4.254077e+37"}. The stored value is exact and arithmetic
+on it is exact; only the rendering rounds. Use
+\code{format(x, notation = "dec")}, or raise \code{options(bignum.sigfig)}, to see all
+of it. \code{integer_to_addr()} reads a \code{biginteger} by its decimal notation for
+this reason, so the round trip is unaffected.
 }
 
 \section{The family does not travel in the number, so you must pass it}{

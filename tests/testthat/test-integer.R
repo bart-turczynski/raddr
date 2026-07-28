@@ -299,22 +299,61 @@ test_that("a biginteger is read by its digits, not by as.character()", {
   )
 })
 
-test_that("asking for bignum without bignum degrades and does not error", {
-  # The whole point of the subissue, tested by making the package invisible
-  # rather than by uninstalling it. `ipaddress` fails this the other way:
-  # `ip_to_integer()` calls `check_installed("bignum")` before anything else, so
-  # it errors even for IPv4, where no big number is involved
-  # [verified 2026-07-28, 1.0.3].
+test_that("every other output works with the package invisible", {
+  # The point of the subissue, tested by hiding the package rather than by
+  # uninstalling it. `ipaddress` fails this: `ip_to_integer()` calls
+  # `check_installed("bignum")` before anything else, so it errors even for
+  # IPv4, where no big number is involved (verified 2026-07-28, 1.0.3).
   local_mocked_bindings(has_bignum = function() FALSE)
   a <- addr_pton(integer_corpus)
 
-  expect_silent(got <- addr_to_integer(a, output = "bignum"))
-  expect_type(got, "character")
-  expect_identical(got, addr_to_integer(a))
-  # And the default path never asked in the first place.
   expect_silent(addr_to_integer(a))
   expect_silent(addr_to_integer(a, output = "double"))
   expect_silent(integer_to_addr(addr_to_integer(a), addr_family(a)))
+  expect_identical(
+    addr_to_integer(addr_pton("2001:db8::1")),
+    "42540766411282592856903984951653826561"
+  )
+})
+
+test_that("asking for bignum without bignum errors rather than degrading", {
+  local_mocked_bindings(has_bignum = function() FALSE)
+  expect_error(
+    addr_to_integer(addr_pton("192.0.2.1"), output = "bignum"),
+    class = "raddr_error_dependency"
+  )
+})
+
+test_that("the character output is not a drop-in for the bignum one", {
+  # Which is why the line above errors instead of quietly returning this. The
+  # digits are right; the ordering is not, because character comparison is
+  # lexicographic.
+  chr <- addr_to_integer(addr_pton(c("0.0.0.9", "0.0.0.10", "1.0.0.0")))
+
+  expect_identical(chr, c("9", "10", "16777216"))
+  expect_identical(max(chr), "9")
+  expect_identical(sort(chr), c("10", "16777216", "9"))
+
+  skip_if_not_installed("bignum")
+  big <- bignum::biginteger(chr)
+  expect_identical(format(max(big), notation = "dec"), "16777216")
+})
+
+test_that("what bignum shows is not what it stores", {
+  skip_if_not_installed("bignum")
+  # The display is 7 significant figures by default and `as.character()` follows
+  # it, so the obvious coercion of a correct value is a rounded string. Pinned
+  # because the docs promise the stored value is exact anyway.
+  big <- addr_to_integer(addr_pton("2001:db8::1"), output = "bignum")
+
+  expect_identical(as.character(big), "4.254077e+37")
+  expect_identical(
+    format(big, notation = "dec"),
+    "42540766411282592856903984951653826561"
+  )
+  expect_true(
+    big == bignum::biginteger("42540766411282592856903984951653826561")
+  )
 })
 
 test_that("bit64's integer64 is read exactly", {

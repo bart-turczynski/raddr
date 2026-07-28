@@ -1672,10 +1672,27 @@ is offered in place of the value.
 `ipaddress::ip_to_integer()` calls `check_installed("bignum")` before it does
 anything, so without that package the function errors — including for IPv4,
 where no arbitrary-precision arithmetic is involved at all **[verified
-2026-07-28, 1.0.3]**. raddr does the arithmetic itself and touches `bignum` only
-for `output = "bignum"`; asking for that without the package returns the
-character vector instead of raising. `has_bignum()` exists as a seam so the
-degrade path is tested rather than asserted.
+2026-07-28, 1.0.3]**. raddr does the arithmetic itself, so both
+default-reachable outputs encode and decode either family with nothing
+installed. `has_bignum()` exists as a seam so that is tested with the package
+hidden rather than asserted.
+
+**`output = "bignum"` errors when `bignum` is missing, and that is not a
+retreat from "degrade, never error".** The subissue's complaint is about being
+made to install a package you did not ask for; it is not an argument for
+answering a request for numbers with text. Degrading to the character vector
+was implemented first and then reverted, because the digits are right and the
+answers are not: character ordering is lexicographic, so `max()` of
+`c("9", "16777216")` is `"9"` and `sort()` puts 10 before 9. The failure lands
+on the first thing a caller does with the value, and it is silent. The error
+names both the install command and the `"character"` output.
+
+**What `bignum` shows is not what it stores.** It displays 7 significant
+figures by default and its `as.character()` and `format()` follow the display,
+so a `biginteger` holding an IPv6 address prints, coerces and `write.csv()`s as
+`"4.254077e+37"`. The value is exact and so is arithmetic on it; only the
+rendering rounds. This is the same trap as the input one below, from the other
+side, and `tests/testthat/test-integer.R` pins both.
 
 **The arithmetic is base 10^6 over the four words**, which is the widest chunk
 keeping every intermediate under 2^53 and therefore exact in a double: the

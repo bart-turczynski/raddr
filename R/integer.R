@@ -174,24 +174,38 @@ integer_digits <- function(x) {
 #'     4-in-6 family, whose value is 128 bits like any other address. A double
 #'     cannot carry an IPv6 address, so raddr returns nothing rather than
 #'     something close.}
-#'   \item{`"bignum"`}{A `bignum::biginteger()`, when that package is installed.
-#'     When it is not, you get the `"character"` result instead -- see below.}
+#'   \item{`"bignum"`}{A `bignum::biginteger()`. The only output that needs an
+#'     installed package, and the only one that can fail -- see below.}
 #' }
 #'
 #' @section The bignum dependency is optional, and actually optional:
 #'
-#' `bignum` is in `Suggests`, and every part of this page works without it. The
-#' comparison worth stating: `ipaddress::ip_to_integer()` calls
+#' `bignum` is in `Suggests`, and the two default-reachable outputs never touch
+#' it. The comparison worth stating: `ipaddress::ip_to_integer()` calls
 #' `check_installed("bignum")` before doing anything, so without that package it
 #' errors -- including for IPv4, where no arbitrary-precision arithmetic is
 #' needed at all (verified 2026-07-28, ipaddress 1.0.3). raddr does its own
-#' arithmetic in base 10^6 over the four 32-bit words and reaches for `bignum`
-#' only when you ask for it.
+#' arithmetic in base 10^6 over the four 32-bit words, so you can encode and
+#' decode every address of either family with nothing installed.
 #'
-#' Asking for `output = "bignum"` without the package installed therefore
-#' returns the character vector rather than raising: degrade, never error. The
-#' fallback is silent by design, and it is the value `bignum::biginteger()`
-#' would have been handed anyway.
+#' `output = "bignum"` does require the package, and **errors** when it is
+#' missing rather than quietly handing back the character vector. The digits
+#' would be right and the answers would not: character ordering is
+#' lexicographic, so `max()` of `c("9", "16777216")` is `"9"` and `sort()` puts
+#' 10 before 9. A caller who asked for numbers and silently received text gets a
+#' wrong answer out of the first thing they do with it. The error names the
+#' install command and the `"character"` alternative.
+#'
+#' @section What bignum shows you is not what it stores:
+#'
+#' `bignum` displays 7 significant figures by default, and its `as.character()`
+#' and `format()` follow the display -- so a `biginteger` holding
+#' `42540766411282592856903984951653826561` prints, formats, coerces and
+#' `write.csv()`s as `"4.254077e+37"`. The stored value is exact and arithmetic
+#' on it is exact; only the rendering rounds. Use
+#' `format(x, notation = "dec")`, or raise `options(bignum.sigfig)`, to see all
+#' of it. `integer_to_addr()` reads a `biginteger` by its decimal notation for
+#' this reason, so the round trip is unaffected.
 #'
 #' @section The family does not travel in the number, so you must pass it:
 #'
@@ -279,14 +293,33 @@ addr_to_integer <- function(x, output = c("character", "double", "bignum")) {
     out[sel$v6] <- words_decimal(w)
   }
 
-  if (output == "bignum" && has_bignum()) {
+  if (output == "bignum") {
+    # Handing back the character vector instead would be worse than refusing.
+    # The digits are right, but character ordering is lexicographic: `max()` of
+    # c("9", "16777216") is "9", and `sort()` puts 10 before 9. A caller who
+    # asked for a number and silently got text gets a wrong answer out of the
+    # first thing they do with it, so this is the one place raddr requires the
+    # optional package -- and only because the caller named it.
+    if (!has_bignum()) {
+      abort(
+        c(
+          '`output = "bignum"` needs the bignum package, which is missing.',
+          i = 'Install it with `install.packages("bignum")`.',
+          i = paste(
+            'Or use the default `output = "character"`: the digits are the',
+            "same, but they sort as text rather than as numbers."
+          )
+        ),
+        class = "raddr_error_dependency"
+      )
+    }
     return(bignum::biginteger(out))
   }
   out
 }
 
 # The one place raddr looks for the optional package. A function rather than an
-# inline call so the degrade path is testable without uninstalling anything.
+# inline call so the branch is testable without uninstalling anything.
 has_bignum <- function() {
   requireNamespace("bignum", quietly = TRUE)
 }
