@@ -70,7 +70,7 @@ test_that("no column is derivable from another, so none is the answer", {
     expect_false(row$destination, label = block)
   }
 
-  # `reserved_by_protocol` is independent of the rest too: two of those five
+  # `reserved_by_protocol` is independent of the rest too: three of those five
   # rows carry it and two do not, on otherwise identical policy.
   reserved <- vapply(
     never_a_destination, function(b) row_for(b)$reserved_by_protocol,

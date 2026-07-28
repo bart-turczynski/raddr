@@ -123,11 +123,18 @@ architecture_divergence <- function() {
   skip_if_not(file.exists(path), "docs/architecture.md is not in the tarball")
   lines <- readLines(path, warn = FALSE)
 
+  # Only the file's absence is a skip. A file that is present but has lost the
+  # section is the drift this test exists to catch, so that fails instead --
+  # a skip would report the fixture going missing as nothing at all.
   start <- grep("^### 3\\.3 Measured divergence", lines)
-  skip_if(length(start) != 1L, "section 3.3 is not where it was")
+  if (length(start) != 1L) {
+    stop("section 3.3 is not where it was in docs/architecture.md")
+  }
   rows <- grep("^\\| `[0-9.]+` \\|", lines[seq.int(start, start + 20L)],
                value = TRUE)
-  skip_if(length(rows) == 0L, "no divergence table under section 3.3")
+  if (length(rows) == 0L) {
+    stop("no divergence table under section 3.3 in docs/architecture.md")
+  }
 
   cells <- strsplit(sub("^\\| ", "", sub(" \\|$", "", rows)), " \\| ")
   table <- as.data.frame(do.call(rbind, cells), stringsAsFactors = FALSE)

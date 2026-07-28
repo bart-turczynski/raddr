@@ -2093,8 +2093,8 @@ an implementation. Checked over all 51 blocks; it holds.
 usable" boolean would be lossy. `255.255.255.255/32` is the registry's *only*
 `Source = False, Destination = True` row — written to, never from. Five rows go
 the other way (`0.0.0.0/8`, `0.0.0.0/32`, `::/128`, `192.0.0.8/32`,
-`100:0:0:1::/64`), and two of those five carry `reserved_by_protocol` while two
-do not, on otherwise identical policy. That is the five-independent-columns
+`100:0:0:1::/64`), and three of those five carry `reserved_by_protocol` while
+two do not, on otherwise identical policy. That is the five-independent-columns
 shape §4 chose, now pinned rather than asserted in prose.
 
 **A withdrawn row reports `NA`, not `False`.** `192.88.99.0/24` and

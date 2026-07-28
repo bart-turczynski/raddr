@@ -58,6 +58,24 @@ slow_boundary_literals <- c(
   # fe80::/10 at both ends, which is the getaddrinfo scope lift (section 3.2).
   "fe80::1", "fe80:1::1", "fe7f:1::1", "fe80:abcd::1", "febf:abcd::1",
   "fec0:abcd::1", "fe80:0:abcd::1",
+  # Forms `slow_generated_literals` structurally cannot spell, worked through by
+  # hand against RFC 4291 section 2.2 rather than sampled: an elision standing
+  # for exactly one group in the middle, a dotted tail with no elision at all,
+  # a dotted tail at every wrong arity, and uppercase hextets, which
+  # `as.hexmode()` never renders.
+  "1:2:3:4:5:6:1.2.3.4", "1::2:3:4:5:6:7", "1::2:3:4:5:6:7:8",
+  "::0:0:0:0:0:0:0", "::0:0:0:0:0:0:0:0", "1:2:3:4:5:6:7:8:",
+  ":1:2:3:4:5:6:7:8", "1::1.2.3.4", "::ffff:0:1.2.3.4",
+  "1:2:3:4:5:1.2.3.4", "1:2:3:4:5:6:7:1.2.3.4", "::1:2:3:4:5:6:1.2.3.4",
+  "::1.2.3.4.5", "::1.2.3.", "::0x1.2.3.4", "::01.2.3.4",
+  "FE80::1", "::FFFF:1.2.3.4", "0:0:0:0:0:0:0:ABCD",
+  # A zone carrying the delimiters of the address grammar itself, which is only
+  # safe because the zone is split off before anything counts a dot or a colon.
+  "fe80::1%eth.0", "fe80::1%eth:0", "fe80::1%%",
+  # The digitless "0x" away from the ends, where `empty_hex_final` decides, and
+  # whitespace mid-literal, where `stop_at_space` truncates to a shorter arity.
+  "0x.1", "1.0x", "0x.1.2", "1.0x.2", "1.2.0x", "1.0x.2.3", "1.2.0x.3",
+  "1 .2.3.4", "1.2 .3.4", "1.2.3 .4", "1.2.3. 4", "1.\t2.3.4", "1.2.3.4\v",
   # And the missing address, which is not a rejection.
   NA_character_
 )
