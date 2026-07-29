@@ -231,8 +231,11 @@ read_embedded <- function(words, segments, at) {
 extract_embeddings <- function(x, kind) {
   n <- vec_size(x)
   empty <- empty_raddr_embedding()
+  # Kept as a plain list as well as a `list_of`, because the scatter at the end
+  # of the function writes into it rather than rebuilding it.
+  slots <- rep(list(empty), n)
   out <- list(
-    embeddings = new_list_of(rep(list(empty), n), ptype = empty),
+    embeddings = new_list_of(slots, ptype = empty),
     global = stats::setNames(
       rep(list(rep(NA, n)), length(raddr_embedding_roles)),
       raddr_embedding_roles
@@ -301,15 +304,28 @@ extract_embeddings <- function(x, kind) {
     category = field(inner, "category")
   )
 
-  # Back into one element per outer address. A level per address rather than a
-  # size per address, so the rows that extracted nothing get their empty.
-  out$embeddings <- new_list_of(
-    unname(vec_chop(rows, indices = split(
-      seq_along(at),
-      factor(at, levels = seq_len(n))
-    ))),
-    ptype = empty
-  )
+  # Back into one element per outer address, with the rows that extracted
+  # nothing keeping the shared empty `slots` already holds.
+  #
+  # `vec_chop()` is asked ONLY for the groups that have rows. It used to be
+  # given a `split()` over a factor whose levels were `seq_len(n)` -- a level
+  # per address, present or absent -- which asks `vctrs` for `n` slices of a
+  # nested record and pays a `vec_proxy()` round-trip for every one of them, to
+  # deliver as few as nineteen. That cost 11.7 s per 1e6 addresses and was 84%
+  # of `addr_classify()` on IPv6, against 0.4 s for the prefix lookups §11.1.6
+  # exists to tune. Worse than slow, it was *flat in the number of embeddings
+  # and linear in `n`* -- 11.1 s for 19 embedded rows and 12.2 s for 240,172 --
+  # so no wall clock could show it and only the decomposition in §11.1.7 did.
+  #
+  # `split()` on an integer vector groups by `as.factor()`, whose levels are
+  # `sort(unique())`, so the groups arrive in ascending position order and
+  # `sort(unique(at))` names them. `at` happens to be ascending already, from
+  # `order_in_element` above, but spelling the sort makes the scatter correct
+  # whether or not it is -- the alternative reads the positions back out of
+  # `names()`, which is a round-trip through character.
+  groups <- unname(split(seq_along(at), at))
+  slots[sort(unique(at))] <- vec_chop(rows, indices = groups)
+  out$embeddings <- new_list_of(slots, ptype = empty)
 
   global <- embedded_is_global(inner)
   for (name in unique(role)) {

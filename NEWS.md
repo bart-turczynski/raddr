@@ -1,5 +1,18 @@
 # raddr (development version)
 
+## Performance
+
+* `addr_classify()` is **15.7x faster on IPv6** — 0.88 s per 1e6 addresses,
+  down from 13.9 s. `extract_embeddings()` scattered its result back to one
+  element per address by chopping into a `vctrs` slice per address, so it asked
+  for a million slices of a nested record to deliver as few as nineteen. It now
+  chops only the groups that have rows. Answers are unchanged, `identical()` on
+  both a hand-built corner corpus and 1e6 random rows.
+* That cost was flat in the number of embeddings and linear in the vector
+  length, so it was invisible in a total and only showed up in
+  `bench/classify.R`'s decomposition (`docs/architecture.md` §11.1.7). IPv4 is
+  unaffected: it returns before the scatter, having no transition formats.
+
 ## Documentation
 
 * The reality dialects are now documented as modelling **Apple** `inet_pton()`
