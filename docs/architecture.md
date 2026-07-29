@@ -3355,6 +3355,77 @@ look for, but what it guards is totality.
 absent — verified by hiding the installed package and running the suite: six
 tests, six skips, no errors, nothing at file scope touching the namespace.
 
+### 11.10 The migration diff against the in-house guards **[measured 2026-07-29]**
+
+sitemapr and robotstxtr each carry a structural SSRF guard whose IP reading
+raddr is meant to replace. Measured read-only in both repos; nothing was
+changed in either. `tests/testthat/test-migration.R` pins the facts a
+delegation would rest on.
+
+**The two guards are one implementation.** `R/ssrf.R` in each repo is
+byte-identical for its whole IP body — 232 lines, 11 functions — differing only
+in the entry point (`ssrf_check_parsed()` takes a parsed rurl row,
+`robots_ssrf_check()` takes a URL). So "run both guards' assertions" is running
+one guard's assertions twice, their agreement with each other is not evidence
+of anything, and a defect in one is a defect in both. That duplication is a
+better argument for delegating than any divergence below.
+
+**On the reading itself, they agree completely.** raddr's 1861-literal hostile
+corpus through the guard: **659 literals read by both, zero disagreements on
+the bits.** Not one address is read differently. And **zero literals that raddr
+reads and the guard refuses** — so delegation cannot loosen the guard, which is
+the direction that would matter for a security control.
+
+Three literals go the other way, and they are two different findings.
+
+**The guard's fail-closed posture has a trailing-separator hole.** `::1:`,
+`::ffff:`, `1:2:3:4:5:6:7:8:` and `1.2.3.4.` are read as valid addresses.
+The cause is one line: R's `strsplit()` **drops a trailing empty field**, so
+`strsplit("1:2:3:4:5:6:7:8:", ":")` returns eight groups, not nine, and
+`ssrf_expand_zero_run()`'s arity check passes. The same mechanism makes
+`ssrf_is_dotted_quad("1.2.3.4.")` true. The guard's header states the opposite
+as an invariant — a literal that cannot resolve to exactly 8 hextets "is
+refused with `malformed-address` rather than reaching the default allow" — and
+that is the reliance SITE-vovtwvuh set out to remove. raddr calls all three
+IPv6 forms `malformed`, under **every one of the six dialects**.
+
+Severity is bounded and should be stated as such: the hole makes the guard read
+`X:` as `X`, so it over-accepts rather than under-blocks — `::1:` still
+classifies as loopback and is still refused. What it breaks is the documented
+invariant, not a specific block.
+
+**The trailing dot is not the guard's mistake.** `1.2.3.4.` is a hostname
+carrying the DNS root label; WHATWG reads it as an address and the other five
+dialects refuse, so raddr reports it as **`divergent`** rather than picking a
+side. The guard agrees with WHATWG — silently, and without knowing that is what
+it is doing. This is the P3 case, and the fact the guard needs is one raddr
+already has.
+
+**One reason code in the guard is wrong.** Its IPv4 matrix files
+`100.64.0.0/10` under `cloud-metadata`. That block is RFC 6598 **Shared Address
+Space** — carrier-grade NAT — and has nothing to do with metadata endpoints.
+raddr answers `shared`. The codes are documented as "machine-readable and
+stable", so a caller keying off `cloud-metadata` misattributes every CGNAT
+address. `0.0.0.0/8` is filed as `unspecified` where raddr says `this_network`,
+which is the more defensible of the two but still imprecise: only
+`0.0.0.0/32` is the unspecified address.
+
+**What raddr supplies, and what it declines to.** Every range-derived reason
+code in the guard is a rename of an `addr_category()` value — `loopback`,
+`private`, `link_local`, `this_network`, `shared` — and the whole embedding
+inventory is `addr_embedded_kind()` plus `addr_embeddings()`, both ISATAP
+markers included. The obfuscation grep in `ssrf_numeric_literal_blocked()` is
+answered structurally rather than by pattern: a literal the lenient dialects
+read and `strict` refuses **is** the obfuscation, and it arrives with the
+address each dialect saw. What raddr does not supply is `cloud-metadata` and
+the metadata hostname — those are policy, they are P8, and they are ssrfr's.
+
+**Nothing here changed raddr.** The diff found no defect in it, and the
+literals involved were already pinned (`test-codes.R`'s `trailing_dot`,
+`test-ipv6.R`'s stray-colon block). The new file pins the *contract* instead,
+because the migration depends on a vocabulary that no existing test forces to
+stay put.
+
 ---
 
 ## 12. Dependencies
