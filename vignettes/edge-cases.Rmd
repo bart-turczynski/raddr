@@ -1,0 +1,302 @@
+---
+title: "Edge cases"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Edge cases}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(raddr)
+```
+
+This is a "be warned" catalogue: the places where address handling surprises
+people, and what raddr answers there.
+
+**Every table below is computed when this vignette is built**, from raddr's own
+parsers, its exported accessors and the vendored IANA snapshots. None of it is
+typed out by hand. That is deliberate — a stale warnings document is worse than
+no warnings document, because people trust it. If raddr's behavior changes,
+these tables change with it, and if they stop being true the package stops
+building.
+
+The framing between the tables is hand-written, and it is the part to read
+sceptically.
+
+```{r}
+show <- function(literals) {
+  p <- addr_parse(literals)
+  out <- data.frame(input = literals)
+  for (d in c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl")) {
+    out[[d]] <- format(addr_reading(p, d))
+  }
+  out
+}
+```
+
+## Reading a literal
+
+### The leading zero
+
+The headline case, and the one that changes which host you reach.
+
+```{r}
+show(c("0177.0.0.1", "010.0.0.1", "192.0.010.1", "192.0.048.1"))
+```
+
+`0177.0.0.1` reaches loopback in a browser and a routable LACNIC address
+through `inet_pton`. `192.0.048.1` is worse in a quieter way: `048` is not a
+valid octal number, so the octal readers reject the whole literal while
+`inet_pton` strips the zero and reads decimal — **curl reaches a host a browser
+refuses to dial**.
+
+If you take one thing from this vignette: a leading zero in an address literal
+is never safe to normalize away, and never safe to pass through unexamined.
+
+### Short forms and the whole-host number
+
+```{r}
+show(c("10.1", "127.1", "2130706433", "4294967296", "1.4294967296"))
+```
+
+`inet_aton` accepts one, two, three or four parts, filling the gap. It also
+range-checks every arity **except** the whole-host number: with two to four
+parts the final part is bounded, so `1.4294967296` is rejected, while a single
+part is truncated modulo 2^32 with no check at all. That is why `4294967296` is
+`0.0.0.0` rather than an error.
+
+### The trailing dot, and the WHATWG asymmetry
+
+```{r}
+show(c("1.2.3.4.", "1.2.3.04", "::1.2.3.04"))
+```
+
+Look at the last two rows together. `whatwg` reads `1.2.3.04` as `1.2.3.4` — a
+leading zero in a standalone IPv4 host is only a validation *warning* in that
+specification. The same leading zero inside the IPv4 tail of an IPv6 literal is
+a hard *failure*, so `whatwg` refuses `::1.2.3.04` while `pton` reads it
+happily.
+
+**The WHATWG IPv6 tail is stricter than the WHATWG standalone IPv4 parser**: no
+hex, no octal, no short forms and no trailing dot reach it. rust-url implements
+it as a separate loop rather than by calling its own IPv4 parser, which is the
+clearest evidence the asymmetry is intended rather than accidental.
+
+A trailing dot goes the other way: `whatwg` drops one before parsing, so it
+alone accepts `1.2.3.4.`.
+
+### IPv6: where the disagreement moves
+
+The two paper dialects disagree constantly about IPv4. About IPv6 they largely
+agree, and the divergence moves to the reality side:
+
+```{r}
+show(c("::1", "00001::", "12345::", "fe80:abcd::1", "1:2:3:4:5:6:7:8:"))
+```
+
+`inet_pton` puts no width limit on leading zeros in a hextet and then caps the
+*significant* digits at four, so `00001::` is `1::` while `12345::` is a
+rejection. The RFC 4291 grammar caps the raw digits, so the paper dialects
+reject the whole family.
+
+`fe80:abcd::1` is the IPv6 counterpart of `0177.0.0.1`: two entry points into
+one C library returning different bits for one string. Apple's `getaddrinfo`
+reads the second hextet of a link-local address as a scope ID and clears it;
+`inet_pton` does not.
+
+`1:2:3:4:5:6:7:8:` is here as a warning about *text handling* rather than about
+raddr. R's `strsplit()` drops a trailing empty field, so code that counts groups
+by splitting on `":"` sees eight where the literal has a ninth empty one. Every
+dialect refuses this literal; a hand-rolled group counter may not.
+
+### The zone travels beside the bits
+
+```{r}
+show(c("fe80::1%lo0", "fe80::1%25lo0", "fe80::1%lo0%en0"))
+```
+
+```{r}
+addr_zone(addr_pton("fe80::1%lo0"))
+addr_pton("fe80::1%lo0") == addr_pton("fe80::1%en0")
+addr_zone(addr_pton("fe80::1%25lo0"))
+```
+
+An RFC 4007 zone ID names an interface, not an address, so it is stored beside
+the bits and takes no part in equality. Two addresses differing only by zone are
+the same address, and `addr_zone()` is the only thing that tells them apart —
+including in a deduplication, a join, or a `unique()` call.
+
+The percent-encoded `%25lo0` form was RFC 6874's answer to putting a zone in a
+URI. Note the third line above: raddr reads a zone as **literal text and does
+not percent-decode it**, so `%25lo0` yields the zone `"25lo0"`, not `"lo0"`.
+That is the honest reading — decoding would be a URL-layer step, and raddr never
+sees a URL — but it means zone text arriving from a URI needs decoding before it
+reaches raddr, or it will silently name a different interface.
+
+**RFC 9844 (August 2025) completely obsoletes RFC 6874 and drops the URI syntax
+entirely**, so there is no live standard for a zone in a URI. Browsers never
+implemented it.
+
+## What raddr models, and what it does not
+
+`strict` and `whatwg` are fixed specifications and read the same everywhere.
+`pton` and `aton` model *measured* behavior, and the C library matters:
+
+| literal | Apple | glibc | musl |
+|---|---|---|---|
+| `1.2.3.4 ` (trailing space) | accept | accept | reject |
+| `1.2.3.4junk` | reject | **accept** | reject |
+
+raddr's reality dialects are measured against **Apple libc**. glibc's public
+`inet_aton` ignores trailing garbage outright — which is why glibc had to ship a
+separate `__inet_aton_exact` for callers that must not tolerate it, the clearest
+possible evidence that the leniency is deliberate. musl rejects any trailing
+byte that is not `.` or NUL.
+
+Three answers, and raddr currently ships one. Where a reality dialect appears in
+this vignette, read it as "what this libc does", not "what every libc does".
+The glibc and musl `inet_pton` rows are not measured at all yet.
+
+raddr itself is pure R and calls no resolver, so it returns these same answers
+on every machine — **including a machine whose libc would answer differently**.
+That is a feature for reproducibility and a trap if you assume the local system
+agrees.
+
+## Classification
+
+### Longest prefix match, and why a parent block is not the answer
+
+The registry nests. A more specific block can reverse its parent's policy, so
+matching a prefix is not enough — you must match the *longest* one:
+
+```{r}
+lpm <- as.data.frame(addr_classify(addr_pton(c("192.0.0.1", "192.0.0.9"))))
+lpm[, c("block", "name", "category", "globally_reachable")]
+```
+
+`192.0.0.9` is globally reachable and sits inside `192.0.0.0/24`, which is not.
+A check written against the `/24` gets that address exactly backwards. Here is
+every carve-out of that shape in the vendored snapshot, generated rather than
+listed:
+
+```{r}
+reg <- addr_registry()
+network <- addr_pton(sub("/.*$", "", reg$block))
+closed <- !is.na(reg$globally_reachable) & !reg$globally_reachable
+open <- !is.na(reg$globally_reachable) & reg$globally_reachable
+
+reg[open & addr_within_any(network, reg$block[closed]), c("block", "name")]
+```
+
+Those are found by asking raddr itself — each block's network address tested for
+containment in every block IANA marks as not globally reachable — so the list is
+the registry's, not an editor's.
+
+### `0.0.0.0` is two rows, not one
+
+```{r}
+zero <- as.data.frame(addr_classify(addr_pton(c("0.0.0.0", "0.1.2.3"))))
+zero[, c("block", "name", "category")]
+```
+
+Only `0.0.0.0/32` is the unspecified address. The rest of `0.0.0.0/8` is "this
+network", a different thing with a different meaning. Tables that collapse these
+into one row — including RFC 6890's own Table 2 — lose the distinction; the
+current registry splits them and so does raddr.
+
+### "Not globally reachable" is not "not forwardable"
+
+Two separate IANA columns, and they genuinely differ:
+
+```{r}
+sel <- !is.na(reg$globally_reachable) & !reg$globally_reachable &
+  !is.na(reg$forwardable) & reg$forwardable
+reg[sel, c("block", "name", "globally_reachable", "forwardable")]
+```
+
+Every one of those blocks is forwardable by a router and not globally reachable.
+Collapsing the two columns into a single "is it private" boolean silently
+misfiles all of them.
+
+### The `N/A` rows, and two different reasons for one `NA`
+
+```{r}
+reg[is.na(reg$globally_reachable),
+    c("block", "name", "footnotes", "termination_date")]
+```
+
+Four blocks carry no value, and they do not carry it for the same reason. Two
+are deprecated and say so with a `termination_date`. Two are live rows where
+IANA itself records the value as `N/A`, with a footnote explaining why.
+
+raddr ships the fields that tell them apart rather than collapsing them, because
+"IANA declined to state this" and "this block was withdrawn in 2015" are not the
+same fact and should not arrive looking alike.
+
+### Reason codes at the classify layer
+
+Every rule raddr reports about an address, with the normative force of its
+source:
+
+```{r}
+codes <- addr_codes_registry()
+codes[codes$layer == "classify", c("code", "strength", "rfc")]
+```
+
+Reporting only the MUST rules would collapse a spectrum into a binary. The
+grade follows the rule's *substance*, not a keyword search: RFC 4291 and RFC
+8215 invoke RFC 2119 nowhere, so grading by keyword would mark a binding format
+definition as unspecified purely because of how its author wrote it down. See
+`vignette("reason-codes")` for all 23 codes.
+
+### RFC 6890 is a stale snapshot
+
+Many libraries cite RFC 6890 (2013) as the source for special-purpose ranges.
+It is the RFC that *created* the registry, and it is thirteen years out of date:
+it is missing `3fff::/20`, `5f00::/16`, `64:ff9b:1::/48`, `2001:20::/28`,
+`2001:30::/28`, `100:0:0:1::/64`, `2001:1::1/128`, `2001:1::2/128`,
+`2001:1::3/128`, `2001:3::/32`, `2001:4:112::/48` and `2620:4f:8000::/48`, and
+it still lists `2001:10::/28` as live ORCHID rather than deprecated.
+
+Cite RFC 6890 for the *framework* — it defines what the policy columns mean —
+and the IANA registry for the *contents*. raddr does exactly that.
+
+## Provenance
+
+Every classification carries the stamp of the snapshot that answered it, so a
+result can be traced to a specific version of the data:
+
+```{r}
+addr_registry_version()
+addr_address_space_version()
+addr_transition_version()
+addr_category_version()
+```
+
+```{r}
+addr_registry_outdated()
+```
+
+The snapshots are vendored, so raddr never touches the network and a
+classification is reproducible. The cost is that the data is exactly as fresh as
+the installed package. `addr_registry_outdated()` is how you ask.
+
+## What none of this decides
+
+raddr reports facts. Everything above is a description of what a specification
+says or what an implementation does, and none of it is a verdict about whether
+you should accept an address. That decision depends on what you are defending —
+it is policy, and it belongs in a different package.
+
+The failure mode this vignette exists to prevent is the quiet one: a literal
+that passes your validator and reaches a different host than the one you
+checked. That is not a rare adversarial edge case. It is `0177.0.0.1`, and it
+is the first row of the first table.
