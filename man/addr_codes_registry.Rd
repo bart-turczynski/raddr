@@ -21,13 +21,21 @@ valid codes from it rather than keeping a second list, and a test asserts
 that every code has at least one input in the corpus that produces it, so a
 code that nothing can emit fails the build.
 }
-\section{A cross-repo contract}{
+\section{A versioned vocabulary, not an alias}{
 
 
-The codes are meant to be read by other packages -- \code{ssrfr} reports raddr's
-codes rather than inventing a parallel vocabulary. Adding a code is therefore
-an addition to raddr's API and removing one is a breaking change, which is
+The codes are meant to be read by other packages, so adding one is an
+addition to raddr's API and removing one is a breaking change -- which is
 what the \code{since} column records.
+
+They are \strong{not} a vocabulary another package echoes verbatim. \code{ssrfr} owns
+its own reason codes and its own result model, and the relationship between
+the two vocabularies is many-to-one and conditional rather than an alias:
+raddr states facts, a policy layer interprets them into a refusal reason. A
+raddr code may travel in a detailed result as evidence without being that
+package's public reason. This is the same separation drawn between raddr's
+\code{category} and a policy verdict, and for the same purpose -- a policy layer
+must not enumerate a descriptive classifier's output as its deny list.
 }
 
 \section{Layers}{
@@ -39,6 +47,30 @@ Reported by \code{\link[=addr_codes]{addr_codes()}}.}
 \item{\code{classify}}{Facts about a parsed address noted during
 classification. Reported in the \code{codes} field of \code{\link[=addr_classify]{addr_classify()}}.}
 }
+}
+
+\section{Why every rule is reported, not only the MUSTs}{
+
+
+\code{strength} records how much force the rule a code reports actually carries:
+\code{"must"}, \code{"should"}, \code{"may"} or \code{"unspecified"}. Reporting only the MUST
+rules would collapse a spectrum into a binary, which is the move raddr
+exists to refuse -- so a rule stated in weaker language is still reported,
+and the grade is what says not to act on it as though it were a MUST.
+
+It is \code{NA} for every \code{parse} code, and that is the honest value rather than
+a filler: those codes describe what a parser \strong{did} with a literal, not
+what a specification mandates about an address.
+
+The grade follows the rule's substance, not the presence of an RFC 2119
+keyword, because the sources do not agree about keywords: RFC 4291 and
+RFC 8215 invoke RFC 2119 nowhere and state their rules in lowercase or as a
+format diagram, while RFC 3056, 3927, 4193, 4380 and 6052 all invoke it.
+Each \code{summary} says which case it is, so the grading can be checked rather
+than taken on trust.
+
+\code{"should"} has no member yet. The level is kept anyway, so that a consumer
+does not read \code{must} and \code{may} as the whole scale.
 }
 
 \examples{

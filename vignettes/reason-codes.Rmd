@@ -1,0 +1,554 @@
+---
+title: "Reason codes"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reason codes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(raddr)
+```
+
+A reason code is raddr's answer to "why". A reading that produced no address
+comes with the code that says what stopped it, and an address that classified
+into a registry block comes with codes for the rules it sits awkwardly against.
+Codes are the reason a refusal is a finding rather than a shrug.
+
+The whole vocabulary is one data frame:
+
+```{r}
+registry <- addr_codes_registry()
+nrow(registry)
+table(registry$layer)
+```
+
+This vignette walks every code in it. Each entry says what the code *means*,
+why it is *a signal* worth having, and how it is *detected* — including what it
+does not prove, which is usually the part that matters.
+
+## Two layers, and they are not the same kind of statement
+
+```{r}
+registry[registry$layer == "parse", "code"]
+registry[registry$layer == "classify", "code"]
+```
+
+A **parse** code describes what a parser *did* with a piece of text. It is a
+fact about one dialect's reading, and a different dialect may have no objection
+at all. A **classify** code describes an *address* against a rule in a
+specification: the address parsed fine, and something about it contradicts a
+document. That difference is why only the classify layer is graded:
+
+```{r}
+table(registry$layer, registry$strength, useNA = "ifany")
+```
+
+`strength` is `NA` for all fifteen parse codes, and that is the honest value
+rather than a placeholder. "This dialect wanted digits here" is not a rule with
+normative force; it is a description of a grammar.
+
+### A helper for the examples below
+
+Parse codes are per-dialect, so the interesting question about any example is
+always *which dialects said this*. One helper answers it for every example in
+the next section:
+
+```{r}
+codes_by_dialect <- function(literal) {
+  p <- addr_parse(literal)
+  found <- vapply(
+    c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl"),
+    function(d) paste(unlist(addr_codes(p, d)), collapse = ", "),
+    character(1)
+  )
+  data.frame(codes = found)
+}
+```
+
+## The parse layer
+
+### `not_a_number`
+
+*Meaning.* A dot-separated part is not a number in any radix this dialect
+reads.
+
+*Why it is a signal.* It is the ordinary "that is not an address" answer, and
+its value is mostly that it is *not* one of the interesting codes below. A
+literal that fails this way fails everywhere, so there is no divergence to
+reason about.
+
+*Detection and precision.* Raised on the first part that fails to parse.
+A code fires once per part, first match wins, so a part that is not a number
+does not also report the range its garbage value happened to land outside of.
+
+```{r}
+codes_by_dialect("1.2.a.4")
+```
+
+### `leading_zero`
+
+*Meaning.* A part carries a leading zero and this dialect forbids one.
+
+*Why it is a signal.* **This is the most important code in the package.** A
+leading zero is where the dialects part company: the RFC dotted-quad grammar
+refuses it, a browser reads it as octal, and `inet_pton` strips it and reads
+decimal. One string, several hosts.
+
+*Detection and precision.* Note carefully what the example shows — only
+`strict` raises it. **A `leading_zero` code does not mean the literal was
+rejected.** It means one dialect objected while the others read the literal
+happily, and quite possibly as *different addresses*. Seeing this code is a
+reason to go look at the readings, not a reason to stop.
+
+```{r}
+codes_by_dialect("01.2.3.4")
+addr_reading(addr_parse("0177.0.0.1"), "whatwg")
+addr_reading(addr_parse("0177.0.0.1"), "pton")
+```
+
+### `empty_part`
+
+*Meaning.* Two consecutive dots, or a leading dot, leave a part empty.
+
+*Why it is a signal.* An empty part is almost always a truncation or a
+concatenation bug upstream rather than a deliberate spelling.
+
+*Detection and precision.* Every dialect raises it; there is no divergence
+here. A *trailing* dot is a different case with its own code, because the
+dialects disagree about that one.
+
+```{r}
+codes_by_dialect(".1.2.3")
+```
+
+### `empty_hex`
+
+*Meaning.* A part is a digitless `"0x"` where this dialect requires digits.
+
+*Why it is a signal.* `inet_aton` tolerates a digitless `0x` in any part but
+the last, treating it as zero, and WHATWG has no such carve-out — a bare `0x`
+is simply zero there. It is a small, real difference between two widely
+deployed number parsers.
+
+*Detection and precision.* Only `aton` raises it, and only in the final part;
+`0x.1` and `0x.0x.0` parse without complaint. The other dialects reach a
+different objection to the same text, which is why the example below shows
+three different sets of codes for one literal.
+
+```{r}
+codes_by_dialect("0x")
+```
+
+### `out_of_range`
+
+*Meaning.* A part exceeds the largest value its position can hold.
+
+*Why it is a signal.* It separates "this was never an address" from "this was
+an address that overflowed", which is a real distinction when you are looking
+at logs.
+
+*Detection and precision.* The bound is positional, not a flat 255.
+`inet_aton` range-checks every arity except the whole-host number: with two to
+four parts the final part is bounded by `256^(5-k) - 1`, so `127.16777215` is
+fine and `127.16777216` is not. With one part there is no check at all and the
+value is truncated modulo 2^32 — which is why `4294967296` is `0.0.0.0` under
+`aton` and rejected everywhere else.
+
+```{r}
+codes_by_dialect("256.1.1.1")
+addr_aton(c("127.16777215", "127.16777216", "4294967296"))
+```
+
+### `wrong_part_count`
+
+*Meaning.* The number of dot-separated parts is not one this dialect accepts.
+
+*Why it is a signal.* The short forms are the reason `10.1` reaches `10.0.0.1`
+in a browser and a shell but not in a dotted-quad validator.
+
+*Detection and precision.* Only the dialects that require exactly four parts
+raise it. `whatwg` and `aton` accept one, two, three or four parts, so a
+three-part literal is an address to them and an error only to `strict` and
+`pton`.
+
+```{r}
+codes_by_dialect("1.2.3")
+addr_whatwg("1.2.3")
+```
+
+### `trailing_dot`
+
+*Meaning.* The literal ends in a dot that this dialect does not drop.
+
+*Why it is a signal.* A trailing dot is a fully qualified domain name's
+spelling, so it turns up whenever host text has been through a DNS-shaped code
+path.
+
+*Detection and precision.* `whatwg` is the odd one out: it drops a single
+trailing dot before parsing, so it alone has no objection. Every other dialect
+raises the code. Do not read this as "harmless" — it is the WHATWG parser
+accepting a literal the others reject.
+
+```{r}
+codes_by_dialect("1.2.3.4.")
+addr_whatwg("1.2.3.4.")
+```
+
+### `zone_not_permitted`
+
+*Meaning.* The literal carries a zone ID and this dialect has no zone ID at
+all.
+
+*Why it is a signal.* RFC 4007 zone IDs exist in the socket API and in what
+people type, and not in the address grammars. The code marks that boundary
+rather than pretending the text was malformed.
+
+*Detection and precision.* Raised by the two paper dialects only. The reality
+dialects read the zone and keep it beside the bits, where it takes no part in
+equality.
+
+```{r}
+codes_by_dialect("fe80::1%lo0")
+addr_zone(addr_pton("fe80::1%lo0"))
+```
+
+### `multiple_zones`
+
+*Meaning.* More than one `%`, so the zone ID has no single delimiter.
+
+*Why it is a signal.* There is no reading of two zone IDs, so this is a
+genuine malformation rather than a difference of opinion.
+
+*Detection and precision.* The paper dialects reach `zone_not_permitted`
+first — they object to the *first* `%` and never get as far as the second — so
+this code comes only from the dialects that have zones at all. Two dialects
+refusing one literal for two different reasons is normal and is why codes are
+per-dialect.
+
+```{r}
+codes_by_dialect("fe80::1%lo0%en0")
+```
+
+### `bad_hextet`
+
+*Meaning.* A group is not one to four hexadecimal digits.
+
+*Why it is a signal.* It catches both non-hex characters and over-long groups.
+
+*Detection and precision.* Note that `aton` raises nothing at all here, and
+that is not an oversight. `inet_aton` is an `AF_INET` parser: it has no
+*objection* to a colon literal, it has no *reading* of one. That is an outcome,
+not a code, and it is why there is no `no_ipv6_reading` in the vocabulary.
+
+```{r}
+codes_by_dialect("g::1")
+addr_outcome(addr_parse("g::1"), "aton")
+```
+
+### `empty_group`
+
+*Meaning.* A stray colon leaves a group empty.
+
+*Why it is a signal.* It is the IPv6 counterpart of `empty_part`, and like it,
+usually a truncation.
+
+*Detection and precision.* A single leading or trailing colon is an empty
+group; a *doubled* one is the elision `::` and is fine. The engine narrows row
+by row through one gate at a time, so the first gate a row fails is its reason.
+
+```{r}
+codes_by_dialect(":1")
+```
+
+### `bad_elision`
+
+*Meaning.* More than one `"::"`, or a `":::"` run.
+
+*Why it is a signal.* The elision has to be unambiguous — two of them cannot be
+expanded to a unique address.
+
+*Detection and precision.* Raised by every dialect that reads IPv6. It is
+about the *count* of elisions, not their position; a single `::` anywhere is
+legal, including at either end.
+
+```{r}
+codes_by_dialect("::1::2")
+```
+
+### `wrong_group_count`
+
+*Meaning.* The literal does not resolve to exactly eight groups.
+
+*Why it is a signal.* Eight groups is the whole of the IPv6 address, and a
+literal that resolves to seven or nine is not an address under any reading.
+
+*Detection and precision.* "Resolve to" is the operative phrase: the check runs
+*after* the elision has been expanded, so `::1` is one written group and eight
+resolved ones. Watch out for text handling that drops a trailing empty field
+before this check runs — a literal ending in `:` can be made to look like it has
+one fewer group than it does.
+
+```{r}
+codes_by_dialect("1:2:3:4:5:6:7")
+```
+
+### `bad_embedded_ipv4`
+
+*Meaning.* The dotted-quad tail is not an address under this dialect's own
+IPv4 rules.
+
+*Why it is a signal.* It is the one place the two families meet, and each
+dialect judges the tail by its own IPv4 grammar rather than by a shared one.
+
+*Detection and precision.* Because the tail is judged by the *dialect's own*
+rules, a tail that one dialect reads as an address is a `bad_embedded_ipv4` to
+another — `::ffff:1.2.3.04` is fine to `pton` and not to `strict`. The IPv4
+codes are not repeated on the outer literal; you get this code instead.
+
+```{r}
+codes_by_dialect("::ffff:1.2.3.999")
+addr_pton("::ffff:1.2.3.04")
+addr_strict("::ffff:1.2.3.04")
+```
+
+### `whitespace`
+
+*Meaning.* The literal contains whitespace, which this dialect rejects
+outright.
+
+*Why it is a signal.* `inet_aton` stops at the first whitespace character and
+ignores everything after it, so `"1.2.3.4 junk"` is an address to it.
+`getaddrinfo` refuses whitespace-bearing input before either primitive sees it.
+The code marks a gate, not a grammar.
+
+*Detection and precision.* Look hard at the example: **`getaddrinfo` raises it
+and `curl` does not**, even though `curl` composes `getaddrinfo`. `curl` tries
+`aton` first, and `aton` answers, so the gate is never reached. A gate in a
+composition is not a gate in everything built on it. The gate also covers the
+address and not the zone ID — it tests the text before the `%`.
+
+```{r}
+codes_by_dialect("1.2.3.4 junk")
+addr_curl("1.2.3.4 junk")
+```
+
+## The classify layer
+
+These are statements about an address that parsed successfully, and each one
+reports a rule from a specification. Every one of them is graded:
+
+```{r}
+classify <- registry[registry$layer == "classify", ]
+classify[c("code", "strength", "rfc")]
+```
+
+Reporting only the MUST rules would collapse a spectrum into a binary, which is
+the move raddr exists to refuse. So a rule stated in weaker language is still
+reported, and the grade is what tells you not to act on it as though it were a
+MUST.
+
+Classify codes live in the `codes` field of the classification, which the print
+method leaves out. One more helper puts them next to the block that matched:
+
+```{r}
+classify_view <- function(literals) {
+  d <- as.data.frame(addr_classify(addr_pton(literals)))
+  data.frame(
+    input = literals,
+    category = as.character(d$category),
+    block = d$block,
+    codes = vapply(d$codes, paste, character(1), collapse = ", ")
+  )
+}
+```
+
+**The grade follows the rule's substance, not a keyword search.** The sources
+do not agree about RFC 2119: RFC 4291 and RFC 8215 invoke it nowhere and state
+their rules in lowercase or as a format diagram, while RFC 3056, 3927, 4193,
+4380 and 6052 all invoke it. Grading by keyword would mark a binding format
+definition as unspecified purely because of how its author wrote it down.
+
+### `nat64_wk_embedded_not_global` — `must`
+
+*Meaning.* The NAT64 well-known prefix carries a non-global embedded IPv4
+address.
+
+*Why it is a signal.* RFC 6052 §3.1 says translators MUST NOT translate such
+packets and MUST drop them. An address like `64:ff9b::a9fe:a9fe` embeds
+`169.254.169.254` inside the well-known prefix — a link-local address wrapped
+in an IPv6 costume.
+
+*Detection and precision.* The rule binds `64:ff9b::/96` **alone**, never a
+network-specific prefix, and RFC 8215 §5 says it does not reach
+`64:ff9b:1::/48`. raddr applies it exactly that narrowly.
+
+```{r}
+classify_view("64:ff9b::a9fe:a9fe")
+```
+
+### `sixtofour_embedded_not_global` — `must`
+
+*Meaning.* The 6to4 `V4ADDR` is not in the format of a global unicast address.
+
+*Why it is a signal.* RFC 3056 §9 requires such traffic to be silently
+discarded by both encapsulators and decapsulators, so an address carrying a
+private V4ADDR is one no correct implementation should be relaying.
+
+*Detection and precision.* Spelled `sixtofour` because a code may not begin
+with a digit; CPython's `ipaddress` names the same property the same way. The
+code is about the *embedded* address, so the outer address still classifies
+into `2002::/16` normally.
+
+```{r}
+classify_view("2002:a00:1::")
+```
+
+### `teredo_client_not_global` — `must`
+
+*Meaning.* A global Teredo address embeds a non-global IPv4 client address.
+
+*Why it is a signal.* RFC 4380 §4 requires a global Teredo address to embed a
+global-scope unicast IPv4 as its client address.
+
+*Detection and precision.* **The rule is conditional on the outer address.**
+Only a *link-local* Teredo identifier MAY embed a private client address, so
+the code fires on global Teredo addresses and not on link-local ones. Note also
+that Teredo stores the client address ones-complemented; raddr undoes that
+before judging it.
+
+```{r}
+classify_view("2001:0:4136:e378:8000:63bf:f5ff:fffe")
+addr_embeddings(addr_pton("2001:0:4136:e378:8000:63bf:f5ff:fffe"))
+```
+
+### `link_local_outside_fe80_64` — `must`
+
+*Meaning.* The address is inside the `fe80::/10` reservation but outside
+`fe80::/64`.
+
+*Why it is a signal.* The link-local format fixes the 54 bits after the prefix
+to zero. `febf::1` matches the registry row without being a link-local address —
+so a check written against the registry prefix alone accepts something the
+format does not define.
+
+*Detection and precision.* RFC 4291 §2.5.6 states this as a **format
+definition** and invokes no RFC 2119 keyword anywhere. It is graded `must`
+regardless, on substance: a format definition that fixes bits is not weaker
+than a sentence containing the word MUST.
+
+```{r}
+classify_view(c("febf::1", "fe80::1"))
+```
+
+### `link_local_reserved_range` — `must`
+
+*Meaning.* The address is in `169.254.0.0/24` or `169.254.255.0/24`.
+
+*Why it is a signal.* RFC 3927 §2.1 reserves those 512 addresses for future
+use and says they MUST NOT be selected by a host configuring an IPv4
+link-local address.
+
+*Detection and precision.* **The rule binds the host that picks an address,
+not a packet carrying one.** Seeing this code means the address should not have
+been self-assigned; it does not by itself mean a packet bearing it is invalid.
+The rest of `169.254.0.0/16` is ordinary link-local space and raises nothing.
+
+```{r}
+classify_view(c("169.254.255.5", "169.254.1.5"))
+```
+
+### `ipv4_compatible_low_tail` — `may`
+
+*Meaning.* The deprecated IPv4-compatible tail is below `1.0.0.0`, so it lands
+in `0.0.0.0/8` and is not a host address.
+
+*Why it is a signal.* `::2` looks like an IPv4-compatible IPv6 address carrying
+`0.0.0.2`, which is not a host address at all.
+
+*Detection and precision.* Graded `may` because implementations are "not
+required to support this address type", so a consumer may reasonably discount
+the reading entirely. It is reported rather than suppressed: the exclusion
+raddr applies is the registry fact that `::` and `::1` are separate rows, not a
+judgment about the rest of the range.
+
+```{r}
+classify_view("::2")
+```
+
+### `nat64_local_layout_unspecified` — `unspecified`
+
+*Meaning.* raddr read RFC 6052 `/48` geometry under `64:ff9b:1::/48`, whose
+syntax RFC 8215 leaves deliberately undefined.
+
+*Why it is a signal.* This code exists to mark raddr's *own* extraction as
+contested. RFC 8215 says nodes "must not make any assumptions regarding the
+syntax or properties of those addresses (e.g., the existence and location of
+embedded IPv4 addresses)" — lowercase, in a document that invokes no RFC 2119.
+
+*Detection and precision.* The extraction is kept because deployments do use
+that geometry, and the code is the disclosure that it is a convention rather
+than something the prefix implies. This is the one code that tells you to trust
+the accompanying `embeddings` field *less*.
+
+```{r}
+classify_view("64:ff9b:1::c000:201")
+```
+
+### `ula_l_bit_unset` — `unspecified`
+
+*Meaning.* The ULA L bit is 0, so the address is in `fc00::/8` rather than the
+locally assigned `fd00::/8`.
+
+*Why it is a signal.* RFC 4193 §3.1 defines only `L = 1` and says `L = 0` "may
+be defined in the future". No allocation mechanism ever was defined, so such an
+address is unspecified rather than merely unusual — nothing says what it means
+or who may use it.
+
+*Detection and precision.* The address still classifies as `private`, because
+`fc00::/7` is the registry row and that is a fact about the registry. The code
+is the finer statement layered on top.
+
+```{r}
+classify_view(c("fc00::1", "fd00::1"))
+```
+
+## What a code does not prove
+
+Three habits are worth keeping.
+
+**A parse code is not a rejection.** It belongs to one dialect. `leading_zero`
+on `strict` sits beside two other dialects that read the literal as two
+different addresses. Always ask which dialect raised it:
+
+```{r}
+codes_by_dialect("0177.0.0.1")
+```
+
+**An empty code set is not an endorsement.** A dialect with no reading of a
+literal raises nothing, because it has no objection to state — `aton` is silent
+on every IPv6 literal in this vignette. Read `addr_outcome()` alongside the
+codes, never the codes alone.
+
+**A classify code is evidence, not a verdict.** raddr states what a
+specification says about an address. It does not decide what you should do
+about it, and `strength` exists precisely so a `may` and a `must` do not arrive
+looking alike. Turning these facts into an allow-or-deny decision is policy,
+depends on what you are defending, and belongs in a different package.
+
+The registry itself records when each code entered the vocabulary, so a
+consumer can tell an unfamiliar code from a new one:
+
+```{r}
+unique(registry$since)
+```
+
+Adding a code is an addition to raddr's API; removing one is a breaking change.

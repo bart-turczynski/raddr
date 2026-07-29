@@ -24,5 +24,10 @@ Authors:
   \item Bart Turczynski \email{bartek@turczynski.pl} (\href{https://orcid.org/0000-0002-8788-7980}{ORCID})
 }
 
+Other contributors:
+\itemize{
+  \item web-platform-tests contributors (bundled URL test corpus, BSD-3-Clause; see inst/COPYRIGHTS) [copyright holder]
+}
+
 }
 \keyword{internal}

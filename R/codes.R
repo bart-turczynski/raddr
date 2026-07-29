@@ -384,12 +384,20 @@ add_classify_code <- function(mask, code, hit) {
 #' that every code has at least one input in the corpus that produces it, so a
 #' code that nothing can emit fails the build.
 #'
-#' @section A cross-repo contract:
+#' @section A versioned vocabulary, not an alias:
 #'
-#' The codes are meant to be read by other packages -- `ssrfr` reports raddr's
-#' codes rather than inventing a parallel vocabulary. Adding a code is therefore
-#' an addition to raddr's API and removing one is a breaking change, which is
+#' The codes are meant to be read by other packages, so adding one is an
+#' addition to raddr's API and removing one is a breaking change -- which is
 #' what the `since` column records.
+#'
+#' They are **not** a vocabulary another package echoes verbatim. `ssrfr` owns
+#' its own reason codes and its own result model, and the relationship between
+#' the two vocabularies is many-to-one and conditional rather than an alias:
+#' raddr states facts, a policy layer interprets them into a refusal reason. A
+#' raddr code may travel in a detailed result as evidence without being that
+#' package's public reason. This is the same separation drawn between raddr's
+#' `category` and a policy verdict, and for the same purpose -- a policy layer
+#' must not enumerate a descriptive classifier's output as its deny list.
 #'
 #' @section Layers:
 #'
@@ -400,8 +408,7 @@ add_classify_code <- function(mask, code, hit) {
 #'     classification. Reported in the `codes` field of [addr_classify()].}
 #' }
 #'
-#' @section `strength`, and why every rule is reported rather than only the
-#'   MUSTs:
+#' @section Why every rule is reported, not only the MUSTs:
 #'
 #' `strength` records how much force the rule a code reports actually carries:
 #' `"must"`, `"should"`, `"may"` or `"unspecified"`. Reporting only the MUST
