@@ -138,8 +138,17 @@ axes**, not one list: what a *standard* requires ("on paper") and what an
 |---|---|---|---|
 | paper | `strict` | RFC dotted-quad grammar; Python `ipaddress`, Go, Rust | fixed |
 | paper | `whatwg` | WHATWG URL host parser; what browsers do | fixed, versioned spec |
-| reality | `pton` | POSIX `inet_pton` | **platform-varying** |
-| reality | `aton` | BSD `inet_aton` | **platform-varying** (see §3.3) |
+| reality | `pton` | Apple `inet_pton` | **platform-varying** (§3.3, §3.5.3) |
+| reality | `aton` | Apple `inet_aton` | **platform-varying** (§3.3) |
+
+Both reality rows say *Apple* rather than *POSIX* or *BSD*, and that is a
+correction rather than a nicety: measured across Apple, glibc and musl on
+2026-07-29 (§3.3, §3.5.3), there is no row of the reality side that all three
+libcs agree on. Naming a standard would have implied one.
+
+The two compositions below inherit that, so **all four reality-side readings are
+platform-varying** — `getaddrinfo` and `curl` for a reason of their own on top
+of what they inherit, since the scope lift of §3.5.3 is Apple's alone.
 
 ### 3.2 The two compositions
 
@@ -155,6 +164,16 @@ Every measured row falls out of those two orderings. They are implemented as
 literal compositions of the exported primitives, so a precedence change upstream
 is an argument swap, not a rewrite — which is exactly what `RADD-puzhycev` cost
 when the second line turned out to be wrong.
+
+**The algebra is the one part of the reality side that does not vary by platform
+[verified 2026-07-29].** Across Apple, glibc and musl, `getaddrinfo` is
+`pton`-then-`aton` on all 91 IPv4 rows, behind the same whitespace pre-step —
+the same ten rows are the gate's on Apple and on glibc, and they are invisible on
+musl only because musl's own `aton` has already rejected them. Every *primitive*
+under that algebra turned out to diverge (§3.3.0); the composition over them did
+not. That is the strongest evidence the model has for treating the two
+compositions as orderings rather than as parsers in their own right, and it was
+not available when the decision was made.
 
 **The asymmetry in the second line is deliberate.** `curl` falls back to the
 resolver *entry point*, not to the bare parser under it, because curl's URL
@@ -235,18 +254,42 @@ Two rows carry most of the package's value:
 
 **Both reality dialects are platform-dependent**, not just `pton`.
 
-- `pton` — Apple libc strips leading zeros and reads decimal. glibc and musl are
-  **unverified** — see §10.
-- `aton` — glibc's `inet_aton` ignores trailing garbage, so `1.2.3.4junk`
-  **succeeds** there; Apple and musl reject it. glibc ships a separate
-  `__inet_aton_exact` for callers that want the strict reading, which is the
-  clearest evidence the leniency is deliberate rather than a bug.
+#### 3.3.0 The three libcs, measured **[verified 2026-07-29]**
 
-The `aton` divergence is why §3.1's "stable in practice" was wrong. Note that
-**the oracle fixtures cannot currently show either divergence**: they carry the
-columns `input, pton, aton, getaddrinfo, whatwg` and no libc dimension, so every
-recorded row is Apple. Adding a per-libc column is `RADD-xrgomyhx` (O6), and
-until it lands raddr ships no dialect for which the glibc reading is true.
+O6 is settled. `data-raw/oracle-libc-linux.sh` runs the same two Python oracles
+under `debian:bookworm-slim` (glibc 2.36) and `alpine:3.20` (musl 1.2.5) and
+commits the answers beside the Apple ones as `ipv4-libc-{glibc,musl}.csv` and
+`ipv6-libc-{glibc,musl}.csv`. `tests/testthat/test-libc.R` asserts the
+divergence set, so an image or libc upgrade changes a committed file rather than
+passing quietly.
+
+- `pton` — Apple strips leading zeros and reads decimal. **glibc and musl reject
+  the text outright**, on nine IPv4 rows (`0177.0.0.1`, `192.0.048.1`,
+  `010.010.010.010` and the rest) and on the IPv6 hextet and dotted-quad-tail
+  equivalents. This is wider than "platform-varying" suggested: on Linux those
+  rows are not a different reading, they are not a reading.
+- `aton` — the earlier claim here was **wrong in both halves and is retracted**.
+  It said glibc "ignores trailing garbage, so `1.2.3.4junk` succeeds there;
+  Apple and musl reject it". Measured: glibc rejects glued garbage (`1.2.3.4x`)
+  exactly as Apple does, and accepts whitespace-then-garbage (`1.2.3.4 x`,
+  `127.0.0.1 junk`) exactly as Apple does. **musl is the outlier**, and it is
+  strict, not lenient — it refuses even a bare trailing space. glibc's
+  `__inet_aton_exact` is real, but it is not evidence for what the claim said.
+- `aton`, again — Apple wraps a whole-host number modulo 2^32, so `4294967296`
+  is `0.0.0.0`. **glibc and musl reject every overflow**, and the digitless-`0x`
+  carve-out (`0x.1`, `0x.0x.0`) with it. §3.3's second headline row is therefore
+  a three-way split, not a two-way one.
+
+So the reality side is Apple ≠ glibc ≠ musl on IPv4, and Apple ≠ (glibc = musl)
+on IPv6 — the two Linux libcs differ from each other on trailing whitespace and
+nowhere else.
+
+**raddr continues to model Apple, deliberately.** The alternative is not a
+better dialect but a non-function: `addr_pton()` would return different values
+on different machines, which P1 (pure, offline, no I/O) forbids and which would
+make every fixture in this repository unassertable. What changes is the labelling
+— §3.1 now names Apple in the "models" column rather than a standard — and the
+evidence, which is committed rather than deferred.
 
 ### 3.3.1 The rest of the measured surface **[verified 2026-07-26]**
 
@@ -272,10 +315,9 @@ spec or the scratch documents:
   VT, FF) and ignores the remainder, so `1.2.3.4 junk` parses. Leading
   whitespace still fails, because the truncation leaves nothing to parse, and
   glued-on non-whitespace (`1.2.3.4x`) fails too.
-  **[Apple libc only.]** This whole row is one of three answers, not the
-  answer: glibc accepts `1.2.3.4x` as well, since its `inet_aton` ignores
-  trailing garbage outright; musl agrees with Apple in rejecting it. Nothing
-  here is measured off Apple — see §3.3 and `RADD-xrgomyhx`.
+  **glibc behaves identically on every one of these rows [verified 2026-07-29];
+  musl rejects the lot, including a bare trailing space.** An earlier draft of
+  this bullet had it the other way round — see §3.3.0, which retracts it.
 - **A digitless `0x` is tolerated by `inet_aton` in any part but the last.**
   `0x.1` and `0x.0x.0` parse; `0x`, `0x.0x` and `1.2.0x` do not. WHATWG has no
   such carve-out — a bare `0x` is simply zero.
@@ -506,8 +548,21 @@ All three were re-measured through PHP's `inet_pton` **[verified 2026-07-27]**,
 which is a different binding to the same libc, and all three reproduce exactly —
 `fe80::1%lo0` gives `fe800001…`, while `%1`, `%bogus0`, `%LO0` and
 `%99999999999` do not fold. That rules out the oracle's Python binding as the
-source of the behavior, so the fold is libc's. It says **nothing** about glibc
-or musl, which is still O6: same libc, different doorway.
+source of the behavior, so the fold is libc's.
+
+**On glibc and musl the fold cannot arise, because `inet_pton` takes no zone ID
+at all [verified 2026-07-29].** Any literal containing a `%` is a rejection
+there — `%lo`, `%1`, `%bogus0` alike. O6b, settled.
+
+The measurement needed its own instrument, and the reason is a trap worth
+recording. `data-raw/oracle-ipv6.py` spells its zones `%lo0` and `%en0`, which
+are *Apple* interface names; run that corpus in a Linux container and every
+zone row comes back a rejection for the wrong reason, because the loopback
+there is `lo`. The row would have measured the container's interface table and
+been read as a statement about glibc. `data-raw/oracle-zone-native.py` therefore
+substitutes each host's own names from `if_nameindex()`, so both sides are asked
+about a name they actually have, and the finding is the *rule* each libc applies
+to a resolvable name rather than an accident of spelling.
 
 **raddr does not reproduce the fold**, and the reason is a principle rather than
 a shortcut: `if_nametoindex()` reads the host's interface table, so the fold is
@@ -522,12 +577,45 @@ other way. Apple's `getaddrinfo` takes the second hextet of an `fe80::/10`
 address as the scope ID and clears it from the bytes, **whether or not a zone ID
 was written**; an explicit zone wins, and the hextet is cleared either way. That
 transform is pure arithmetic on the input, so raddr models it, and
-`addr_getaddrinfo()` applies it as a post-step on the §3.2 composition.
+`addr_getaddrinfo()` applies it as a post-step on the §3.2 composition. The
+lifted hextet becomes the zone rather than being discarded, so the reading is
+lossless: `addr_getaddrinfo("fe80:abcd::1")` is `fe80::1%43981`, and `43981` is
+`0xabcd`.
 
 | | reads the host's interface table | raddr models it |
 |---|---|---|
 | `inet_pton` fold (name -> bits) | yes | **no** |
 | `getaddrinfo` lift (bits -> scope) | no | **yes** |
+
+#### 3.5.3.1 The lift is Apple's, and that is O6b **[verified 2026-07-29]**
+
+**glibc and musl do not lift.** `fe80:abcd::1` stays `fe80:abcd::1` at scope 0;
+with an explicit `%lo` the scope is set and the hextet is *still* left standing.
+That is the worst case `RADD-blpcanps` was filed to check for, and it holds.
+
+The consequence is bigger than a boundary detail. It is not that the two
+platforms disagree about where `fe80::/10` ends — it is that they disagree about
+the whole block. `addr_getaddrinfo()` and `addr_curl()` are Apple readings for
+every address in `fe80::/10`, and since `RADD-puzhycev` moved `addr_curl()`'s
+fallback from bare `pton` to the `getaddrinfo` entry point, `curl` inherits that
+where before the fix it was lift-free. Outside the block the two agree, so the
+divergence really is bounded by `fe80::/10` and not by the dialect.
+
+The lift's justification survives this, but it is worth being exact about what
+it now rests on. "Pure arithmetic on the input" is still true, and it is still
+the reason raddr *may* model the lift while it may not model the fold. It was
+never the reason raddr *should*, and the measurement shows why the distinction
+matters: the transform is a function of the input, but whether a platform
+applies it at all is not.
+
+Two further Linux restrictions, recorded because they bound how far a zoned
+Linux reading can be read across:
+
+- a zone is accepted only on a **scoped** address. Link-local and multicast take
+  one; global (`2001:db8::1%lo`), loopback (`::1%lo`) and a full-arity unicast
+  address do not. Apple takes a zone on anything.
+- the name must **resolve**. `%bogus0` and the wrong-case `%LO` are rejections.
+  Apple accepts either and reports scope 0.
 
 Six fixture rows are therefore expected to differ from the `pton` oracle column,
 and `tests/testthat/test-ipv6.R` names them individually rather than matching a
@@ -544,8 +632,11 @@ pattern, so that a change to the set is visible in the diff.
   `as.character()`, `format()`, a data-frame column. There the default is
   **`whatwg`**, because it is a fixed, versioned standard rather than an
   implementation. Defaulting to a reality dialect would make the answer depend
-  on the machine raddr happens to be running on — §3.1 marks `pton` as
-  platform-varying, and `curl` and `getaddrinfo` both compose it.
+  on the machine raddr happens to be running on — §3.1 marks **all four**
+  reality-side readings platform-varying, and the 2026-07-29 measurement made
+  that argument stronger than it was when it was written: `pton` and `aton`
+  diverge across three libcs, and `getaddrinfo` and `curl` diverge over the
+  whole of `fe80::/10` on their own account (§3.5.3.1), not only by inheritance.
 - **P5 does not conflict with this.** P5 governs *formatting*: `format()` emits
   the canonical form of a parsed value rather than echoing the input spelling.
   It says nothing about which dialect produced that value. Choosing `whatwg` as
@@ -1633,10 +1724,10 @@ to be a typo for the network and a host that wanted `/32`. Guessing between them
 is the silent reinterpretation §6.5.2 refuses for a double above 2^53. Python's
 `ip_network()` refuses it too; the error names the masked form.
 
-**Blocks are read by `addr_strict()`, not `addr_pton()`.** §3.2 records that
-`pton` is the one dialect whose behaviour varies by platform — raddr models
-Apple libc, which strips leading zeros, so it reads `010.0.0.0` as `10.0.0.0`
-where glibc rejects the text outright. A block that denotes different networks
+**Blocks are read by `addr_strict()`, not `addr_pton()`.** §3.1 records that
+every reality dialect varies by platform — raddr models Apple libc, which strips
+leading zeros, so it reads `010.0.0.0` as `10.0.0.0` where glibc and musl reject
+the text outright **[verified 2026-07-29]**. A block that denotes different networks
 on different machines is worse than one that is refused, and CIDR text is
 written in the RFC grammar in the first place.
 
@@ -2208,11 +2299,13 @@ APNIC space, so matching the typo would be worse than missing the prefix.
 - `[::]` — URL authority syntax. Stripping brackets is the URL layer's job, so
   every dialect rejects it.
 
-`1.2.3.4junk` is the one row in the harvest raddr **cannot settle**: glibc
-accepts it, Apple and musl reject it, and the fixture records Apple only. The
-test asserts rejection under every dialect — which is what raddr's model claims
-— and says so: until `RADD-xrgomyhx` gives the fixture a per-libc column, a pass
-there is a statement about Apple and nothing else.
+`1.2.3.4junk` was recorded here as the one row in the harvest raddr **could not
+settle**, on the grounds that glibc accepted it where Apple and musl did not.
+**That was wrong and is retracted [verified 2026-07-29].** Glued-on garbage is a
+rejection under all three libcs; it is whitespace-then-garbage that divides them,
+and there the split is Apple and glibc accepting against musl refusing (§3.3.0).
+The test asserts rejection under every dialect, which is now a statement about
+every libc measured rather than about Apple alone.
 
 ---
 
@@ -2344,7 +2437,8 @@ the decisions are not relitigated.
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
 | O5 | Trie vs sorted masked vector for the 51 IANA rows plus the transition overlay | **Measured and closed 2026-07-28, see §11.1.6.** Neither, and not the walk either: grouping the blocks by prefix length — §11.1.5's containment trick, with `vec_match()` in place of `vec_in()` so the group reports *which* row — won every case and **shipped**, worth **36x** on the 276-row address-space table `addr_classify()` reads on every call. The sorted masked vector is *slower* than the walk on `special`; the trie pays to re-encode 1e6 addresses as bit strings on every call |
-| O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only, and §3.5 raises the stakes: the IPv6 leading-zero rule, the fold and the lift are all Apple behaviors |
+| O6 | glibc and musl `pton` rows | **Settled 2026-07-29 by measuring them — see §3.3.0.** `data-raw/oracle-libc-linux.sh` runs both Python oracles under glibc 2.36 and musl 1.2.5 and commits four fixtures beside the Apple ones; `test-libc.R` asserts the divergence set. Findings: glibc and musl `inet_pton` **reject** the leading zeros Apple reads as decimal, in IPv4 and IPv6 alike; both reject every `inet_aton` overflow Apple wraps modulo 2^32; and the item's own premise about `aton` trailing garbage was **backwards** — glibc matches Apple, musl is the strict outlier. The composition of §3.2 holds on all three |
+| O6b | Whether glibc/musl `getaddrinfo` does the `fe80::/10` scope lift | **Settled 2026-07-29, and the answer is no — see §3.5.3.1.** `RADD-blpcanps`'s worst case holds: Linux leaves `fe80:abcd::1` alone at scope 0, so `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of `fe80::/10` rather than at a boundary. Linux `inet_pton` also takes no zone ID at all, so the §5.1 fold cannot arise there. Needed its own instrument, `oracle-zone-native.py`, because the corpus's `%lo0` is an Apple interface name and would have measured the container's interface table |
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | **Settled 2026-07-29: yes, and it costs nothing.** Installs from a prebuilt `sonoma-arm64` binary, 180 KB, no compilation. Its entire dependency closure is `testthat` + `rlang (>= 0.1.6)`, both of which raddr already carries — so the §12 argument it needed to win, it wins by adding no transitive weight at all. `Suggests`, and §11.9's file skips whole when it is absent |
@@ -3062,12 +3156,18 @@ without them still runs every assertion.
 | Oracle | Measures | Written by |
 |---|---|---|
 | Apple libc | `pton`, `aton`, `getaddrinfo`, the scope lift | `oracle-ipv{4,6}.py` |
+| **glibc 2.36, musl 1.2.5** | the same surface on a libc raddr does not model (§3.3.0) | `oracle-libc-linux.sh` |
+| **the local interface table** | the zone, the fold and the lift, under each host's own names | `oracle-zone-native.py` |
 | CPython `ipaddress` | the `strict` dialect, on paper | `oracle-ipv6.py` |
 | ada, via `adaR` | the `whatwg` dialect, as browsers ship it | `oracle-ipv{4,6}.R` |
 | **Go `net/netip`** | `strict` again, a second implementation | `oracle-netip.go` |
 | **real curl** | the one dialect raddr composes rather than reads | `oracle-tools.R` |
 
-The last two are new, and each falsified something.
+`Go net/netip` and `real curl` were the first two additions here, and each
+falsified something. The two Linux rows above are the third and fourth, and they
+did the same: between them they retracted the `aton` trailing-garbage claim of
+§3.3 and established that the scope lift raddr models is Apple's alone
+(§3.5.3.1).
 
 **Go `netip` — §3.1's grouping is not quite one dialect.** The table files
 Python, Go and Rust together under `strict`. On 125 of the 126 recorded IPv6

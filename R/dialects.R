@@ -26,11 +26,10 @@
 #' @section In reality:
 #'
 #' \describe{
-#'   \item{`addr_pton()`}{POSIX `inet_pton()`. Four decimal parts, leading zeros
+#'   \item{`addr_pton()`}{Apple `inet_pton()`. Four decimal parts, leading zeros
 #'     allowed and ignored, so `0177.0.0.1` is **177.0.0.1** and not
-#'     `127.0.0.1`. This is the one dialect whose behavior varies by platform;
-#'     raddr models Apple libc, and glibc and musl are unverified.}
-#'   \item{`addr_aton()`}{BSD `inet_aton()`. Hex, octal and short forms, and
+#'     `127.0.0.1`.}
+#'   \item{`addr_aton()`}{Apple `inet_aton()`. Hex, octal and short forms, and
 #'     three quirks worth knowing: a whole-host number is truncated to 32 bits
 #'     rather than rejected, so `4294967296` is `0.0.0.0`; parsing stops at the
 #'     first whitespace character and ignores the rest, so `1.2.3.4 junk` is an
@@ -38,6 +37,14 @@
 #'     `inet_aton()` is `AF_INET` by signature, so it rejects **every** IPv6
 #'     literal.}
 #' }
+#'
+#' Both say *Apple* rather than POSIX or BSD, and that is load-bearing. Measured
+#' across Apple, glibc and musl on 2026-07-29, there is no reality-side reading
+#' the three libcs agree on: glibc and musl `inet_pton()` **reject** every
+#' leading zero above, and their `inet_aton()` rejects every overflow rather
+#' than wrapping it. raddr models Apple on all four reality-side readings, as a
+#' dialect that varied with the host would not be a function -- and reports that
+#' choice here rather than implying a standard it does not have.
 #'
 #' @section IPv6:
 #'
@@ -67,6 +74,13 @@
 #' *into* the second hextet. raddr deliberately does not reproduce that: the
 #' index comes from the host's interface table, so it is not a function of the
 #' input, and raddr is pure and offline.
+#'
+#' The lift is Apple's own, measured 2026-07-29. glibc and musl do not
+#' perform it -- `fe80:abcd::1` stays `fe80:abcd::1` there -- and their
+#' `inet_pton()` takes no zone ID at all, so the fold cannot arise either. That
+#' makes `addr_getaddrinfo()` and `addr_curl()` Apple readings across the whole
+#' of `fe80::/10` rather than at its edges. Outside that block the platforms
+#' agree.
 #'
 #' @section Compositions:
 #'
@@ -108,6 +122,12 @@
 #' wrong. `data-raw/oracle-ipv4.py` and `data-raw/oracle-tools.R` regenerate the
 #' measurements; `tests/testthat/test-ipv4.R` holds them as the divergence
 #' table.
+#'
+#' The same corpus was run under glibc 2.36 and musl 1.2.5 on 2026-07-29 by
+#' `data-raw/oracle-libc-linux.sh`, which is what fixes these functions to Apple
+#' rather than to a standard. Those fixtures are recorded, never modelled;
+#' `tests/testthat/test-libc.R` asserts the divergence set so a libc upgrade
+#' shows up as a changed file.
 #'
 #' @param x A character vector of address literals.
 #'

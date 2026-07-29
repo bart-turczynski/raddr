@@ -57,11 +57,10 @@ and one trailing dot dropped, so \verb{1.2.3.} is \verb{1.2.0.3}. Values above
 
 
 \describe{
-\item{\code{addr_pton()}}{POSIX \code{inet_pton()}. Four decimal parts, leading zeros
+\item{\code{addr_pton()}}{Apple \code{inet_pton()}. Four decimal parts, leading zeros
 allowed and ignored, so \verb{0177.0.0.1} is \strong{177.0.0.1} and not
-\verb{127.0.0.1}. This is the one dialect whose behavior varies by platform;
-raddr models Apple libc, and glibc and musl are unverified.}
-\item{\code{addr_aton()}}{BSD \code{inet_aton()}. Hex, octal and short forms, and
+\verb{127.0.0.1}.}
+\item{\code{addr_aton()}}{Apple \code{inet_aton()}. Hex, octal and short forms, and
 three quirks worth knowing: a whole-host number is truncated to 32 bits
 rather than rejected, so \code{4294967296} is \verb{0.0.0.0}; parsing stops at the
 first whitespace character and ignores the rest, so \verb{1.2.3.4 junk} is an
@@ -69,6 +68,14 @@ address; and a digitless \verb{0x} is tolerated in any part but the last.
 \code{inet_aton()} is \code{AF_INET} by signature, so it rejects \strong{every} IPv6
 literal.}
 }
+
+Both say \emph{Apple} rather than POSIX or BSD, and that is load-bearing. Measured
+across Apple, glibc and musl on 2026-07-29, there is no reality-side reading
+the three libcs agree on: glibc and musl \code{inet_pton()} \strong{reject} every
+leading zero above, and their \code{inet_aton()} rejects every overflow rather
+than wrapping it. raddr models Apple on all four reality-side readings, as a
+dialect that varied with the host would not be a function -- and reports that
+choice here rather than implying a standard it does not have.
 }
 
 \section{IPv6}{
@@ -100,6 +107,13 @@ Apple \code{inet_pton()} also does the reverse, writing a resolved interface ind
 \emph{into} the second hextet. raddr deliberately does not reproduce that: the
 index comes from the host's interface table, so it is not a function of the
 input, and raddr is pure and offline.
+
+The lift is Apple's own, measured 2026-07-29. glibc and musl do not
+perform it -- \verb{fe80:abcd::1} stays \verb{fe80:abcd::1} there -- and their
+\code{inet_pton()} takes no zone ID at all, so the fold cannot arise either. That
+makes \code{addr_getaddrinfo()} and \code{addr_curl()} Apple readings across the whole
+of \verb{fe80::/10} rather than at its edges. Outside that block the platforms
+agree.
 }
 
 \section{Compositions}{
@@ -147,6 +161,12 @@ derived from the other two rather than run, and the IPv6 half of it was
 wrong. \code{data-raw/oracle-ipv4.py} and \code{data-raw/oracle-tools.R} regenerate the
 measurements; \code{tests/testthat/test-ipv4.R} holds them as the divergence
 table.
+
+The same corpus was run under glibc 2.36 and musl 1.2.5 on 2026-07-29 by
+\code{data-raw/oracle-libc-linux.sh}, which is what fixes these functions to Apple
+rather than to a standard. Those fixtures are recorded, never modelled;
+\code{tests/testthat/test-libc.R} asserts the divergence set so a libc upgrade
+shows up as a changed file.
 }
 
 \examples{

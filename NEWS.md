@@ -1,5 +1,24 @@
 # raddr (development version)
 
+## Documentation
+
+* The reality dialects are now documented as modelling **Apple** `inet_pton()`
+  and `inet_aton()`, not POSIX and BSD. The same oracles were run under glibc
+  2.36 and musl 1.2.5 (`data-raw/oracle-libc-linux.sh`, needs Docker), and there
+  is no reality-side reading all three libcs agree on: glibc and musl reject the
+  leading zeros Apple reads as decimal, and reject the overflow Apple wraps
+  modulo 2^32. Behavior is unchanged — raddr modelled Apple before and still
+  does, because a dialect that varied with the host would not be a function.
+* `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of
+  `fe80::/10`: the scope lift they apply there is Apple's alone, and glibc and
+  musl do not perform it. Previously documented as a boundary detail.
+* Retracted an unmeasured claim that glibc's `inet_aton()` "ignores trailing
+  garbage" where Apple and musl reject it. Measured, glibc matches Apple exactly
+  and **musl** is the outlier, refusing even a bare trailing space.
+* Four Linux fixtures are committed beside the Apple ones and asserted by
+  `tests/testthat/test-libc.R`, so a libc upgrade changes a tracked file rather
+  than passing quietly.
+
 # raddr 0.1.0
 
 First release. `addr_parse()` takes no mode argument: it reports what an IP
