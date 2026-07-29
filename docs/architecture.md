@@ -2347,7 +2347,7 @@ the decisions are not relitigated.
 | O6 | glibc and musl `pton` rows | **Unverified.** Docker is installed locally. §3.3's `pton` column is Apple-only, and §3.5 raises the stakes: the IPv6 leading-zero rule, the fold and the lift are all Apple behaviors |
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
-| O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | Not currently installed |
+| O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | **Settled 2026-07-29: yes, and it costs nothing.** Installs from a prebuilt `sonoma-arm64` binary, 180 KB, no compilation. Its entire dependency closure is `testthat` + `rlang (>= 0.1.6)`, both of which raddr already carries — so the §12 argument it needed to win, it wins by adding no transitive weight at all. `Suggests`, and §11.9's file skips whole when it is absent |
 | O10 | WPT vendoring licence mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analogue. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a licence notice appended there is deleted by the next registry rebuild |
 | O11 | Two bugs to file upstream on `davidchall/ipaddress` | (a) the NAT64 gap — one predicate plus one extractor; (b) the `0x80000000` equality bug of §5.1.1, reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. File both regardless of what raddr ships |
 | O12 | `rurl::get_host_type()` NULL-default wart | File on rurl |
@@ -2926,6 +2926,10 @@ parser is only interestingly total on input nobody meant it to read. The
 registry property adds one address from every special-purpose block, so all 51
 rows are reached rather than only the ones a uniform draw lands in.
 
+Both corpora are **frozen** — one seed, drawn once. §11.9 asserts the same kind
+of claim over a generator instead, which is what buys the shrunk counterexample
+and the one axiom a flat corpus cannot state at all.
+
 **The wrapper round-trip builds its own wrappers, from the RFCs rather than from
 `raddr_transition_prefixes`.** A builder sharing the geometry table with the
 extractor round-trips through its own mistakes and reports agreement — so each
@@ -3272,6 +3276,85 @@ under `wpt` and the row is one of raddr's own additions, since no input at
 `181476a` contains `::ffff:` at all. The leftover check caught it on the first
 run, which is the only reason it is worth mentioning.
 
+### 11.9 The generated properties **[implemented 2026-07-29]**
+
+`tests/testthat/test-property.R` asserts §11.4's kind of claim over a
+**generator** rather than over §11.4's frozen corpus. The corpus is 400 byte
+draws behind one seed plus 2139 hostile literals, and it is not short of
+inputs — so the case for a seventh test file, and for a dependency, rests on
+the two things a frozen corpus structurally cannot do.
+
+**The shrunk counterexample.** A corpus failure says one of 2139 literals broke
+totality and leaves the reader to bisect it; `hedgehog` returns the smallest
+input that still fails. Breaking `addr_parse()` on inputs containing `0x`
+shrinks to the literal **`"0x"`** — the bug stated in two characters. That is
+what the dependency buys.
+
+**Tuples.** Transitivity is a claim about three addresses at once, which a flat
+corpus cannot express. Until this file it was the one axiom §5.1.2 claims and
+nothing checked.
+
+| property | what it quantifies over |
+|---|---|
+| a rendered address reads back, and rendering is a fixed point | drawn addresses, both renderers (§5.1.3) |
+| the four encodings decode to the drawn address | drawn addresses (§6.5) |
+| the order is transitive, and ties are an equivalence | drawn *triples*, repeats included (§5.1.2) |
+| containment is downward closed in the prefix length | drawn address pairs, every length at once (§6.3) |
+| `addr_parse()` is total, and only `rejected` carries codes | drawn literals (P2, §5.2.1) |
+| every reading classifies without erroring | drawn literals × six dialects (§5.3) |
+
+The generators are built from `paste`, `sprintf` and `as.hexmode`, never from
+the parser they feed — §11.4's rule for the wrapper round-trip, for the same
+reason: a generator that spelled its addresses with `addr_format()` would
+round-trip through the renderer's mistakes and report agreement. The masking
+behind the containment property is byte arithmetic, sharing nothing with the
+divisor arithmetic in `R/within.R` that it checks.
+
+The draw count is passed explicitly at every call rather than set through
+`options(hedgehog.tests)`. The option is process-wide, so pinning it in one file
+sets it for every file that runs afterwards, and a property whose sample size
+depends on file ordering is the drift this file exists to catch. 25 draws on
+CRAN, 400 under `NOT_CRAN`.
+
+**Graded by mutation, and the grading changed the generators twice.** Six
+mutations, one per property, all caught, each shrinking to a legible cause:
+
+| mutation | shrinks to |
+|---|---|
+| the renderer drops a trailing zero octet | `0.0.0` |
+| the integer encoder loses a digit | `129.127.0.1` |
+| `widen_word()` loses its `NA` guard | a word of `0x80000000` |
+| `/7` answers as `/8` | a pair agreeing to 7 bits |
+| `addr_parse()` errors on `0x` | `"0x"` |
+| `addr_classify()` errors on a missing address | `"0"` |
+
+Two of those first **survived**, and neither survival was the property's fault.
+
+**Uniform octets are blind to the hazards this package is built around.** Four
+independently drawn octets land on `0x80000000` about once in 10^5, so removing
+`widen_word()`'s `NA` guard — the ipaddress bug of O11(b), reintroduced on
+purpose — passed every property. Addresses are drawn a **word** at a time now,
+half from a hazard pool and half uniform, because the hazards are word-level
+facts and the data model is four 32-bit words. The same change caught the
+trailing-zero renderer, which an address ending in `.0` at 1-in-256 had also
+been surviving. Sensitivity went from one property catching the `widen_word`
+mutation to four.
+
+**Transitivity cannot fail while the order goes through a `vctrs` proxy**, and
+that is worth writing down rather than rediscovering. A lexicographic
+comparison of proxy columns *is* a total order, so no proxy — however wrong —
+can be intransitive. The first attempt at a mutation here, comparing on a
+single octet, was rejected for exactly this reason: one key still gives a
+transitive relation. So the property's real content is the two ways the axiom
+can still break: comparison answering `NA`, which is O11(b)'s shape and makes
+the order undefined rather than intransitive, and ties failing to be an
+equivalence. It is filed under transitivity because that is what a reader will
+look for, but what it guards is totality.
+
+`hedgehog` is `Suggests` (§12), and the file skips as a whole when it is
+absent — verified by hiding the installed package and running the suite: six
+tests, six skips, no errors, nothing at file scope touching the namespace.
+
 ---
 
 ## 12. Dependencies
@@ -3285,7 +3368,7 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 | `cli` | Open; nice, not load-bearing |
 | `stringi` | Open; benchmark base R first (O4) |
 | `bignum` | Suggests only, degrade gracefully |
-| `hedgehog` | Suggests only |
+| `hedgehog` | Suggests only — **taken up 2026-07-29 (§11.9)**. Adds nothing transitively: it needs `testthat` + `rlang`, both already here (O9) |
 | `ipaddress` | **No.** Would import its `is_global` semantics and its gaps |
 | `adaR` | **No.** Oracle in `data-raw/`, not a runtime dep |
 | Go toolchain | **No.** Oracle in `data-raw/` (§11.6). The suite reads the CSV it wrote |
