@@ -11,9 +11,11 @@ A length-1 \code{character} \code{"YYYY-MM-DD"} date, or \code{NA_character_} wh
 either half of the snapshot is undated.
 }
 \description{
-Reports the date the vendored IANA address-space files were last \strong{served}
-with, normalized to ISO at build time. This is \code{\link[=addr_registry_version]{addr_registry_version()}}'s
-counterpart for \code{\link[=addr_address_space]{addr_address_space()}}.
+Reports the date IANA itself records having last changed the vendored
+address-space registries. This is \code{\link[=addr_registry_version]{addr_registry_version()}}'s counterpart for
+\code{\link[=addr_address_space]{addr_address_space()}}, and follows the same rules: IANA's page-level
+\verb{Last Updated} field, the older of the two halves, and \code{NA} rather than a
+guess whenever the date cannot be read.
 }
 \section{Why this is stamped separately}{
 
@@ -23,18 +25,23 @@ across both would make each half assert something about a table it says
 nothing about -- the same reason the transition overlay carries its own
 stamp (\code{addr_transition_version()}).
 
-The separation is not theoretical here. The four vendored files are \strong{not}
-served with one timestamp: three carry \verb{Thu, 09 Oct 2025 21:51:16 GMT} and
-the IPv6 address-space export carries \verb{Sat, 11 Oct 2025 00:06:16 GMT}. So
-the "older of the two halves" rule, which is a no-op for the special-purpose
-pair, actually does work for this one.
+The separation is not theoretical, and this is the pair that proves it. These
+two registries carry editorial dates two weeks apart, \code{2025-10-10} and
+\code{2025-10-23}, so the "older of the two halves" rule does real work here while
+it is a no-op for the special-purpose pair.
+}
 
-The same caveat applies as to \code{\link[=addr_registry_version]{addr_registry_version()}}, and more strongly:
-\code{Last-Modified} is a site \strong{deploy} timestamp, not an editorial one. For
-the special-purpose pair the served date happens to match IANA's own page
-level \verb{Last Updated}. For these two it does not, so this stamp answers
-"when was this file written to the server" and nothing more. Content
-identity is tracked exactly and separately, by a sha256 per file.
+\section{This pair is why the stamp is editorial}{
+
+
+raddr used to stamp from the \code{Last-Modified} header the CSVs are served with.
+For the special-purpose pair that header happens to match IANA's editorial
+date. For these two it does not: they are served with \code{2025-10-09} and
+\code{2025-10-11} against editorial dates of \code{2025-10-10} and \code{2025-10-23}, so
+the header approach reported this snapshot as a day older than IANA says it
+is, for reasons that have nothing to do with the data. Vendoring these two
+turned that from a caveat into a wrong number, and the stamp now comes from
+the registry page instead.
 }
 
 \examples{
@@ -42,5 +49,6 @@ addr_address_space_version()
 
 }
 \seealso{
-\code{\link[=addr_address_space]{addr_address_space()}} for the data itself.
+\code{\link[=addr_address_space]{addr_address_space()}} for the data itself, and
+\code{\link[=addr_registry_snapshot]{addr_registry_snapshot()}} for which bytes are installed.
 }

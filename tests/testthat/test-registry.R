@@ -171,11 +171,41 @@ test_that("the version stamp is a date, or honestly unknown", {
     expect_equal(
       version,
       min(
-        raddr_registry_data$meta$v4$last_modified_date,
-        raddr_registry_data$meta$v6$last_modified_date
+        raddr_registry_data$meta$v4$last_updated,
+        raddr_registry_data$meta$v6$last_updated
       )
     )
   }
+})
+
+test_that("the stamp is IANA's editorial date, not the served header", {
+  # The distinction is invisible on this pair -- both registries were genuinely
+  # edited on the day their exports were deployed -- so it is pinned on the
+  # FIELD the stamp is built from rather than on its value. See the
+  # address-space pair below for the case where the two numbers differ.
+  for (key in c("v4", "v6", "v4_space", "v6_space")) {
+    meta <- raddr_registry_data$meta[[key]]
+
+    expect_match(meta$last_updated, "^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+    # The editorial date comes from the registry page, and the page is named so
+    # the claim is auditable rather than merely asserted.
+    expect_match(meta$page_url, "^https://www\\.iana\\.org/.*\\.xhtml$")
+    # Evidence for it, not just the maintainer's word: these bytes were read.
+    expect_identical(meta$last_updated_from, "page")
+    expect_match(meta$page_sha256, "^sha256:[0-9a-f]{64}$")
+
+    # The served header is still recorded. It is a fact about the fetch, and
+    # deleting it would delete the evidence for why the stamp moved.
+    expect_match(meta$last_modified, "GMT$")
+  }
+
+  expect_equal(
+    addr_registry_version(),
+    min(
+      raddr_registry_data$meta$v4$last_updated,
+      raddr_registry_data$meta$v6$last_updated
+    )
+  )
 })
 
 test_that("an undated snapshot is reported outdated, never assumed fresh", {
@@ -190,6 +220,85 @@ test_that("an undated snapshot is reported outdated, never assumed fresh", {
   # evidence of freshness.
   local_mocked_bindings(addr_registry_version = function() NA_character_)
   expect_true(addr_registry_outdated(max_age = 1e6))
+})
+
+test_that("the snapshot id is a sha256 over the documented manifest", {
+  id <- addr_registry_snapshot()
+
+  expect_type(id, "character")
+  expect_length(id, 1L)
+  expect_match(id, "^sha256:[0-9a-f]{64}$")
+
+  # The manifest is stored beside the id so the hash is auditable here rather
+  # than trusted. Its exact bytes are the definition: one "<key> <sha256>" line
+  # per source, LF-terminated, in this fixed order.
+  manifest <- raddr_registry_data$meta$snapshot_manifest
+  expect_type(manifest, "character")
+
+  keys <- c("v4", "v6", "v4_space", "v6_space")
+  expect_equal(
+    manifest,
+    paste0(
+      vapply(
+        keys,
+        function(k) {
+          sprintf("%s %s\n", k, raddr_registry_data$meta[[k]]$sha256)
+        },
+        character(1)
+      ),
+      collapse = ""
+    )
+  )
+
+  # Order is part of the definition, not presentation: a manifest built in a
+  # different order would hash differently and identify the same bytes as a
+  # different snapshot.
+  expect_equal(
+    vapply(strsplit(trimws(strsplit(manifest, "\n")[[1]]), " "), `[`, "", 1L),
+    keys
+  )
+})
+
+test_that("the snapshot id follows from its manifest, recomputed", {
+  # The claim the accessor makes is that the id IS the hash of the manifest.
+  # Recomputed rather than assumed, so a hand-edited R/sysdata.rda fails here
+  # and not only in the maintainer-side --check guard.
+  skip_if_not_installed("digest")
+
+  expect_equal(
+    addr_registry_snapshot(),
+    paste0(
+      "sha256:",
+      digest::digest(
+        raddr_registry_data$meta$snapshot_manifest,
+        algo = "sha256",
+        serialize = FALSE
+      )
+    )
+  )
+})
+
+test_that("the snapshot id tracks content, and only content", {
+  skip_if_not_installed("digest")
+
+  manifest <- raddr_registry_data$meta$snapshot_manifest
+  id_of <- function(x) {
+    paste0("sha256:", digest::digest(x, algo = "sha256", serialize = FALSE))
+  }
+
+  # A corpus that can disagree: flipping one hex digit of one checksum must
+  # move the id. Without this, the equality above would also pass for a
+  # constant.
+  mutated <- sub("sha256:e", "sha256:f", manifest, fixed = TRUE)
+  expect_false(identical(mutated, manifest))
+  expect_false(identical(id_of(mutated), addr_registry_snapshot()))
+
+  # Reordering the same four lines is also a different snapshot, which is what
+  # makes the fixed order part of the definition rather than a formatting
+  # choice.
+  lines <- strsplit(manifest, "\n")[[1]]
+  reordered <- paste0(paste0(rev(lines), "\n"), collapse = "")
+  expect_false(identical(id_of(reordered), addr_registry_snapshot()))
 })
 
 test_that("addr_registry_outdated() rejects a nonsense max_age", {
@@ -337,8 +446,8 @@ test_that("the two layers are stamped separately", {
     expect_equal(
       version,
       min(
-        raddr_registry_data$meta$v4_space$last_modified_date,
-        raddr_registry_data$meta$v6_space$last_modified_date
+        raddr_registry_data$meta$v4_space$last_updated,
+        raddr_registry_data$meta$v6_space$last_updated
       )
     )
   }
@@ -346,9 +455,34 @@ test_that("the two layers are stamped separately", {
   # And the halves genuinely differ here, unlike the special-purpose pair, so
   # the "older of the two" rule is doing real work.
   expect_false(identical(
-    raddr_registry_data$meta$v4_space$last_modified,
-    raddr_registry_data$meta$v6_space$last_modified
+    raddr_registry_data$meta$v4_space$last_updated,
+    raddr_registry_data$meta$v6_space$last_updated
   ))
+})
+
+test_that("this pair is the one where editorial and served dates disagree", {
+  # The reason the stamp is scraped from IANA's page rather than taken from the
+  # HTTP header. On the special-purpose pair the two agree by coincidence; here
+  # they do not, so the header approach reported a date IANA does not claim.
+  #
+  # Pinned on both sources so a future rebuild that silently reverted to the
+  # header would fail here rather than ship a plausible wrong number.
+  v4 <- raddr_registry_data$meta$v4_space
+  v6 <- raddr_registry_data$meta$v6_space
+
+  expect_equal(v4$last_updated, "2025-10-10")
+  expect_equal(v4$last_modified_date, "2025-10-09")
+  expect_equal(v6$last_updated, "2025-10-23")
+  expect_equal(v6$last_modified_date, "2025-10-11")
+
+  # Both halves disagree with their header, in the same direction: IANA edited
+  # the registry after the export was deployed.
+  expect_gt(v4$last_updated, v4$last_modified_date)
+  expect_gt(v6$last_updated, v6$last_modified_date)
+
+  # And the stamp follows the editorial dates, so it is a day later than the
+  # header rule produced.
+  expect_equal(addr_address_space_version(), "2025-10-10")
 })
 
 test_that("special-purpose outranks address space where both match", {

@@ -2039,39 +2039,97 @@ recorded. `inst/extdata/*.csv` is now `-text` in `.gitattributes` and excluded
 from the three whitespace hooks. **A vendoring pattern needs an exemption from
 the repo's formatting, or the formatting silently invalidates the provenance.**
 
-**An undated snapshot is outdated (see §7.2 for the overlay's own stamp).** The CSVs carry no version field, so the
-stamp is the served `Last-Modified`, normalized to ISO at build time with an
-explicit month map (never `strptime`'s locale-dependent `%b`). The stamp is the
+**An undated snapshot is outdated (see §7.2 for the overlay's own stamp).** The
+CSVs carry no version field, so the stamp is scraped (§7.1.1). The stamp is the
 **older** of the two halves, and is `NA` if either half is undated;
 `addr_registry_outdated()` then returns `TRUE`. Treating absence of evidence as
 evidence of freshness is the one failure a staleness check exists to prevent.
 
-**But the stamp answers a weaker question than "when did IANA change this"**
-**[verified 2026-07-27].** `Last-Modified` is a site *deploy* timestamp, not an
-editorial one. Seven CSV exports across four unrelated IANA registries are
-served with the identical second `Thu, 09 Oct 2025 21:51:16 GMT`, and the IPv4
-multicast registry's own page records an editorial `Last Updated` of
-`2026-06-26` while several of its CSV exports still carry a 2025
-`Last-Modified`. IANA's editorial signal is the page-level `Last Updated` field
-inside the XHTML, which raddr does not fetch.
+#### 7.1.1 The stamp is editorial, not served **[implemented 2026-07-30]**
 
-The number raddr currently ships is nonetheless correct: both special-purpose
-registries record `Last Updated` `2025-10-09`, matching the served header. It is
-right by coincidence, which is why the claim was narrowed rather than the
-mechanism changed. The failure mode to watch is a deploy with no content change
-advancing the stamp, which would assert freshness the data has not earned — the
-same failure as an undated snapshot, arriving more slowly.
+`RADD-lfgkjvfv`. The stamp used to be the CSV's served `Last-Modified`. It is
+now IANA's own page-level `Last Updated`, scraped from the registry XHTML.
 
-Two things contain the damage. Content identity is tracked exactly by a sha256
-per file, and `--check` compares content and never dates, so provenance drift
-cannot move the staleness guard. And the "older of the two halves" rule is
-currently a no-op, because both halves always carry the same deploy second; it
-is kept as the correct rule should they ever diverge.
+**`Last-Modified` is a site *deploy* timestamp** [verified 2026-07-27,
+re-verified against the live pages 2026-07-30]. Seven CSV exports across four
+unrelated IANA registries are served with the identical second
+`Thu, 09 Oct 2025 21:51:16 GMT`, and the IPv4 multicast registry's own page
+records an editorial `Last Updated` of `2026-06-26` while several of its CSV
+exports still carry a 2025 `Last-Modified`.
 
-Stamping from the page-level `Last Updated` is the real fix and is deferred
-(`RADD-lfgkjvfv`), because it means scraping XHTML in the build script.
-Its failure mode is safe — an unparseable field yields `NA`, which yields
-`outdated = TRUE` — so the deferral is a cost decision, not a risk one.
+**Vendoring the address-space pair is what made this a wrong number rather than
+a caveat.** While the special-purpose pair stood alone the shipped stamp was
+correct — both those registries really were edited on `2025-10-09`, the day
+their exports were deployed — so §7.1 narrowed the *claim* and left the
+mechanism. The address-space pair does not cooperate: editorial `2025-10-10` and
+`2025-10-23` against headers of `2025-10-09` and `2025-10-11`. So
+`addr_address_space_version()` shipped `2025-10-09`, a date IANA does not claim,
+arrived at from deploy timing. It now reports `2025-10-10`.
+`addr_registry_version()` is unchanged. **No classification result moved: all
+four CSVs are byte-identical, only the provenance did.**
+
+**The field, and the two traps in reading it.** It is a definition-list pair,
+`<dt>Last Updated</dt>` followed by `<dd>2025-10-09</dd>`, and the value is
+*already ISO* — so unlike the header path this needs no month map. But it must
+be keyed on the **label**, never on position: the two special-purpose pages open
+with `<dt>Created</dt>` and carry Last Updated second, while the two
+address-space pages have no `Created` at all and carry it first. An index-based
+read returns a 2009 creation date for half the sources. And the page URL is
+**not derivable** from the CSV URL — the special-purpose exports are `-1.csv`
+against a suffix-less page, the IPv4 address-space export has no suffix, the
+IPv6 one is back to `-1.csv`, and the source keyed `iana-ipv4-address-space`
+lives under a path segment spelled `ipv4-address-space`. Both URLs are written
+out per source.
+
+**Scraping upstream markup is acceptable here only because of how it fails.**
+Every failure — field renamed, duplicated, emptied, or reformatted — yields `NA`
+with a warning naming which failure it was, and `NA` yields an undated stamp and
+`outdated = TRUE`. Each of those five was exercised by mutating a saved page.
+The duplicated-field case is the one that justifies requiring *exactly* one
+match: a first-match rule shipped the injected decoy date instead of refusing.
+
+**The pages are deliberately not vendored.** 140 KB of markup to carry four
+dates is not worth a tarball, so each page is fetched, read, and discarded — but
+its sha256 and served date are recorded, so a maintainer who archived the markup
+can prove which bytes a stamp came from. `--input DIR` accordingly accepts saved
+pages *or* `.last-updated` sidecars, and **the page wins**: markup re-derives the
+date through the same scrape a network build uses, where a sidecar is an
+assertion with nothing behind it. Which route produced the date is itself
+recorded, as `last_updated_from`, because a stamp cannot otherwise tell the two
+apart. Archiving a snapshot therefore means saving four CSVs *and* four pages.
+
+**The served header is still recorded per source, and is now evidence rather
+than a stamp.** `last_updated` and `last_modified_date` disagreeing on the
+address-space pair is the whole finding; deleting the header would delete the
+record of a corrected mistake.
+
+#### 7.1.2 One snapshot id, and why one is safe here **[implemented 2026-07-30]**
+
+`addr_registry_snapshot()`. pslr pins a 40-char upstream commit SHA and derives
+its `list_date` from that commit, so its snapshot is content-addressed *and* its
+date is deterministic given the pin. IANA publishes no commit and no version, so
+those two halves are separate here: §7.1.1 is the date, this is the identity.
+
+A sha256 over a **canonical manifest** — one `<key> <sha256>` line per source,
+LF-terminated, in the fixed order `v4`, `v6`, `v4_space`, `v6_space`, hashed as
+UTF-8 bytes. The order and spelling are part of the definition, not formatting,
+which is what makes the id reproducible outside R: `printf` piped to `shasum`
+reproduces it, and that was checked rather than assumed. `serialize = FALSE` is
+load-bearing — without it `digest()` hashes R's serialization of the string
+instead of the string.
+
+**One id covers all four files, which is not the mistake the two separate DATE
+stamps avoid.** A date spanning both pairs would make each half assert currency
+for a table it says nothing about (§7.2's rule). A content hash asserts only
+which bytes are installed, which is a property of the payload as a whole — and
+it says nothing about which of two snapshots is newer, a hash having no order.
+Identity is single; currency stays split.
+
+`--check` verifies it in two independent steps, because the two ways it can be
+wrong have different causes: the manifest no longer describing the files on disk
+is content drift, whereas an id not following from its own manifest is the shape
+a hand-edited `R/sysdata.rda` takes and nothing else would catch it. Both are
+content, so both belong in a guard that never compares dates.
 
 ### 7.2 The transition overlay **[implemented 2026-07-27]**
 
@@ -2201,13 +2259,16 @@ this reason; on a naive numeric read the check does not merely mis-report, it
 silently loses an eighth of the IPv6 address space.
 
 **Two stamps, and here the "older half" rule does real work.** The pair is
-stamped separately from the special-purpose pair, for §7.2's reason. Unlike
-that pair — whose halves share a deploy second, making the rule a no-op — these
-four files are **not** served with one timestamp: three carry
-`Thu, 09 Oct 2025 21:51:16 GMT` and the IPv6 address-space export carries
-`Sat, 11 Oct 2025 00:06:16 GMT`. The `Last-Modified`-is-a-deploy-timestamp
-caveat (§7.1) applies more strongly here, since these two registries' editorial
-dates are known to differ from what they are served with (`RADD-lfgkjvfv`).
+stamped separately from the special-purpose pair, for §7.2's reason. Unlike that
+pair — whose halves share an editorial date, making the rule a no-op — these two
+registries were edited two weeks apart, `2025-10-10` and `2025-10-23`, so the
+older-half rule is what produces the stamp rather than merely standing by.
+
+**And this pair is why the stamp is editorial at all.** Its served headers
+(`Thu, 09 Oct 2025 21:51:16 GMT`, `Sat, 11 Oct 2025 00:06:16 GMT`) disagree with
+its editorial dates in both halves, so the header rule reported this snapshot a
+day older than IANA claims, for deploy reasons. Vendoring these two turned §7.1's
+documented caveat into a wrong number and settled `RADD-lfgkjvfv`; see §7.1.1.
 
 ### 7.4 What the registry pins, asserted **[implemented 2026-07-28]**
 

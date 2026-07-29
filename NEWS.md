@@ -19,6 +19,28 @@
   rejection rather than a wrong address. IPv4 was never affected: its
   equivalent scan uses an unanchored negated class.
 
+* `addr_address_space_version()` **reported a date IANA does not claim**. Both
+  registry stamps were built from the `Last-Modified` header the CSV exports are
+  served with, which is a site *deploy* timestamp rather than an editorial one —
+  seven exports across four unrelated IANA registries carry the identical second.
+  The stamps are now read from the page-level `Last Updated` field on IANA's own
+  registry pages. `addr_registry_version()` is unchanged at `2025-10-09`, where
+  the header happened to match; `addr_address_space_version()` moves
+  **`2025-10-09` to `2025-10-10`**, because those two registries were edited on
+  `2025-10-10` and `2025-10-23` after being deployed on `2025-10-09` and
+  `2025-10-11`. Vendoring the address-space pair is what turned this from a
+  documented caveat into a wrong number. No classification result changes: the
+  four vendored CSVs are byte-identical.
+
+## New features
+
+* `addr_registry_snapshot()` returns one content-addressed id for the whole
+  vendored payload — a `sha256:` digest over a canonical manifest of the four
+  source keys and their per-file checksums, in a fixed order. It is the value to
+  quote in a bug report, since it pins the data independently of the package
+  version. It deliberately says nothing about currency: a hash has no order, and
+  the two editorial stamps stay separate because they describe separate tables.
+
 ## Performance
 
 * The eleven remaining regex patterns on the address-parse path now run under

@@ -174,31 +174,37 @@ addr_address_space <- function() {
 
 #' Provenance of the bundled special-purpose registry snapshot
 #'
-#' `addr_registry_version()` reports the date the vendored **special-purpose**
-#' registry files were last **served** with. `addr_registry_outdated()` says
-#' whether that is longer ago than `max_age` days.
+#' `addr_registry_version()` reports the date IANA itself records having last
+#' changed the vendored **special-purpose** registries.
+#' `addr_registry_outdated()` says whether that is longer ago than `max_age`
+#' days.
 #'
 #' These two answer for [addr_registry()] only. The address-space pair is
 #' vendored from different files and stamped separately; see
-#' [addr_address_space_version()].
+#' [addr_address_space_version()]. For *which bytes* are installed rather than
+#' how current they are, see [addr_registry_snapshot()].
 #'
 #' @section What the stamp is, and is not:
 #'
-#' The IANA CSVs carry no version field, so the stamp is the `Last-Modified`
-#' date the two files were served with, normalized at build time.
+#' The IANA CSVs carry no version field. The stamp is the page-level
+#' `Last Updated` field from IANA's own registry page -- its editorial date --
+#' read at build time and stored as ISO text.
 #'
-#' That is a weaker signal than it looks, and the documentation used to
-#' overstate it. `Last-Modified` is a site **deploy** timestamp rather than an
-#' editorial one: unrelated CSVs across different IANA registries are served
-#' with the same timestamp to the second, and at least one IANA registry has
-#' been edited months after the `Last-Modified` its own CSV export still
-#' carries. So the stamp answers "when was this file written to the server", not
-#' "when did IANA last change this data".
+#' It is deliberately **not** the `Last-Modified` header the CSV is served with,
+#' which earlier versions of raddr used. That header is a site **deploy**
+#' timestamp: unrelated CSVs across different IANA registries are served with
+#' the same timestamp to the second, and at least one IANA registry has been
+#' edited months after the `Last-Modified` its own export still carries. For
+#' this pair the two happen to agree; for the address-space pair they do not,
+#' which is what settled the question. The served header is still recorded in
+#' the package's internal metadata, because it is a fact about the fetch -- it
+#' is simply not an answer to "when did IANA last change this".
 #'
-#' Content identity is tracked separately and exactly, by a sha256 per file
-#' recorded at build time. `data-raw/build-registry.R --check` compares content
-#' and never dates, so a stamp that drifts for deploy reasons cannot make the
-#' staleness guard pass or fail.
+#' Content identity is tracked separately and exactly, by a sha256 per file and
+#' by the single snapshot id [addr_registry_snapshot()] returns.
+#' `data-raw/build-registry.R --check` compares content and never dates, so a
+#' stamp that drifts for deploy reasons cannot make the staleness guard pass or
+#' fail.
 #'
 #' @section Unknown is not fresh:
 #'
@@ -210,10 +216,16 @@ addr_address_space <- function() {
 #' evidence about, and treating no evidence as evidence of freshness is the one
 #' failure mode a staleness check exists to prevent.
 #'
+#' That extends to the source of the date. Scraping a field out of upstream
+#' markup can fail in several ways -- the field renamed, duplicated, emptied, or
+#' reformatted -- and every one of them yields `NA` here rather than a guess.
+#' That is what makes reading the editorial date acceptable at all: the mode it
+#' fails in is the safe one.
+#'
 #' The stamp is also the **older** of the two halves, because a snapshot is only
-#' as current as its stalest part. In practice the two halves are served with
-#' the same deploy timestamp and the rule rarely bites; it is kept because it is
-#' the right rule if they ever diverge, not because it is doing work today.
+#' as current as its stalest part. Both special-purpose registries currently
+#' record the same editorial date, so the rule does no work for this pair; it
+#' does for [addr_address_space_version()].
 #'
 #' @section No refresh:
 #'
@@ -270,9 +282,11 @@ addr_registry_outdated <- function(max_age = 365) {
 
 #' Provenance of the bundled address-space snapshot
 #'
-#' Reports the date the vendored IANA address-space files were last **served**
-#' with, normalized to ISO at build time. This is [addr_registry_version()]'s
-#' counterpart for [addr_address_space()].
+#' Reports the date IANA itself records having last changed the vendored
+#' address-space registries. This is [addr_registry_version()]'s counterpart for
+#' [addr_address_space()], and follows the same rules: IANA's page-level
+#' `Last Updated` field, the older of the two halves, and `NA` rather than a
+#' guess whenever the date cannot be read.
 #'
 #' @section Why this is stamped separately:
 #'
@@ -281,23 +295,27 @@ addr_registry_outdated <- function(max_age = 365) {
 #' nothing about -- the same reason the transition overlay carries its own
 #' stamp (`addr_transition_version()`).
 #'
-#' The separation is not theoretical here. The four vendored files are **not**
-#' served with one timestamp: three carry `Thu, 09 Oct 2025 21:51:16 GMT` and
-#' the IPv6 address-space export carries `Sat, 11 Oct 2025 00:06:16 GMT`. So
-#' the "older of the two halves" rule, which is a no-op for the special-purpose
-#' pair, actually does work for this one.
+#' The separation is not theoretical, and this is the pair that proves it. These
+#' two registries carry editorial dates two weeks apart, `2025-10-10` and
+#' `2025-10-23`, so the "older of the two halves" rule does real work here while
+#' it is a no-op for the special-purpose pair.
 #'
-#' The same caveat applies as to [addr_registry_version()], and more strongly:
-#' `Last-Modified` is a site **deploy** timestamp, not an editorial one. For
-#' the special-purpose pair the served date happens to match IANA's own page
-#' level `Last Updated`. For these two it does not, so this stamp answers
-#' "when was this file written to the server" and nothing more. Content
-#' identity is tracked exactly and separately, by a sha256 per file.
+#' @section This pair is why the stamp is editorial:
+#'
+#' raddr used to stamp from the `Last-Modified` header the CSVs are served with.
+#' For the special-purpose pair that header happens to match IANA's editorial
+#' date. For these two it does not: they are served with `2025-10-09` and
+#' `2025-10-11` against editorial dates of `2025-10-10` and `2025-10-23`, so
+#' the header approach reported this snapshot as a day older than IANA says it
+#' is, for reasons that have nothing to do with the data. Vendoring these two
+#' turned that from a caveat into a wrong number, and the stamp now comes from
+#' the registry page instead.
 #'
 #' @return A length-1 `character` `"YYYY-MM-DD"` date, or `NA_character_` when
 #'   either half of the snapshot is undated.
 #'
-#' @seealso [addr_address_space()] for the data itself.
+#' @seealso [addr_address_space()] for the data itself, and
+#'   [addr_registry_snapshot()] for which bytes are installed.
 #'
 #' @examples
 #' addr_address_space_version()
@@ -306,4 +324,55 @@ addr_registry_outdated <- function(max_age = 365) {
 addr_address_space_version <- function() {
   version <- raddr_registry_data$meta$space_version
   if (is.null(version)) NA_character_ else as.character(version)
+}
+
+#' Content-addressed identity of the bundled registry snapshot
+#'
+#' Returns one string identifying exactly which vendored IANA bytes are
+#' installed: a `"sha256:..."` digest over all four registry files. This is the
+#' value to quote in a bug report, because it pins the data a result came from
+#' without depending on the package version.
+#'
+#' @section What it answers, and what it does not:
+#'
+#' It answers **which bytes**. Two installations reporting the same id have the
+#' same four files, byte for byte.
+#'
+#' It does **not** answer which of two snapshots is newer. A hash has no order.
+#' Currency is what [addr_registry_version()] and
+#' [addr_address_space_version()] report, and those two are deliberately
+#' separate because they make claims about separate tables.
+#'
+#' One id covers all four files for that same reason inverted. A *date* spanning
+#' both pairs would make each half assert currency for a table it says nothing
+#' about; a content hash asserts only what is installed, which is a property of
+#' the payload as a whole.
+#'
+#' @section How it is computed:
+#'
+#' A sha256 over a canonical manifest: one `"<key> sha256:<hex>"` line per
+#' source, each terminated by a newline, in the fixed order `v4`, `v6`,
+#' `v4_space`, `v6_space`, hashed as UTF-8 bytes.
+#'
+#' The order and the spelling are part of the definition rather than formatting,
+#' which is what makes the id reproducible outside R -- the manifest is a byte
+#' string anything can build from the installed CSVs and hash. The manifest is
+#' also stored beside the id, and `data-raw/build-registry.R --check` verifies
+#' both steps: that the manifest still describes the files on disk, and that the
+#' id still follows from the manifest. Being content rather than dates, both
+#' belong in that guard, which never compares dates.
+#'
+#' @return A length-1 `character` of the form `"sha256:"` followed by 64 hex
+#'   digits, or `NA_character_` if the installed snapshot records no id.
+#'
+#' @seealso [addr_registry_version()] and [addr_address_space_version()] for
+#'   currency rather than identity.
+#'
+#' @examples
+#' addr_registry_snapshot()
+#'
+#' @export
+addr_registry_snapshot <- function() {
+  snapshot <- raddr_registry_data$meta$snapshot
+  if (is.null(snapshot)) NA_character_ else as.character(snapshot)
 }

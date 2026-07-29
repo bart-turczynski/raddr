@@ -44,6 +44,29 @@
 # reproducible from bytes already on disk, and so the vendored CSVs can be
 # rebuilt on a machine with no route to IANA.
 #
+# What `--input DIR` looks for, per source:
+#
+#   <stem>.csv                    the data                      REQUIRED
+#   <stem>.csv.last-modified      served date of the CSV         optional
+#   <stem>.xhtml                  the registry page              optional
+#   <stem>.xhtml.last-modified    served date of the page        optional
+#   <stem>.csv.last-updated       IANA's editorial date          optional
+#
+# `<stem>` is the VENDORED basename, e.g. `iana-ipv4-address-space`, not IANA's
+# own -- so the directory reads as four CSV/page pairs, which
+# `iana-ipv4-address-space.csv` beside `ipv4-address-space.xhtml` would not.
+#
+# The page and the `.last-updated` sidecar are alternatives, and the page WINS.
+# Saved markup is evidence: it re-derives the date through the same scrape a
+# network build uses, and its sha256 can be checked against the one the
+# fetching build recorded. The sidecar is the weaker fallback for a maintainer
+# who kept the date but not the bytes. With neither, the snapshot is honestly
+# undated and `addr_registry_outdated()` reports TRUE.
+#
+# So archiving a snapshot means saving the four CSVs AND the four pages. That is
+# the only way to rebuild an identical stamp after IANA edits a page, since the
+# pages are deliberately not vendored into the package.
+#
 # `--check` rebuilds the table in memory from the COMMITTED inst/extdata bytes
 # and compares it to the committed R/sysdata.rda. It exits non-zero on drift,
 # which is what stops a hand-edited generated file from shipping. It compares
@@ -56,12 +79,27 @@
 
 # --- configuration ----------------------------------------------------------
 
+# Each source names TWO endpoints. The CSV is the data; the `page` is the XHTML
+# registry page, fetched only for IANA's own editorial `Last Updated` field and
+# then discarded (see `page_last_updated()` below).
+#
+# The page URL is written out per source rather than derived from the CSV URL,
+# because there is no rule to derive it by: the special-purpose exports are
+# `-1.csv` against a page with no suffix, the IPv4 address-space export has no
+# suffix at all, the IPv6 one is back to `-1.csv`, and the key named
+# `iana-ipv4-address-space` lives under a path segment spelled
+# `ipv4-address-space`. A `sub()` clever enough to cover all four would be
+# wrong the first time IANA adds a fifth.
 sources <- list(
   v4 = list(
     name = "iana-ipv4-special-registry",
     url = paste0(
       "https://www.iana.org/assignments/iana-ipv4-special-registry/",
       "iana-ipv4-special-registry-1.csv"
+    ),
+    page = paste0(
+      "https://www.iana.org/assignments/iana-ipv4-special-registry/",
+      "iana-ipv4-special-registry.xhtml"
     ),
     path = "inst/extdata/iana-ipv4-special-registry.csv"
   ),
@@ -70,6 +108,10 @@ sources <- list(
     url = paste0(
       "https://www.iana.org/assignments/iana-ipv6-special-registry/",
       "iana-ipv6-special-registry-1.csv"
+    ),
+    page = paste0(
+      "https://www.iana.org/assignments/iana-ipv6-special-registry/",
+      "iana-ipv6-special-registry.xhtml"
     ),
     path = "inst/extdata/iana-ipv6-special-registry.csv"
   ),
@@ -83,6 +125,10 @@ sources <- list(
       "https://www.iana.org/assignments/ipv4-address-space/",
       "ipv4-address-space.csv"
     ),
+    page = paste0(
+      "https://www.iana.org/assignments/ipv4-address-space/",
+      "ipv4-address-space.xhtml"
+    ),
     path = "inst/extdata/iana-ipv4-address-space.csv"
   ),
   v6_space = list(
@@ -90,6 +136,10 @@ sources <- list(
     url = paste0(
       "https://www.iana.org/assignments/ipv6-address-space/",
       "ipv6-address-space-1.csv"
+    ),
+    page = paste0(
+      "https://www.iana.org/assignments/ipv6-address-space/",
+      "ipv6-address-space.xhtml"
     ),
     path = "inst/extdata/iana-ipv6-address-space.csv"
   )
@@ -599,6 +649,151 @@ file_sha256 <- function(path) {
   paste0("sha256:", digest::digest(file = path, algo = "sha256"))
 }
 
+# Upstream's own idea of when a file was written to the server. Recorded when it
+# is offered and left unknown when it is not -- never guessed, and never
+# defaulted to today (subissue RADD-oknssqfy).
+http_last_modified <- function(url) {
+  tryCatch(
+    {
+      h <- curlGetHeaders(url)
+      val <- grep("^[Ll]ast-[Mm]odified:", h, value = TRUE)
+      if (length(val)) trimws(sub("^[^:]+:", "", val[1])) else NA_character_
+    },
+    error = function(e) NA_character_
+  )
+}
+
+# A sidecar lets an offline build carry the same provenance a fetch would.
+read_sidecar <- function(path) {
+  if (!file.exists(path)) {
+    return(NA_character_)
+  }
+  lines <- readLines(path, warn = FALSE)
+  if (!length(lines)) NA_character_ else trimws(lines[1])
+}
+
+# An editorial date is trusted only when it has the shape of one, and
+# `as.Date()` alone is not that check: it accepts `2025-10-9` and it accepts a
+# datetime with a time part, either of which would put a value in
+# R/sysdata.rda that `addr_registry_version()`'s documented "YYYY-MM-DD"
+# contract does not describe.
+# So the shape is matched first and the calendar checked second -- `2025-13-45`
+# has the right shape and is not a date.
+iso_date_or_na <- function(x, label) {
+  bad <- function(why) {
+    warning(
+      "editorial date for ", label, " ", why, ": ", x,
+      "; recording it as unknown",
+      call. = FALSE
+    )
+    NA_character_
+  }
+  # Deliberately NOT a silent early return. Every caller reaches this function
+  # because something was supposed to hold a date -- a `<dd>` that exists, or a
+  # sidecar file that exists -- so blank is a failure to report, not an absence
+  # to accept. Returning NA quietly here would collapse "the page has no value"
+  # into "there was no page", which are different things to fix.
+  if (is.na(x) || !nzchar(x)) {
+    x <- if (is.na(x)) "NA" else "\"\""
+    return(bad("is empty"))
+  }
+  if (!grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", x)) {
+    return(bad("is not ISO YYYY-MM-DD"))
+  }
+  if (is.na(as.Date(x, format = "%Y-%m-%d"))) {
+    return(bad("has ISO shape but is not a calendar date"))
+  }
+  x
+}
+
+# IANA's editorial date lives in the registry PAGE -- not in the CSV export and
+# not in any HTTP header. It is a definition-list pair reading
+# `<dt>Last Updated</dt>` followed by `<dd>2025-10-09</dd>`, and it is already
+# ISO upstream, so unlike http_date_to_iso() this needs no month map.
+#
+# Keyed on the LABEL, never on position. The two special-purpose pages open with
+# `<dt>Created</dt>` and carry Last Updated second; the two address-space pages
+# have no Created at all and carry it first. An index-based read would quietly
+# return a 2009 creation date for half the sources.
+#
+# The dt and the dd sit on separate lines, so the file is collapsed to one
+# string before matching rather than scanned line by line.
+#
+# Exactly one such field is required. Every failure -- no field, several fields,
+# no value, a value that is not a date -- returns NA with a warning, and NA
+# propagates to an undated stamp and `addr_registry_outdated() == TRUE`. That is
+# why scraping upstream markup is an acceptable thing to do here: the mode it
+# fails in is the safe one.
+page_last_updated <- function(path, label = path) {
+  html <- paste(readLines(path, warn = FALSE), collapse = "\n")
+
+  label_pattern <- "<dt>[[:space:]]*Last Updated[[:space:]]*</dt>"
+  found <- regmatches(html, gregexpr(label_pattern, html))[[1]]
+  if (length(found) != 1L) {
+    warning(
+      "expected exactly one 'Last Updated' field in ", label, ", found ",
+      length(found), "; the page shape has changed. Recording the editorial ",
+      "date as unknown",
+      call. = FALSE
+    )
+    return(NA_character_)
+  }
+
+  m <- regmatches(
+    html,
+    regexec(paste0(label_pattern, "[[:space:]]*<dd>([^<]*)</dd>"), html)
+  )[[1]]
+  if (length(m) != 2L) {
+    warning(
+      "the 'Last Updated' field in ", label, " has no <dd> value; recording ",
+      "the editorial date as unknown",
+      call. = FALSE
+    )
+    return(NA_character_)
+  }
+
+  iso_date_or_na(trimws(m[2]), label)
+}
+
+# --- the snapshot identity --------------------------------------------------
+
+# pslr pins a 40-char upstream commit SHA and derives its list_date from that
+# commit, so the snapshot is content-addressed AND the date is deterministic
+# given the pin. IANA publishes no commit and no version to pin, so those two
+# halves are separate here: the date is scraped from the page above, and
+# identity comes from the bytes themselves.
+#
+# The id is a sha256 over a canonical manifest: one `<key> <sha256>` line per
+# source, LF-terminated, in the fixed order `all_keys` declares, hashed as UTF-8
+# bytes. `serialize = FALSE` is load-bearing -- without it digest() hashes R's
+# serialization of the string rather than the string, and the id would depend on
+# the serialization format instead of on the data.
+#
+# The order and the spelling are part of the definition, not formatting: the
+# manifest is stored beside the id so both steps are reproducible, and `--check`
+# verifies each separately.
+#
+# ONE id covers all FOUR files, and that is not the mistake the two separate
+# DATE stamps avoid. A date across both pairs would make each half assert
+# currency for a table it says nothing about. A content hash asserts only which
+# bytes are installed, which is a property of the payload as a whole -- and it
+# says nothing about which of two snapshots is newer, a hash having no order.
+snapshot_manifest <- function(entries, keys) {
+  lines <- vapply(
+    keys,
+    function(k) sprintf("%s %s\n", k, entries[[k]]$sha256),
+    character(1)
+  )
+  paste0(lines, collapse = "")
+}
+
+snapshot_id <- function(manifest) {
+  paste0(
+    "sha256:",
+    digest::digest(manifest, algo = "sha256", serialize = FALSE)
+  )
+}
+
 # --- --check: the committed artifacts must agree ----------------------------
 
 if (check_only) {
@@ -646,6 +841,22 @@ if (check_only) {
     }
   }
 
+  # The snapshot id is checked in two independent steps, because the two ways it
+  # can be wrong have different causes and different fixes. Step one catches
+  # content drift the per-file loop above would also catch; step two catches an
+  # id that no longer follows from its own recorded manifest, which is the shape
+  # a hand-edited R/sysdata.rda takes and which nothing else here would see.
+  # Both are content, not dates, so both belong in a dates-blind guard.
+  on_disk <- lapply(sources, function(s) list(sha256 = file_sha256(s$path)))
+  disk_manifest <- snapshot_manifest(on_disk, all_keys)
+  recorded_manifest <- env$raddr_registry_data$meta$snapshot_manifest
+  recorded_id <- env$raddr_registry_data$meta$snapshot
+  if (!identical(disk_manifest, recorded_manifest)) {
+    problems <- c(problems, "snapshot manifest disagrees with inst/extdata")
+  } else if (!identical(snapshot_id(recorded_manifest), recorded_id)) {
+    problems <- c(problems, "snapshot id does not follow from its own manifest")
+  }
+
   if (length(problems)) {
     message("registry artifacts are STALE:")
     for (p in problems) message("  ", p)
@@ -664,38 +875,83 @@ if (check_only) {
 
 dir.create("inst/extdata", recursive = TRUE, showWarnings = FALSE)
 
-last_modified <- stats::setNames(
-  as.list(rep(NA_character_, length(all_keys))), all_keys
-)
+# Provenance is collected per source rather than in parallel vectors, because
+# there are now five facts per file and four lists indexed by the same key are a
+# way to get them out of step.
+prov <- stats::setNames(vector("list", length(all_keys)), all_keys)
 
 for (key in all_keys) {
   src <- sources[[key]]
+  p <- list(
+    last_modified = NA_character_,
+    page_last_modified = NA_character_,
+    page_sha256 = NA_character_,
+    page_bytes = NA_integer_,
+    last_updated = NA_character_,
+    # Where the editorial date came from, because the two routes are not equally
+    # good evidence and the stamp alone cannot tell them apart. "page" was read
+    # out of markup whose sha256 is recorded beside it; "sidecar" is a
+    # maintainer's assertion with nothing behind it. Recording only the date
+    # would present both as the same fact.
+    last_updated_from = NA_character_
+  )
+
   if (is.null(input_dir)) {
     utils::download.file(src$url, src$path, mode = "wb", quiet = TRUE)
-    # Upstream's own idea of when the registry last changed. Recorded when it
-    # is offered and left unknown when it is not -- never guessed, and never
-    # defaulted to today (subissue RADD-oknssqfy).
-    lm <- tryCatch(
-      {
-        h <- curlGetHeaders(src$url)
-        val <- grep("^[Ll]ast-[Mm]odified:", h, value = TRUE)
-        if (length(val)) trimws(sub("^[^:]+:", "", val[1])) else NA_character_
-      },
-      error = function(e) NA_character_
-    )
-    last_modified[[key]] <- lm
+    p$last_modified <- http_last_modified(src$url)
+
+    # The page is fetched for one field and then DISCARDED: 140 KB of markup is
+    # not vendored into the package to carry a date. Its sha256 and served date
+    # ARE recorded, so a maintainer who archived the markup can prove which
+    # bytes the stamp was read from, and rebuild the same stamp with --input.
+    page_file <- tempfile(fileext = ".xhtml")
+    utils::download.file(src$page, page_file, mode = "wb", quiet = TRUE)
+    p$page_last_modified <- http_last_modified(src$page)
+    p$page_sha256 <- file_sha256(page_file)
+    p$page_bytes <- as.integer(file.size(page_file))
+    p$last_updated <- page_last_updated(page_file, src$page)
+    if (!is.na(p$last_updated)) {
+      p$last_updated_from <- "page"
+    }
+    unlink(page_file)
   } else {
     from <- file.path(input_dir, basename(src$path))
     if (!file.exists(from)) {
       stop("no such file: ", from, call. = FALSE)
     }
     file.copy(from, src$path, overwrite = TRUE)
-    # A sidecar lets an offline build carry the same provenance a fetch would.
-    sidecar <- paste0(from, ".last-modified")
-    if (file.exists(sidecar)) {
-      last_modified[[key]] <- trimws(readLines(sidecar, warn = FALSE)[1])
+    p$last_modified <- read_sidecar(paste0(from, ".last-modified"))
+
+    # Saved markup beats a date sidecar, and the preference is not arbitrary:
+    # the markup re-derives the date through the same scrape a network build
+    # uses, and carries a checksum that can be compared against the fetching
+    # build's. A sidecar is an assertion with nothing behind it.
+    page_from <- sub("[.]csv$", ".xhtml", from)
+    sidecar <- paste0(from, ".last-updated")
+    if (file.exists(page_from)) {
+      p$page_last_modified <- read_sidecar(paste0(page_from, ".last-modified"))
+      p$page_sha256 <- file_sha256(page_from)
+      p$page_bytes <- as.integer(file.size(page_from))
+      p$last_updated <- page_last_updated(page_from)
+      if (!is.na(p$last_updated)) {
+        p$last_updated_from <- "page"
+      }
+    } else if (file.exists(sidecar)) {
+      p$last_updated <- iso_date_or_na(read_sidecar(sidecar), sidecar)
+      if (!is.na(p$last_updated)) {
+        p$last_updated_from <- "sidecar"
+      }
+    } else {
+      warning(
+        "no ", basename(page_from), " and no ", basename(sidecar), " in ",
+        input_dir, "; this snapshot will be undated and therefore reported ",
+        "outdated",
+        call. = FALSE
+      )
     }
   }
+
+  prov[[key]] <- p
 }
 
 # --- build ------------------------------------------------------------------
@@ -714,36 +970,70 @@ row_counts <- c(
 
 meta <- lapply(all_keys, function(key) {
   src <- sources[[key]]
+  p <- prov[[key]]
   list(
     name = src$name,
     url = src$url,
     path = src$path,
     sha256 = file_sha256(src$path),
     bytes = as.integer(file.size(src$path)),
-    last_modified = last_modified[[key]],
-    last_modified_date = http_date_to_iso(last_modified[[key]]),
+    # The served dates are kept even though nothing is stamped from them any
+    # more. They are facts about the fetch, and one of them is the evidence for
+    # why the stamp moved: `last_updated` and `last_modified_date` disagreeing
+    # on the address-space pair is the whole finding behind RADD-lfgkjvfv.
+    # Dropping them would delete the record of a corrected mistake.
+    last_modified = p$last_modified,
+    last_modified_date = http_date_to_iso(p$last_modified),
+    page_url = src$page,
+    page_last_modified = p$page_last_modified,
+    page_sha256 = p$page_sha256,
+    page_bytes = p$page_bytes,
+    # IANA's own editorial date, and the one the stamp is built from.
+    last_updated = p$last_updated,
+    last_updated_from = p$last_updated_from,
     blocks = as.integer(row_counts[[key]])
   )
 })
 names(meta) <- all_keys
 meta$retrieved_at <- format(Sys.time(), tz = "UTC", usetz = TRUE)
 meta$license <- "CC0 1.0 Universal"
+meta$snapshot_manifest <- snapshot_manifest(meta, all_keys)
+meta$snapshot <- snapshot_id(meta$snapshot_manifest)
 
+# The stamp is IANA's EDITORIAL date -- the page-level `Last Updated` field --
+# and no longer the served `Last-Modified` (RADD-lfgkjvfv).
+#
+# The header is a site DEPLOY timestamp. Seven CSV exports across four unrelated
+# IANA registries are served with the identical second, and the IPv4 multicast
+# page records an editorial date eight months newer than what several of its own
+# exports still carry. Re-verified against the live pages 2026-07-30: the
+# special-purpose pair reads `2025-10-09`, matching its header by coincidence,
+# while the address-space pair reads `2025-10-10` and `2025-10-23` against
+# headers of `2025-10-09` and `2025-10-11`.
+#
+# So while the address-space pair was unvendored this was a claim that happened
+# to be true; once it was vendored the header approach misdated half the sources
+# on day one. That is why this moved from a documentation narrowing to a fix.
+#
 # A snapshot is only as current as its STALEST half, and it is not dated at all
 # unless both halves are. An unknown date must degrade to "unknown" and never to
 # today (subissue RADD-oknssqfy): a stamp that quietly reads as fresh is worse
-# than no stamp, because `addr_registry_outdated()` would believe it.
+# than no stamp, because `addr_registry_outdated()` would believe it. The scrape
+# yields NA on every failure for exactly this reason.
 stamp <- function(keys) {
-  dates <- vapply(keys, function(k) meta[[k]]$last_modified_date, character(1))
+  dates <- vapply(keys, function(k) meta[[k]]$last_updated, character(1))
   if (anyNA(dates)) NA_character_ else min(dates)
 }
 
 # TWO stamps, not one. The pairs are vendored from different registries whose
-# provenance behaves differently -- the special-purpose pair's served
-# `Last-Modified` happens to match its editorial `Last Updated`, and the
-# address-space pair's does not (RADD-lfgkjvfv). One date across both would
-# make each half assert something about a table it says nothing about, which is
-# the same reason the transition overlay is stamped separately (section 7.2).
+# provenance behaves differently, and the editorial dates make the split sharper
+# than the headers did: the special-purpose pair agrees at `2025-10-09` while
+# the address-space pair spans two weeks. One date across both would make each
+# half assert something about a table it says nothing about, which is the same
+# reason the transition overlay is stamped separately (section 7.2).
+#
+# `meta$snapshot` is single for the opposite reason -- see the note on
+# `snapshot_manifest()`: identity is a property of the payload, currency is not.
 meta$version <- stamp(special_keys)
 meta$space_version <- stamp(space_keys)
 
@@ -763,8 +1053,13 @@ dir.create("inst", recursive = TRUE, showWarnings = FALSE)
 notice_entry <- function(key) {
   m <- meta[[key]]
   sprintf(
-    "  %s\n    Source URL: %s\n    Checksum:   %s\n    Bytes:      %d",
-    m$path, m$url, m$sha256, m$bytes
+    paste0(
+      "  %s\n    Source URL: %s\n    Registry:   %s\n",
+      "    Updated:    %s\n    Checksum:   %s\n    Bytes:      %d"
+    ),
+    m$path, m$url, m$page_url,
+    if (is.na(m$last_updated)) "unknown" else m$last_updated,
+    m$sha256, m$bytes
   )
 }
 
@@ -812,6 +1107,21 @@ copyrights <- paste(
     "partitions of their spaces:",
     "",
     vapply(space_keys, notice_entry, character(1)),
+    "",
+    "`Updated` above is IANA's own page-level `Last Updated` field, its",
+    "editorial date, and not the HTTP `Last-Modified` the export is served",
+    "with -- that header is a site deploy timestamp and misdates two of these",
+    "four files.",
+    "",
+    "The four together are identified by one content-addressed snapshot id,",
+    "reported by addr_registry_snapshot():",
+    "",
+    sprintf("  %s", meta$snapshot),
+    "",
+    "It is a sha256 over a canonical manifest of the four source keys and",
+    "their per-file checksums, in the order listed above. It says which bytes",
+    "are installed; it does not say whether they are current, which is what",
+    "the two `Updated` dates are for.",
     "",
     "IANA registry data is dedicated to the public domain under CC0 1.0",
     "Universal <https://creativecommons.org/publicdomain/zero/1.0/>. The",
@@ -874,7 +1184,26 @@ for (key in all_keys) {
     "    last-modified: ",
     if (is.na(m$last_modified)) "unknown" else m$last_modified
   )
+  # Printed next to each other on purpose: these two disagreeing is the finding
+  # that moved the stamp, and a maintainer should see it rather than read about
+  # it. On the address-space pair they still disagree.
+  message(
+    "    last-updated:  ",
+    if (is.na(m$last_updated)) "unknown" else m$last_updated,
+    "   (IANA editorial, from ",
+    if (is.na(m$last_updated_from)) {
+      "nothing"
+    } else if (identical(m$last_updated_from, "page")) {
+      basename(m$page_url)
+    } else {
+      "a maintainer sidecar, NOT the page"
+    },
+    ")"
+  )
 }
 message("  special-purpose blocks: ", nrow(blocks))
 message("  address-space rows:     ", nrow(space))
+message("  special-purpose stamp:  ", meta$version)
+message("  address-space stamp:    ", meta$space_version)
+message("  snapshot:               ", meta$snapshot)
 message("Review the upstream diff before committing the regenerated artifacts.")

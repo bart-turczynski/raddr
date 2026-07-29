@@ -17,10 +17,14 @@ The two special-purpose registries, which answer policy:
 
   inst/extdata/iana-ipv4-special-registry.csv
     Source URL: https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv
+    Registry:   https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
+    Updated:    2025-10-09
     Checksum:   sha256:e3e39e76d00b1677335db8e9a805c7b9480ea2f4dc9e33f0b93cd3a905128d73
     Bytes:      2423
   inst/extdata/iana-ipv6-special-registry.csv
     Source URL: https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv
+    Registry:   https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+    Updated:    2025-10-09
     Checksum:   sha256:775feea0621dec8735a44fbf30f762e721e8f0a1b3ab7eb341961a88cfce2139
     Bytes:      2289
 
@@ -29,12 +33,31 @@ partitions of their spaces:
 
   inst/extdata/iana-ipv4-address-space.csv
     Source URL: https://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv
+    Registry:   https://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.xhtml
+    Updated:    2025-10-10
     Checksum:   sha256:b7b28385e8bc8785c117e2ea65974f942cc6f7dd9dce914f2253ff0adfad4b03
     Bytes:      22972
   inst/extdata/iana-ipv6-address-space.csv
     Source URL: https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space-1.csv
+    Registry:   https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xhtml
+    Updated:    2025-10-23
     Checksum:   sha256:41fef65d7a5fb32076175ffac1b663a9153d5593d3e2c840696ed8ffa1c7af29
     Bytes:      2093
+
+`Updated` above is IANA's own page-level `Last Updated` field, its
+editorial date, and not the HTTP `Last-Modified` the export is served
+with -- that header is a site deploy timestamp and misdates two of these
+four files.
+
+The four together are identified by one content-addressed snapshot id,
+reported by addr_registry_snapshot():
+
+  sha256:be7f919d7d766a7ad2e2bf848b677c6eb8d8afee34174f1322c45f2831c7c94e
+
+It is a sha256 over a canonical manifest of the four source keys and
+their per-file checksums, in the order listed above. It says which bytes
+are installed; it does not say whether they are current, which is what
+the two `Updated` dates are for.
 
 IANA registry data is dedicated to the public domain under CC0 1.0
 Universal <https://creativecommons.org/publicdomain/zero/1.0/>. The

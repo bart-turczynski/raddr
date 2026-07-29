@@ -32,6 +32,7 @@ X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
 Suggests:
     bignum,
     bit64,
+    digest,
     hedgehog,
     knitr,
     rmarkdown,

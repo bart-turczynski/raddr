@@ -19,33 +19,39 @@ addr_registry_outdated(max_age = 365)
 snapshot is older than \code{max_age} days \strong{or} undated.
 }
 \description{
-\code{addr_registry_version()} reports the date the vendored \strong{special-purpose}
-registry files were last \strong{served} with. \code{addr_registry_outdated()} says
-whether that is longer ago than \code{max_age} days.
+\code{addr_registry_version()} reports the date IANA itself records having last
+changed the vendored \strong{special-purpose} registries.
+\code{addr_registry_outdated()} says whether that is longer ago than \code{max_age}
+days.
 }
 \details{
 These two answer for \code{\link[=addr_registry]{addr_registry()}} only. The address-space pair is
 vendored from different files and stamped separately; see
-\code{\link[=addr_address_space_version]{addr_address_space_version()}}.
+\code{\link[=addr_address_space_version]{addr_address_space_version()}}. For \emph{which bytes} are installed rather than
+how current they are, see \code{\link[=addr_registry_snapshot]{addr_registry_snapshot()}}.
 }
 \section{What the stamp is, and is not}{
 
 
-The IANA CSVs carry no version field, so the stamp is the \code{Last-Modified}
-date the two files were served with, normalized at build time.
+The IANA CSVs carry no version field. The stamp is the page-level
+\verb{Last Updated} field from IANA's own registry page -- its editorial date --
+read at build time and stored as ISO text.
 
-That is a weaker signal than it looks, and the documentation used to
-overstate it. \code{Last-Modified} is a site \strong{deploy} timestamp rather than an
-editorial one: unrelated CSVs across different IANA registries are served
-with the same timestamp to the second, and at least one IANA registry has
-been edited months after the \code{Last-Modified} its own CSV export still
-carries. So the stamp answers "when was this file written to the server", not
-"when did IANA last change this data".
+It is deliberately \strong{not} the \code{Last-Modified} header the CSV is served with,
+which earlier versions of raddr used. That header is a site \strong{deploy}
+timestamp: unrelated CSVs across different IANA registries are served with
+the same timestamp to the second, and at least one IANA registry has been
+edited months after the \code{Last-Modified} its own export still carries. For
+this pair the two happen to agree; for the address-space pair they do not,
+which is what settled the question. The served header is still recorded in
+the package's internal metadata, because it is a fact about the fetch -- it
+is simply not an answer to "when did IANA last change this".
 
-Content identity is tracked separately and exactly, by a sha256 per file
-recorded at build time. \code{data-raw/build-registry.R --check} compares content
-and never dates, so a stamp that drifts for deploy reasons cannot make the
-staleness guard pass or fail.
+Content identity is tracked separately and exactly, by a sha256 per file and
+by the single snapshot id \code{\link[=addr_registry_snapshot]{addr_registry_snapshot()}} returns.
+\code{data-raw/build-registry.R --check} compares content and never dates, so a
+stamp that drifts for deploy reasons cannot make the staleness guard pass or
+fail.
 }
 
 \section{Unknown is not fresh}{
@@ -59,10 +65,16 @@ That asymmetry is deliberate. A snapshot of unknown age is one you have no
 evidence about, and treating no evidence as evidence of freshness is the one
 failure mode a staleness check exists to prevent.
 
+That extends to the source of the date. Scraping a field out of upstream
+markup can fail in several ways -- the field renamed, duplicated, emptied, or
+reformatted -- and every one of them yields \code{NA} here rather than a guess.
+That is what makes reading the editorial date acceptable at all: the mode it
+fails in is the safe one.
+
 The stamp is also the \strong{older} of the two halves, because a snapshot is only
-as current as its stalest part. In practice the two halves are served with
-the same deploy timestamp and the rule rarely bites; it is kept because it is
-the right rule if they ever diverge, not because it is doing work today.
+as current as its stalest part. Both special-purpose registries currently
+record the same editorial date, so the rule does no work for this pair; it
+does for \code{\link[=addr_address_space_version]{addr_address_space_version()}}.
 }
 
 \section{No refresh}{
