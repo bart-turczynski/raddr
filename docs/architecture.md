@@ -2448,7 +2448,7 @@ the decisions are not relitigated.
 | O13 | The `curl` = aton-then-pton composition for **IPv6** | **Settled 2026-07-28 by running it, and the answer is no — see §11.6.** curl reaches **`getaddrinfo`**, not `inet_pton`, on all 88 IPv6 rows that can be asked through a URL at all; the derived half was wrong on the 10 rows where Apple's `getaddrinfo` lifts an embedded scope and `inet_pton` does not. The item's own premise was also wrong: the IPv4 composition had never been measured either — no `data-raw` script invoked curl before `RADD-xpmuxafb`, so §3.3's `curl` column was derived from the composition it was being used to support. Measured now, IPv4 holds on all 78 rows. `addr_curl()`'s fallback was corrected to `getaddrinfo` under `RADD-puzhycev` |
 | O15 | **CPython bug to file:** `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id` | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed` |
 | O16 | **`davidchall/ipaddress` bug to file (third):** the IPv6 zone ID is accepted and silently discarded | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone **[verified 2026-07-27, 1.0.3]**. Truncating at the first `%` also accepts two rows Apple's `inet_pton` rejects. Joins O11's list |
-| O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | 5.7 s against 2.5 s per 1e6 **[verified 2026-07-27, §11.1.1]**, which the flat-per-row theory does not explain. The suspicion, unmeasured, is `derive_status()`: for an IPv6 vector `aton`'s reading is missing on every row, so `readings_agree()` runs `vec_equal()` against an all-missing address and enters `blank_missing()`'s `proxy[is.na(code), ] <- NA` over a million rows and six columns — a path an all-accepted IPv4 vector never takes. If that is it, the fix is to skip dialects that accepted nothing, and it is small. Profile before touching anything |
+| O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | **Settled 2026-07-29 by profiling it, and the question was wrong — see §11.1.1.** It does not cost more; it barely costs anything. `derive_status()` is 0.124 s on IPv4 against 0.116 s on IPv6 for the same length, and the whole record layer is 8% / 2% of the call. The suspicion was `blank_missing()`'s `proxy[is.na(code), ] <- NA` over an all-missing `aton` column: real, measurable, and **0.4% of the call** — not worth the branch to skip it. The 2.5 s / 5.7 s figures came from subtracting the bare dialect functions from `addr_parse()`, which charges the record for `parse_dialect_full()`'s attempt tracking (`ip_attempt()`, `ends_in_a_number()`, ~22% in both families). One real target did fall out: `parse_ipv4_number_slow()` at **13% of an IPv6 parse** — `RADD-tkpqvomv` |
 | O18 | **`davidchall/ipaddress` bugs to file (fourth and fifth), both in `reverse_pointer()`** | **[verified 2026-07-28, 1.0.3]** (a) every IPv6 name ends in **`ip.arpa`**, not `ip6.arpa` — `reverse_pointer(ip_address("2001:db8::1"))` is one character short of RFC 3596 §2.5's suffix, and `ip.arpa` is not a registered `.arpa` sub-zone at all (research 08 gotcha 7), so every IPv6 answer the function has ever returned is a wrong name that looks right. (b) the IPv6 branch **accumulates**: element *k* of the result carries the labels of elements 1..*k*, so `reverse_pointer(ip_address(c("::1", "2001:db8::1")))[[2]]` has 64 labels. Cost is quadratic in vector length (§11.1.3). IPv4 is correct on both counts, modulo the trailing dot, which is a choice. Joins the O11/O16 list |
 | O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
 
@@ -2545,13 +2545,28 @@ row per dialect, unpacked over the *distinct* masks rather than row by row. It
 is also the answer to whether Epic G should have been a separate opt-in pass. It
 should not.
 
-**The record is the expensive part, at roughly a third of the call**, and this
-is the one that was measured wrong before it was measured right. The obvious
-theory — that the record is a flat per-row price and therefore looms largest
-where parsing is cheapest — is **false**: it costs 2.5 s on IPv4 and 5.7 s on
-IPv6. The ratio is nonetheless worse for IPv4, because IPv4 parsing is four
-times cheaper and the ratio's denominator is what moves. Both halves of that are
-measured; the *mechanism* behind the IPv6 record cost is not, and is O17.
+**The row labelled "+ the record" is not the record.** It was arrived at by
+subtraction — `addr_parse()` minus the bare dialect functions — and that
+subtraction charges the record for work it does not do. Profiled directly on
+2026-07-29 (O17), the record layer proper (`derive_status()`,
+`readings_agree()`, `first_code()`, `outcome_factor()`, `new_raddr_parse()`)
+is **8% of the call on IPv4 and 2% on IPv6**, and it is flat in absolute terms:
+`derive_status()` costs 0.124 s against 0.116 s for the same vector length. It
+does not grow with family, and the 2.5 s / 5.7 s figures above never measured it.
+
+What the subtraction actually caught is `parse_dialect_full()`, at **71% (IPv4)
+and 76% (IPv6)** of the call. `addr_parse()` cannot use the bare dialect
+functions: it needs to know whether each dialect *attempted* an input in order
+to tell `malformed` from `not_an_address` (§6), and `ip_attempt()` /
+`ends_in_a_number()` are **~22% of the call in both families**. That is the
+price of the outcome model, not of the record, and it is charged per dialect
+rather than per row — which is why the flat-per-row theory failed to predict it.
+
+So the record is cheap, the outcome model is not, and the two had been
+conflated. See O17 for the profile and for the one real optimization target it
+turned up: `parse_ipv4_number_slow()` is **13% of an IPv6 parse**, because every
+IPv6 literal is a single non-decimal "part" to the IPv4 engines and so declines
+the fast path on its way to being rejected.
 
 The last row of the first table is **not comparable to the two above it** — its
 corpus mixes IPv4 and IPv6 literals, so it sits between the families for reasons
