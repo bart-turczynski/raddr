@@ -28,6 +28,14 @@
   0.32 s). `addr_whatwg()`, `addr_aton()` and IPv4 `addr_pton()` are unchanged,
   because the one migrated site on their path is the leading-zero rejection and
   `addr_strict()` is the only dialect that rejects leading zeros.
+* The IPv6 hextet validator is a negated character scan plus a width rather than
+  an anchored regex over every piece — 0.363 s to **0.214 s** on the 8e6 pieces
+  `addr_pton()` splits per 1e6 addresses. With the engine change above,
+  `addr_strict()` on IPv6 is **18% faster** overall (3.55 s to 2.91 s) and
+  `addr_pton()` 23%. Both dialects keep the bound they had: the strict rules
+  bound the raw width of a hextet, Apple's bound the significant digits, so
+  `0000000000000000` is still a legal zero and `00001` is still one digit to
+  `addr_pton()` and one too many to `addr_strict()`.
 * Answers are unchanged: 1091 adversarial literals compared across all seven
   entry points, `addr_codes()`, `ends_in_a_number()` and both `integer_to_addr()`
   families, with **no row moving**. That is not a free swap. PCRE differs from

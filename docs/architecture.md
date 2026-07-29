@@ -2436,7 +2436,7 @@ the decisions are not relitigated.
 | O1 | Pure R vs compiled | **Closed 2026-07-29 with all five operations measured — see §11.2 and §11.1.7.** The record meets both targets in pure R; `within_any` meets target and beats C++ (0.96x / 0.24x); the parsers miss by 18x / 41x and format v6 by 7.5x, and that is the pure R floor on irregular string work. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp. The fifth operation, classification, had never been timed against `ipaddress`, and measuring it turned up the one row that was **not** a floor: 76x–86x on IPv6, where the tuned lookups were 0.4 s of a 13.9 s call and `extract_embeddings()` was 11.7 s of it, chopping 1e6 `vctrs` slices of a nested record to deliver as few as 19. Fixed (`RADD-znxdxgyh`), **15.7x**, and classification was never evidence for compiled code — it was a container reshape wearing a floor's clothing, and what exposed it was a decomposition that did not add up rather than a wall clock |
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
-| O4 | `stringi` vs base R for ASCII host tokenization | **Closed 2026-07-29: base R suffices, no dependency — see §11.2.2.** `bench/tokenize.R` runs every tokenizer pattern under TRE, PCRE and ICU with agreement asserted, and **PCRE is ahead of ICU on all of them**; the splits are a wash, `stringi`'s `simplify = NA` matrix is *slower* than `unlist(strsplit())`, and it has no base-N integer parser at all. Its one real win, `stri_detect_charclass()`, is two-thirds recoverable by restructuring the check in base R. The correctness case for `stringi` — locale-independent Unicode — is the strong one and is **absent** here, since `R/encoding.R` gates the input and the grammars are ASCII by definition. What the comparison did find was a defect: `perl = TRUE` is not a semantics-free swap, PCRE's `$` matches before a trailing newline, and the hextet validator was the one anchored pattern already running under it (`RADD-kurxtbqc`). The migration itself followed as §11.2.3 (`RADD-shgcdcvj`), and it found the *second* way the engines differ, which the defect had hidden: PCRE's `.` does not match a newline either, so the two greedy runs to a final separator needed `(?s)` on top of the `\z` anchors |
+| O4 | `stringi` vs base R for ASCII host tokenization | **Closed 2026-07-29: base R suffices, no dependency — see §11.2.2.** `bench/tokenize.R` runs every tokenizer pattern under TRE, PCRE and ICU with agreement asserted, and **PCRE is ahead of ICU on all of them**; the splits are a wash, `stringi`'s `simplify = NA` matrix is *slower* than `unlist(strsplit())`, and it has no base-N integer parser at all. Its one real win, `stri_detect_charclass()`, is mostly recoverable by restructuring the check in base R — and once that restructure shipped and the pair was remeasured with agreement asserted, what `stringi` still holds is 1.1x, or 0.017 s of a 2.9 s parse (§11.2.4). The correctness case for `stringi` — locale-independent Unicode — is the strong one and is **absent** here, since `R/encoding.R` gates the input and the grammars are ASCII by definition. What the comparison did find was a defect: `perl = TRUE` is not a semantics-free swap, PCRE's `$` matches before a trailing newline, and the hextet validator was the one anchored pattern already running under it (`RADD-kurxtbqc`). The migration itself followed as §11.2.3 (`RADD-shgcdcvj`), and it found the *second* way the engines differ, which the defect had hidden: PCRE's `.` does not match a newline either, so the two greedy runs to a final separator needed `(?s)` on top of the `\z` anchors |
 | O5 | Trie vs sorted masked vector for the 51 IANA rows plus the transition overlay | **Measured and closed 2026-07-28, see §11.1.6.** Neither, and not the walk either: grouping the blocks by prefix length — §11.1.5's containment trick, with `vec_match()` in place of `vec_in()` so the group reports *which* row — won every case and **shipped**, worth **36x** on the 276-row address-space table `addr_classify()` reads on every call. The sorted masked vector is *slower* than the walk on `special`; the trie pays to re-encode 1e6 addresses as bit strings on every call |
 | O6 | glibc and musl `pton` rows | **Settled 2026-07-29 by measuring them — see §3.3.0.** `data-raw/oracle-libc-linux.sh` runs both Python oracles under glibc 2.36 and musl 1.2.5 and commits four fixtures beside the Apple ones; `test-libc.R` asserts the divergence set. Findings: glibc and musl `inet_pton` **reject** the leading zeros Apple reads as decimal, in IPv4 and IPv6 alike; both reject every `inet_aton` overflow Apple wraps modulo 2^32; and the item's own premise about `aton` trailing garbage was **backwards** — glibc matches Apple, musl is the strict outlier. The composition of §3.2 holds on all three |
 | O6b | Whether glibc/musl `getaddrinfo` does the `fe80::/10` scope lift | **Settled 2026-07-29, and the answer is no — see §3.5.3.1.** `RADD-blpcanps`'s worst case holds: Linux leaves `fe80:abcd::1` alone at scope 0, so `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of `fe80::/10` rather than at a boundary. Linux `inet_pton` also takes no zone ID at all, so the §5.1 fold cannot arise there. Needed its own instrument, `oracle-zone-native.py`, because the corpus's `%lo0` is an Apple interface name and would have measured the container's interface table |
@@ -3208,7 +3208,10 @@ constant-factor advantage on offer — is *slower* than `unlist(strsplit())`.
 sub-0.1 s stages, and it has no base-N integer parser at all. The one real win
 is `stri_detect_charclass()` at 0.169 s against 0.386 s for today's anchored
 hextet regex — and restructuring that check in base R as a negated scan plus
-`nchar()` reaches 0.260 s, capturing most of it for free. Tagging the input
+`nchar()` reaches 0.260 s, capturing most of it for free. **Both of those numbers
+were superseded by §11.2.4**, which shipped the restructure and remeasured the
+pair with agreement asserted: 0.214 s for base R against 0.144 s for `stringi`,
+so what is left on the table is 1.1x rather than a third. Tagging the input
 UTF-8 moves neither engine, so the gap is engine speed and not marshalling.
 
 So: **no dependency.** The measured conclusion is that a library swap was never
@@ -3374,7 +3377,97 @@ as fault 2 above — without it, `"0\n"` is left alone where TRE reduces it to
 `"\n"` — and the obvious repair, `^0+(?=[0-9])` as already used in
 `R/integer.R`, is **not** equivalent: it declines a hex digit, so `"0a"` keeps
 its zero and the width computation downstream sees a different number.
-`(?s)^0+(?=.)` is the form that agrees.
+`(?s)^0+(?=.)` is the form that agrees. The IPv6 half of that site is now gone,
+folded into the restructure below; the IPv4 half remains.
+
+### 11.2.4 The hextet validator, restructured out of a regex **[verified 2026-07-29]**
+
+The second half of §11.2.2's tokenizer finding, and the one piece of it that is
+not an engine swap. The hextet grammar was one anchored regex over 8n pieces:
+
+```r
+pattern <- if (rules$leading_zeros) "^0*[0-9a-fA-F]{0,4}\\z" else "^[0-9a-fA-F]{1,4}\\z"
+bad <- !grepl(pattern, flat, perl = TRUE)
+```
+
+It is now a negated character scan plus a width. Same grammar, said differently:
+an anchored alternation makes the engine carry a position and a count, where
+asking only whether a piece contains a character it may not contain lets it stop
+at the first offender and never backtrack, and `nchar()` does the counting the
+`{1,4}` was there to do.
+
+Measured in situ on the 8e6 pieces `addr_pton()` actually splits:
+
+| | |
+|---|---|
+| anchored, strict rules | 0.363 s |
+| anchored, leading-zero rules | 0.404 s |
+| **negated scan + `nchar()`** | **0.214 s** |
+| — the scan alone | 0.144 s |
+| — the `nchar()` alone | 0.017 s |
+
+At the surface, interleaved over the two trees, three passes each, 1e6 addresses:
+`addr_strict()` IPv6 3.17 s to **2.91 s** (−8%), `addr_pton()` IPv6 3.22 s to
+**2.84 s** (−12%). Every reading of the old tree is above every reading of the
+new one on both. With §11.2.3 in front of it, IPv6 `addr_strict()` is 3.55 s to
+2.91 s, **−18% for the two changes together.**
+
+The two dialects bound different things and the restructure had to keep both.
+The strict rules bound the raw width, so `00001` is too wide. Apple's bound the
+*significant* digits, so `00001` is one, and `0000000000000000` is a legal zero.
+That second rule is the only place a regex survives: a piece wider than a hextet
+gets its zeros stripped, and the strip is the same one `strtoi()` needs below, so
+it happens once and only on the pieces that need it. The common case — every
+piece four characters or fewer — now pays no regex beyond the scan.
+
+#### Two things it is worth knowing are unreachable
+
+Mutation testing, because a differential corpus is only as good as the mistakes
+it can catch. Six plausible errors in the restructure, each built and run against
+the same 1111-literal corpus:
+
+| mutation | rows moved |
+|---|---|
+| strip to the empty string rather than keeping a digit | 12 |
+| the `^0+(?=[0-9])` lookahead from `R/integer.R` | 9 |
+| significant-digit bound off by one | 21 |
+| strict width bound off by one | 32 |
+| **drop `(?s)` from the strip** | **0** |
+| **drop the empty-width term** | **0** |
+
+The four that move are the ones that matter, and the third row confirms at this
+exact site the trap §11.2.3 names in the abstract. The two that survive are
+**unreachable by construction, and both are kept anyway**:
+
+- `(?s)` cannot matter here because the negated scan runs first, and a piece
+  containing a newline never reaches the strip — a newline is not a hex digit.
+  This is a real dividend of the restructure rather than an accident: the
+  anchored form had to reason about newlines, and this one has made the question
+  moot for everything downstream of it. The flag stays so the strip is correct on
+  its own terms rather than correct only because of the line above it.
+- The `width == 0L` term cannot matter because the stray-colon gate has already
+  rejected every empty piece. It stays because the rule this branch states is
+  "one to four characters", not "at most four".
+
+A comment claiming either was load-bearing would have been wrong, and the first
+draft of this one was. Neither is a candidate for removal on that basis.
+
+#### And a number from §11.2.2 that needed remeasuring
+
+§11.2.2 recorded `stri_detect_charclass()` at 0.169 s as `stringi`'s one real win
+over the anchored regex. Remeasured here against the shipped restructure, in one
+process, with agreement asserted first: 0.113 s for the scan and 0.031 s for
+`stri_length()`, against 0.144 s and 0.017 s for the base R pair. So `stringi`
+keeps about **1.3x on the scan and 1.1x on the pair** — 0.017 s of a 2.9 s parse.
+
+**O4's conclusion is unchanged and is not close.** But the first draft of that
+remeasurement was wrong in a way worth recording, because it is the failure the
+O4 rule exists to catch: `stri_detect_charclass(x, "[0-9a-fA-F]", negate = TRUE)`
+asks whether a piece contains *no* hex digit, which is not the question
+`grepl("[^0-9a-fA-F]", x)` asks. It read 0.076 s — a 1.9x that does not exist.
+The corpus could not tell the two predicates apart, because every piece in it is
+all hex digits, so `stopifnot()` on the corpus alone would have passed too.
+Assert agreement, and pick a corpus that can disagree.
 
 ### 11.3 The naive second implementations **[implemented 2026-07-28]**
 

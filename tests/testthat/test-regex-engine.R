@@ -164,11 +164,12 @@ test_that("no pattern running under PCRE is anchored with a dollar sign", {
   )
 })
 
-# The hextet grammar is the one pattern built into a variable before the call,
-# so the walk above cannot see it. Read it out of the deparsed body instead --
-# both dialect branches, since only one of them is a leading-zero form and the
-# defect was originally found on the other.
-test_that("the hextet grammar is still anchored at the end of the string", {
+# The hextet grammar is a negated scan plus a width rather than an anchored
+# match, so it has no anchor for the guard above to check. What has to hold
+# instead is that it stayed unanchored: an anchored form here is what shipped
+# the wrong-address defect, and it is the one place in the package with a
+# history.
+test_that("the hextet grammar is an unanchored scan", {
   body_text <- paste(
     deparse(body(asNamespace("raddr")$parse_ipv6_addr)),
     collapse = " "
@@ -177,10 +178,32 @@ test_that("the hextet grammar is still anchored at the end of the string", {
     body_text,
     gregexpr('"[^"]*0-9a-fA-F[^"]*"', body_text)
   )[[1L]]
-  expect_length(hextets, 2L)
-  # Deparsing doubles the backslash, so `\z` reads as two characters here.
-  expect_true(all(endsWith(hextets, '\\\\z"')))
-  expect_false(any(grepl('$"', hextets, fixed = TRUE)))
+  expect_identical(hextets, '"[^0-9a-fA-F]"')
+})
+
+# The two dialects bound different things -- the raw width under the strict
+# rules, the significant digits under Apple's -- and the restructure had to keep
+# both. A width rule is only checked by the values that straddle it.
+test_that("the restructured hextet width rule holds on both dialects", {
+  wide <- c("12345:2:3:4:5:6:7:8", "1:2:3:4:5:6:7:12345", "abcde::")
+  expect_true(all(is.na(addr_strict(wide))))
+  expect_true(all(is.na(addr_pton(wide))))
+
+  # Leading zeros run free, so validity is the count *after* them.
+  expect_false(any(is.na(addr_pton(c(
+    "00001:2:3:4:5:6:7:8", "000000001::", "0000::", "00000::",
+    "0abcd::", "00abcd::", "0000abcd::"
+  )))))
+  expect_true(all(is.na(addr_pton(c("012345::", "0abcde::", "00abcde::")))))
+
+  # An all-zero piece is a legal zero and must not strip to the empty string:
+  # `strtoi("", 16L)` is NA, and the NA guard would then reject it.
+  expect_identical(addr_pton("00000::"), addr_pton("::"))
+  expect_identical(addr_pton("0:00:000:0000:00000:000000:0:0"), addr_pton("::"))
+
+  # The strict rules bound the raw width, so a hextet's zeros count against it.
+  expect_true(is.na(addr_strict("00001:2:3:4:5:6:7:8")))
+  expect_false(is.na(addr_strict("0001:2:3:4:5:6:7:8")))
 })
 
 # --- What the rewrites mean at the surface -----------------------------------

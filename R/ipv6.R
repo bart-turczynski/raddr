@@ -189,6 +189,11 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   # simply the one it reaches first. Reporting it as a group count would send a
   # reader off to add groups, so an edge colon on an unelided literal is named
   # for what it is. A leading "::" is not one -- that row is elided.
+  #
+  # `\z` rather than `$` because this runs under PCRE, where `$` also matches
+  # before a trailing newline. The note in `ends_in_a_number()` has the whole
+  # story; the short version is that a TRE pattern cannot be moved to
+  # `perl = TRUE` without its anchor changing in the same edit.
   edge <- miscounted & !elided & grepl("(^:|:\\z)", body, perl = TRUE)
   mask <- mark(mask, edge, "empty_group")
   mask <- mark(mask, miscounted, "wrong_group_count")
@@ -224,35 +229,55 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   # Apple inet_pton caps the four hex digits at the *significant* ones, so the
   # leading-zero form of the pattern lets the zeros run first.
   #
-  # The end anchor is `\z`, not `$`, and the difference is not cosmetic. Under
-  # PCRE -- which is what `perl = TRUE` below selects -- `$` also matches
-  # *before a trailing newline*, so a hextet of one digit and a newline
-  # satisfied `$` and was accepted. TRE, R's default engine, anchors at the end
-  # of the string and rejects it, and the end of the string is what this grammar
-  # means. `\z` is PCRE's spelling of that, and it measures fractionally faster
-  # than `$` besides. Every anchored pattern the parse path runs is under PCRE
-  # and spelled `\z` for this reason. The sites still on TRE -- zone stripping,
-  # prefix lengths, the dotted-tail rewrite above -- keep `$`, which is correct
-  # there because TRE reads it as the end of the string. Do not move one of
-  # those to `perl = TRUE` without changing its anchor in the same edit.
-  pattern <- if (rules$leading_zeros) {
-    "^0*[0-9a-fA-F]{0,4}\\z"
-  } else {
-    "^[0-9a-fA-F]{1,4}\\z"
-  }
-
+  # This was one anchored regex over 8n pieces and is now a negated scan plus a
+  # width, which is the same grammar said differently and measures a third
+  # faster. An anchored alternation makes the engine carry a position and a
+  # count; asking only whether a piece contains a character it may not contain
+  # lets it stop at the first offender and never backtrack, and `nchar()` is
+  # cheaper than the counting the `{1,4}` was there to do.
+  #
+  # `[^0-9a-fA-F]` is unanchored on purpose, so the two engines cannot disagree
+  # about it -- there is no `$` to argue over and no `.` to exclude a newline
+  # from. A newline is simply not a hex digit. That is the shape every other
+  # `perl = TRUE` scan in the package already had, and the reason IPv4 was never
+  # exposed to the defect the anchored form shipped.
   rows <- which(live)
   flat <- unlist(strsplit(full[rows], ":", fixed = TRUE), use.names = FALSE)
-  bad <- !grepl(pattern, flat, perl = TRUE)
+  width <- nchar(flat, type = "bytes")
+  bad <- grepl("[^0-9a-fA-F]", flat, perl = TRUE)
 
-  # `strtoi()` reads a leading zero happily, so the zeros only have to be
-  # stripped where they could push a hextet past four digits and overflow it --
-  # which is only possible under the leading-zero rules, and only for a piece
-  # wider than a hextet. Guarding it keeps an 8n-element regex out of the common
-  # case, where every piece is already four characters or fewer.
-  wide <- nchar(flat) > 4L
-  if (any(wide)) {
-    flat[wide] <- sub("^0+(.)", "\\1", flat[wide])
+  if (rules$leading_zeros) {
+    # Apple inet_pton caps the four digits at the *significant* ones, so what is
+    # bounded here is the count after the zeros rather than the raw width. Only
+    # a piece already wider than a hextet can carry more than four, and the
+    # strip that answers the question is the same one `strtoi()` needs below --
+    # so it happens once, and only on the pieces that need it. The common case,
+    # where every piece is four characters or fewer, pays no regex at all.
+    #
+    # The lookahead is what keeps a digit behind: an all-zero piece must not
+    # reduce to the empty string, because `strtoi("", 16L)` is NA and the guard
+    # below would then reject a hextet that is a legal zero. It has to be a bare
+    # dot and not a digit class -- the form used in `integer.R` -- because a
+    # significant hex letter must satisfy it too, or a piece like five zeros and
+    # an "a" would keep a zero and be measured a digit too wide.
+    #
+    # `(?s)` is unreachable defense rather than a live fix, and worth keeping as
+    # such. PCRE's `.` excludes a newline, but no piece containing one can get
+    # here: the scan above rejects it, because a newline is not a hex digit. The
+    # flag makes this strip correct on its own terms instead of correct only
+    # because of the line above it.
+    wide <- which(!bad & width > 4L)
+    if (length(wide)) {
+      flat[wide] <- sub("(?s)^0+(?=.)", "", flat[wide], perl = TRUE)
+      bad[wide] <- nchar(flat[wide], type = "bytes") > 4L
+    }
+  } else {
+    # No zeros to discount, so the raw width is the whole width rule. The zero
+    # term is unreachable for the same reason as the flag above -- the
+    # stray-colon gate has already rejected every empty piece -- and is kept
+    # because the rule this branch states is "one to four characters", not "at
+    # most four".
+    bad <- bad | width == 0L | width > 4L
   }
   value <- as.numeric(strtoi(flat, 16L))
 
