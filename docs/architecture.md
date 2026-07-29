@@ -3095,6 +3095,78 @@ Vectorize aggressively: one pass over the character vector returning all fields
 at once, never per-element. Use arithmetic (`2^(8*n)`), not `bitwShiftL` —
 R integers are signed 32-bit and shifting past 2^31 is a trap.
 
+### 11.2.1 The parse path has no classify-shaped defect, and elision is a surcharge
+**[verified 2026-07-29]**
+
+§11.1.7 got 15.7x out of `addr_classify()` by finding a cost that was *flat in
+the workload*, and the obvious next question is whether the 41x in §11.2 hides
+another one. **It does not.** This section is the null result, recorded because
+the alternative is re-arguing "surely there is a quick win in the parser" from
+first principles later.
+
+The method is §11.1.7's, made deliberate: parse corpora whose *real* work differs
+by orders of magnitude, decompose by line, and look for a component that refuses
+to move. A first pass used `rep()` of a single literal and was **thrown away** —
+R interns strings, so a homogeneous corpus makes every downstream hash and regex
+unrepresentatively cheap and would have manufactured flatness wherever it looked.
+The corpora below are distinct addresses, and the dense one lands at 5.63 s
+against §11.2's independently measured 5.64 s, which is the calibration that
+says the instrument is reading the same thing §11.2 read.
+
+`addr_strict()`, 1e6 distinct IPv6 addresses, self time by line:
+
+| | dense, 8 groups | `2001:db8:X::Y`, 4 | `::X`, 1 |
+|---|---|---|---|
+| total | 5.63 s | 5.12 s | 3.20 s |
+| `#229` `strsplit()` | 0.69 s | 0.64 s | 0.50 s |
+| `#230` `grepl()` hextet | 0.73 s | 0.71 s | 0.46 s |
+| `#241` `strtoi()` | 0.39 s | 0.46 s | 0.14 s |
+| `#202` elision expansion | — | 0.92 s | 0.38 s |
+
+**The hextet stage costs the same for four groups as for eight** — 1.81 s
+against 1.81 s, to the hundredth — and the four-group row then pays 0.92 s on
+top for the privilege. That is flat, and it is flat *by design* rather than by
+accident: `#202` expands an elision by materializing the zeros **as text**, so
+`::1` becomes `0:0:0:0:0:0:0:1` and every row reaches the validator as eight
+groups however it was written. The regex at `#230` therefore checks 8e6 pieces
+of which, on `::X`, 7e6 are zeros the code wrote itself one line earlier and
+already knows are valid.
+
+So the sharp statement is not that the parser is slow. It is that **elision is a
+surcharge, not a saving.** The compact form of an address costs *more* per input
+group than the expanded form, and a reader would expect the opposite.
+
+That is a genuine inefficiency, and it is still not worth what it would cost:
+
+- Not materializing the zeros — positioning the head and tail groups into the
+  eight slots and leaving the rest at zero — is bounded at about **35%** on the
+  elided corpus (the 0.92 s expansion, plus the share of a 1.81 s stage spent on
+  synthesized zeros). That is 1.55x, taking parse v6 from 41x to roughly 26x.
+- Running the hextet regex over the **distinct** pieces and indexing back — the
+  trick §11.1.1 used for the reason codes — is worth 2.1x to 3.7x on `#230`
+  alone, and **nothing** on `#241`, where `match()` costs what `strtoi()` did.
+  Call it 14% of the call.
+- `#202` is also where the stray-colon rule lives (`"::1:"` must stay a
+  rejection, not become a seven-group address), and the hextet stage carries the
+  `(value, status, empty)` triple under hedgehog properties and a second
+  implementation in `helper-slow.R`.
+
+Stack every one of them and parse v6 is still an order of magnitude past a 3x
+target. **§11.2's conclusion is unchanged and now rests on better evidence than
+it did**: not "no single hot spot above 17%", which is consistent with a hidden
+flat cost and was the reasoning that let `addr_classify()`'s defect sit
+undetected for three days, but a workload-varying decomposition showing that the
+one flat component is flat on purpose and bounded when removed.
+
+The difference between this and §11.1.7 is worth naming, because both were
+reached the same way and only one was a defect. `extract_embeddings()` was doing
+work **proportional to `n` for a result proportional to the embeddings** — a
+complexity mismatch, and mismatches are bugs at any constant. The parser is
+doing work proportional to eight groups for a result proportional to eight
+groups; it merely reaches eight sooner than it needs to. That is a constant
+factor, and constant factors on irregular string work are what §11.2 means by
+the pure R floor.
+
 ### 11.3 The naive second implementations **[implemented 2026-07-28]**
 
 Every optimization in §11.1 and §11.2 buys speed with machinery, and each piece
