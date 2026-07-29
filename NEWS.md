@@ -1,5 +1,23 @@
 # raddr (development version)
 
+## Bug fixes
+
+* `addr_pton()`, `addr_strict()` and `addr_whatwg()` **accepted an IPv6 literal
+  with a trailing newline and returned a different address than the literal
+  named**, with no reason code. `addr_pton("1:2:3:4:5:6:7:8\n")` came back as
+  `1:2:3:4:5:6:8000:0`, `"::1\n"` as `"::8000:0"`. All such literals are now
+  rejected with `bad_hextet`.
+* Two faults stacked. The hextet validator is the only anchored pattern in the
+  package that runs under `perl = TRUE`, and PCRE's `$` matches *before* a
+  trailing newline where R's default TRE engine anchors at end of string — so
+  `"8\n"` passed as a hextet. It is anchored with `\z` now. Behind it,
+  `strtoi()` returned `NA` for the same piece and nothing checked the result,
+  so the `NA_integer_` bit pattern was read back as the unsigned word
+  `0x80000000` — which is where every wrong answer got its `8000`. The
+  conversion is now reconciled with the validator, so a future miss is a
+  rejection rather than a wrong address. IPv4 was never affected: its
+  equivalent scan uses an unanchored negated class.
+
 ## Performance
 
 * `addr_classify()` is **15.7x faster on IPv6** — 0.88 s per 1e6 addresses,

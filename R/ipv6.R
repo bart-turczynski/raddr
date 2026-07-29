@@ -219,10 +219,19 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   #
   # Apple inet_pton caps the four hex digits at the *significant* ones, so the
   # leading-zero form of the pattern lets the zeros run first.
+  #
+  # The end anchor is `\z`, not `$`, and the difference is not cosmetic. Under
+  # PCRE -- which is what `perl = TRUE` below selects -- `$` also matches
+  # *before a trailing newline*, so `"8\n"` satisfied `$` and was accepted as
+  # a hextet. TRE, R's default engine, anchors at the end of the string and
+  # rejects it, and the end of the string is what this grammar means. `\z` is
+  # PCRE's spelling of that, and it measures fractionally faster than `$`
+  # besides. This is the only anchored pattern in the package that runs under
+  # PCRE, which is why IPv6 was the only family affected.
   pattern <- if (rules$leading_zeros) {
-    "^0*[0-9a-fA-F]{0,4}$"
+    "^0*[0-9a-fA-F]{0,4}\\z"
   } else {
-    "^[0-9a-fA-F]{1,4}$"
+    "^[0-9a-fA-F]{1,4}\\z"
   }
 
   rows <- which(live)
@@ -239,6 +248,21 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
     flat[wide] <- sub("^0+(.)", "\\1", flat[wide])
   }
   value <- as.numeric(strtoi(flat, 16L))
+
+  # The validator above decides which pieces are readable and the conversion
+  # here reads them, and everything downstream trusts that the two agree --
+  # a value is only ever used where `bad` is FALSE. Nothing enforced that
+  # agreement, and when it broke the failure was silent and maximally bad: a
+  # piece the regex accepted converted to NA, the zeroing branch below never
+  # ran, and the NA_integer_ bit pattern was read back as the unsigned word
+  # 0x80000000, so `1:2:3:4:5:6:7:8\n` parsed to `1:2:3:4:5:6:8000:0` with no
+  # reason code attached. The anchor that let it through is fixed above; this
+  # is the guard that makes the next such miss a rejection instead of a
+  # different address. `anyNA()` stops at the first hit, so the common case
+  # pays one scan and no allocation.
+  if (anyNA(value)) {
+    bad <- bad | is.na(value)
+  }
 
   # Likewise: in the common case nothing is malformed, so neither the blanking
   # nor the group-wise reduction has to touch a single piece.

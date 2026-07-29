@@ -519,3 +519,65 @@ test_that("empty and missing input come back empty and missing", {
   expect_true(is.na(addr_pton(NA_character_)))
   expect_true(is.na(addr_pton("")))
 })
+
+# --- a trailing newline is not a hextet (RADD-kurxtbqc) ----------------------
+#
+# PCRE's `$` matches before a trailing newline and TRE's does not, and the
+# hextet validator is the one anchored pattern in the package that runs under
+# `perl = TRUE`. When it accepted `"8\n"`, `strtoi()` returned NA, the zeroing
+# branch never ran, and the NA_integer_ bit pattern was read back as the
+# unsigned word 0x80000000 -- so the parse did not merely admit a bad literal,
+# it returned a *different address* than the literal named, with no reason
+# code. Both halves are pinned here: the rejection, and the code that explains
+# it.
+
+test_that("a hextet with a trailing newline is rejected, not misread", {
+  literals <- c(
+    "1:2:3:4:5:6:7:8\n",
+    "::1\n",
+    "fe80::1\n",
+    "1::\n",
+    "2001:db8::a\n",
+    "\n::1",
+    "::1\n\n"
+  )
+  for (fn in list(addr_pton, addr_strict, addr_whatwg)) {
+    expect_true(all(is.na(fn(literals))))
+  }
+})
+
+test_that("the newline rejection carries a reason code", {
+  expect_identical(
+    addr_codes(addr_parse("1:2:3:4:5:6:7:8\n"))[[1L]],
+    "bad_hextet"
+  )
+})
+
+test_that("no accepted hextet converts to NA", {
+  # The guard behind the validator: `bad` and `strtoi()` have to agree, because
+  # every value downstream is read on the strength of `bad` alone. 0x80000000
+  # is what a disagreement looked like, so it is what a regression would look
+  # like too.
+  literals <- c(
+    "1:2:3:4:5:6:7:8\n", "::1\n", "fe80::1\n", "2001:db8::a\n", "\n::1"
+  )
+  expect_false(any(format(addr_pton(literals)) %in%
+                     c("1:2:3:4:5:6:8000:0", "::8000:0", "fe80::8000:0",
+                       "2001:db8::8000:0", "8000::1"), na.rm = TRUE))
+})
+
+test_that("the fix does not reject a literal that only looks like it", {
+  # Newline-free neighbours of the rejected forms.
+  expect_identical(format(addr_pton("1:2:3:4:5:6:7:8")), "1:2:3:4:5:6:7:8")
+  expect_identical(format(addr_pton("::1")), "::1")
+  expect_identical(format(addr_pton("fe80::1")), "fe80::1")
+
+  # Both dialects carry the anchor, and the leading-zero one is the form where
+  # a wrong anchor would be hardest to see: `^0*[0-9a-fA-F]{0,4}\z` still has
+  # to admit a hextet padded past four characters, and still has to refuse the
+  # newline on the same input.
+  expect_identical(format(addr_pton("00001:2:3:4:5:6:7:8")), "1:2:3:4:5:6:7:8")
+  expect_identical(format(addr_pton("0ffff::1")), "ffff::1")
+  expect_true(is.na(addr_strict("00001:2:3:4:5:6:7:8")))
+  expect_true(is.na(addr_pton("00001:2:3:4:5:6:7:8\n")))
+})
