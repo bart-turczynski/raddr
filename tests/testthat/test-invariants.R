@@ -11,7 +11,7 @@
 # hostile text, and it is what the totality claims are asserted over -- a parser
 # is only interestingly total on input nobody meant it to read.
 
-all_dialects <- c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl")
+# `all_dialects` lives in helper-dialects.R, next to `dialect_fn()`.
 
 # Random bytes of both widths, so the corpus reaches parts of the space no
 # hand-written literal does, plus the literals that are hazards in their own

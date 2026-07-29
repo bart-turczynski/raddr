@@ -1,3 +1,8 @@
+# The six exported parsers, in the order section 3.2 introduces them. Shared,
+# because more than one suite quantifies over "every dialect" and a second copy
+# would let one file gain a dialect the other never hears about.
+all_dialects <- c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl")
+
 dialect_fn <- function(name) {
   switch(
     name,
