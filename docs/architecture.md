@@ -12,7 +12,8 @@ libcurl 8.14.1, Python 3.x, Apple libc.
 Claims marked **[verified 2026-07-27]** were measured on the same machine during
 Epic E, and additionally against Python 3.9.6 / 3.12.13 / 3.14.6, Rust 1.91.1,
 Ruby 2.6.10, PHP 8.5.7 and Node 26.3.1. `data-raw/survey-zone.sh` reproduces the
-cross-implementation ones; §11's numbers come from `bench/record.R`.
+cross-implementation ones; §11's numbers come from `bench/record.R`,
+`bench/prefix.R` and `bench/classify.R`.
 
 ---
 
@@ -2432,7 +2433,7 @@ the decisions are not relitigated.
 
 | # | Item | Disposition |
 |---|---|---|
-| O1 | Pure R vs compiled | **Measured 2026-07-26, see §11.2.** The record meets both targets in pure R; the parsers miss the speed target by 18x and that is the pure R floor. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp |
+| O1 | Pure R vs compiled | **Closed 2026-07-29 with all five operations measured — see §11.2 and §11.1.7.** The record meets both targets in pure R; `within_any` meets target and beats C++ (0.96x / 0.24x); the parsers miss by 18x / 41x and format v6 by 7.5x, and that is the pure R floor on irregular string work. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp. The fifth operation, classification, had never been timed against `ipaddress` and is the one row that is **not** a floor: 3.8x–4.3x on IPv4 but 76x–86x on IPv6, where the tuned lookups are 0.4 s of a 13.9 s call and `extract_embeddings()` is 11.7 s of it — a container reshape, `RADD-znxdxgyh`, not a language limit |
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
 | O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
@@ -2818,6 +2819,124 @@ nothing with `prefix_match()` except the encoder. A wrong divisor surfaces there
 as a disagreement rather than as the same wrong answer computed twice. That
 matcher now lives in `helper-slow.R` with the rest of the naive second
 implementations (§11.3), which it was the worked example for.
+
+### 11.1.7 `addr_classify()`, 1e6 addresses — the last of O1's five
+**[verified 2026-07-29]**
+
+`bench/classify.R`, best of five. O1 names five operations — parse v4, parse v6,
+classify, `within_any`, format v6 — and classification was the one never timed
+against `ipaddress`. §11.1.6 measured `prefix_match()` against three rival
+*algorithms*, which is a different question: it says the lookup is the right
+lookup, not that the call is within target.
+
+**There is no like-for-like baseline, and the file says so rather than
+manufacturing one.** `ipaddress` has no `classify()`. It has eleven boolean
+predicates — `is_private`, `is_global`, `is_reserved`, `is_multicast`,
+`is_loopback`, `is_link_local`, `is_site_local`, `is_unspecified`, `is_6to4`,
+`is_teredo`, `is_ipv4_mapped` — each answering one question about one block set
+in C++. `addr_classify()` answers all eleven at once and then names the block,
+its RFC, footnotes, category, the five IANA policy columns, the termination date,
+the source registry and its version, and extracts the embedded address. So both
+ends of the honest range are reported: against the **bundle** of all eleven, and
+against a **single** predicate.
+
+| | `addr_classify()` | bundle of 11 | / bundle | / one predicate |
+|---|---|---|---|---|
+| IPv4 random | 0.604 s | 0.142 s | **4.3x** | 10.4x |
+| IPv4 inside special blocks | 0.614 s | 0.160 s | **3.8x** | 9.0x |
+| IPv6 random | 13.878 s | 0.162 s | **85.7x** | 272x |
+| IPv6 inside special blocks | 13.574 s | 0.179 s | **75.8x** | 219x |
+
+Two corpora per family because uniform random addresses land in the
+special-purpose registry a fraction of a percent of the time, so on the random
+rows the special layer answers almost nothing and the embedding extractor barely
+fires. Both are drawn over the **full 2^32** per word rather than
+`sample.int(.Machine$integer.max)` as `bench/record.R` and `bench/prefix.R` do:
+a clear top bit puts multicast, broadcast and `192.168.0.0/16` out of reach by
+construction, which does not matter when the operation ignores which bits it
+moves and matters entirely here. It also puts the `0x80000000` pattern (§5.1.1)
+into the corpus instead of outside it.
+
+**IPv4 is at the edge of target and IPv6 misses it by 25x, and the reason is one
+line.** Decomposed:
+
+| | IPv4 random | IPv6 random | IPv6 inside blocks |
+|---|---|---|---|
+| `prefix_match()`, special | 0.196 s | 0.220 s | 0.228 s |
+| `prefix_match()`, space | 0.047 s | 0.185 s | 0.137 s |
+| `embedded_kind_of()` | 0.094 s | 0.143 s | 0.196 s |
+| `extract_embeddings()` | 0.009 s | **11.726 s** | **16.677 s** |
+
+The lookups §11.1.6 spent an epic tuning are **0.4 s of a 13.9 s call**. Nothing
+in the classification algorithm is the cost. `extract_embeddings()` is, and it
+is not the extraction: profiled by line, **11.58 s of 11.58 s is inside `vctrs`**
+— `vec_proxy` at 62%, `vec_chop` at 24% — on a corpus where exactly **19 rows of
+1e6** had an embedding to extract.
+
+`R/embedding.R` scattered its result back to one element per address by chopping
+into a level per address:
+
+```r
+vec_chop(rows, indices = split(seq_along(at), factor(at, levels = seq_len(n))))
+```
+
+Timed on its own with four embedded rows out of 1e6: the `factor()` is 0.131 s,
+the `split()` 0.017 s, and the `vec_chop()` **11.685 s**. It asks `vctrs` for a
+million slices of a nested record to deliver four, and pays a `vec_proxy()`
+round-trip for each.
+
+**The complexity is the finding, not the seconds.** That shape is *flat in the
+number of embeddings and linear in `n`*: 11.1 s for 19 embedded rows, 12.2 s for
+240,172 of them. It cannot be read off a wall clock, because the two numbers are
+nearly the same — which is exactly what makes it invisible without the
+decomposition. Chopping only the groups that have rows and scattering them into
+the pre-built list of empties is linear in the embeddings instead:
+
+| | old shape | grouped scatter | ratio |
+|---|---|---|---|
+| 19 embedded rows of 1e6 | 11.137 s | 0.005 s | **2227x** |
+| 240,172 embedded rows of 1e6 | 12.184 s | 1.959 s | **6.2x** |
+
+`identical()` on both. Filed as `RADD-znxdxgyh`; the numbers above are the
+measurement, not the fix.
+
+**Agreement, and why it is not a gate here.** `bench/record.R` requires zero
+disagreements against `ipaddress` before it will report a containment ratio, and
+most of `addr_classify()` cannot be held to that: it is registry-derived (P4)
+where `ipaddress`'s predicates are hardcoded per RFC, so the two are *entitled*
+to differ and a zero would be the wrong thing to require. O11a
+(`RADD-pyinlkit`) is one such divergence, already filed upstream.
+
+`embedded_kind` is the exception, and that is why it is the anchor. 6to4, Teredo
+and IPv4-mapped are single fixed prefixes named in RFC 3056 §2, RFC 4380 §2.6
+and RFC 4291 §2.5.5.2, so the expected answer follows from the specs without
+reading either implementation, and both sides answer the same question. All six
+counts are **0**, over 39,914 / 40,067 / 40,078 real hits on the inside-blocks
+corpus — a live check rather than a vacuous one. The random corpus contributes
+11 6to4 hits and no Teredo or IPv4-mapped, which is what a `/16` against a `/32`
+and a `/96` predicts.
+
+**So O1's five are now five.** Four of the operations were already measured;
+this is the fifth, and it splits the same way §11.2 does:
+
+| O1 operation | ratio | target | where |
+|---|---|---|---|
+| `within_any`, IPv4 | 0.96x | <= 3x | §11.1.5 |
+| `within_any`, IPv6 | 0.24x | <= 3x | §11.1.5 |
+| classify, IPv4 | 3.8x–4.3x | <= 3x | here |
+| format v6 | 7.5x | <= 3x | §11.2 |
+| parse v4 | 18x | <= 3x | §11.2 |
+| parse v6 | 41x | <= 3x | §11.2 |
+| classify, IPv6 | 76x–86x | <= 3x | here |
+
+Containment meets target and beats C++. Parsing and rendering miss it for the
+reason §11.2 gives — irregular string work — and that is the pure R floor.
+**Classification is neither, and it is the one row on this table that is a
+defect rather than a floor.** Its algorithm is comfortably fast; a container
+reshape is what puts IPv6 at 76x, and removing it moves the IPv6 rows to roughly
+2 s and 4 s, which is the same order as the IPv4 row rather than 25x past it.
+That does not change O1's answer about the parsers, and it does mean
+classification never belonged in the evidence for compiled code.
 
 ### 11.2 Parsing misses the speed target, and that is the O1 evidence
 **[verified 2026-07-26]**
