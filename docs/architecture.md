@@ -13,7 +13,7 @@ Claims marked **[verified 2026-07-27]** were measured on the same machine during
 Epic E, and additionally against Python 3.9.6 / 3.12.13 / 3.14.6, Rust 1.91.1,
 Ruby 2.6.10, PHP 8.5.7 and Node 26.3.1. `data-raw/survey-zone.sh` reproduces the
 cross-implementation ones; §11's numbers come from `bench/record.R`,
-`bench/prefix.R` and `bench/classify.R`.
+`bench/prefix.R`, `bench/classify.R` and `bench/tokenize.R`.
 
 ---
 
@@ -2436,7 +2436,7 @@ the decisions are not relitigated.
 | O1 | Pure R vs compiled | **Closed 2026-07-29 with all five operations measured — see §11.2 and §11.1.7.** The record meets both targets in pure R; `within_any` meets target and beats C++ (0.96x / 0.24x); the parsers miss by 18x / 41x and format v6 by 7.5x, and that is the pure R floor on irregular string work. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp. The fifth operation, classification, had never been timed against `ipaddress`, and measuring it turned up the one row that was **not** a floor: 76x–86x on IPv6, where the tuned lookups were 0.4 s of a 13.9 s call and `extract_embeddings()` was 11.7 s of it, chopping 1e6 `vctrs` slices of a nested record to deliver as few as 19. Fixed (`RADD-znxdxgyh`), **15.7x**, and classification was never evidence for compiled code — it was a container reshape wearing a floor's clothing, and what exposed it was a decomposition that did not add up rather than a wall clock |
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
-| O4 | `stringi` vs base R for ASCII host tokenization | Benchmark base R first |
+| O4 | `stringi` vs base R for ASCII host tokenization | **Closed 2026-07-29: base R suffices, no dependency — see §11.2.2.** `bench/tokenize.R` runs every tokenizer pattern under TRE, PCRE and ICU with agreement asserted, and **PCRE is ahead of ICU on all of them**; the splits are a wash, `stringi`'s `simplify = NA` matrix is *slower* than `unlist(strsplit())`, and it has no base-N integer parser at all. Its one real win, `stri_detect_charclass()`, is two-thirds recoverable by restructuring the check in base R. The correctness case for `stringi` — locale-independent Unicode — is the strong one and is **absent** here, since `R/encoding.R` gates the input and the grammars are ASCII by definition. What the comparison did find was a defect: `perl = TRUE` is not a semantics-free swap, PCRE's `$` matches before a trailing newline, and the hextet validator was the one anchored pattern already running under it (`RADD-kurxtbqc`) |
 | O5 | Trie vs sorted masked vector for the 51 IANA rows plus the transition overlay | **Measured and closed 2026-07-28, see §11.1.6.** Neither, and not the walk either: grouping the blocks by prefix length — §11.1.5's containment trick, with `vec_match()` in place of `vec_in()` so the group reports *which* row — won every case and **shipped**, worth **36x** on the 276-row address-space table `addr_classify()` reads on every call. The sorted masked vector is *slower* than the walk on `special`; the trie pays to re-encode 1e6 addresses as bit strings on every call |
 | O6 | glibc and musl `pton` rows | **Settled 2026-07-29 by measuring them — see §3.3.0.** `data-raw/oracle-libc-linux.sh` runs both Python oracles under glibc 2.36 and musl 1.2.5 and commits four fixtures beside the Apple ones; `test-libc.R` asserts the divergence set. Findings: glibc and musl `inet_pton` **reject** the leading zeros Apple reads as decimal, in IPv4 and IPv6 alike; both reject every `inet_aton` overflow Apple wraps modulo 2^32; and the item's own premise about `aton` trailing garbage was **backwards** — glibc matches Apple, musl is the strict outlier. The composition of §3.2 holds on all three |
 | O6b | Whether glibc/musl `getaddrinfo` does the `fe80::/10` scope lift | **Settled 2026-07-29, and the answer is no — see §3.5.3.1.** `RADD-blpcanps`'s worst case holds: Linux leaves `fe80:abcd::1` alone at scope 0, so `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of `fe80::/10` rather than at a boundary. Linux `inet_pton` also takes no zone ID at all, so the §5.1 fold cannot arise there. Needed its own instrument, `oracle-zone-native.py`, because the corpus's `%lo0` is an Apple interface name and would have measured the container's interface table |
@@ -3167,6 +3167,109 @@ groups; it merely reaches eight sooner than it needs to. That is a constant
 factor, and constant factors on irregular string work are what §11.2 means by
 the pure R floor.
 
+### 11.2.2 Base R suffices for ASCII host tokenization, and the engine choice is a correctness decision
+**[verified 2026-07-29]**
+
+O4 asked whether pure R can tokenize an ASCII host, or whether `stringi` is
+needed the way rurl needs it. `bench/tokenize.R` is the answer. **Base R
+suffices**, and the interesting part is what the measurement turned up on the
+way.
+
+The question is deliberately *not* "which is faster". The two are not equally
+priced: raddr Imports `rlang` and `vctrs`, and its DESCRIPTION says it "is pure
+R". `stringi` is 34.7 MB installed, is a C++ package bundling ICU, and declares
+`SystemRequirements: ICU4C (>= 61, optional)` — a user installing raddr from
+source would compile ICU to parse an address literal. And the usual argument
+for `stringi` does not apply here. It buys locale-independent Unicode
+correctness, which is worth paying for in a URL parser and is why rurl pays it;
+raddr's host tokenizer never sees a non-ASCII byte, because `R/encoding.R`
+gates the input and the grammars downstream are ASCII by definition. **The
+strong case for `stringi` is the correctness case, and it is absent.** So the
+burden of proof sits on the dependency, and only speed can discharge it.
+
+It does not. Base R is also three engines, not one — `grepl()` and `sub()`
+dispatch to TRE by default and PCRE under `perl = TRUE` — so every pattern was
+run all three ways, with agreement asserted rather than assumed:
+
+| pattern | TRE | PCRE | ICU |
+|---|---|---|---|
+| `ipv6.R#210` `(^:\|::\|:$)` | 0.517 s | **0.319 s** | 0.373 s |
+| `ipv6.R#230` hextet | 1.030 s | **0.422 s** | 0.554 s |
+| `ipv4.R#245` `^0[0-9]` | 0.163 s | **0.071 s** | 0.223 s |
+| `integer.R#167` `^[0-9]+$` | 0.213 s | **0.195 s** | 0.273 s |
+| `ipv6.R#137` `sub("^.*:")` | 0.751 s | **0.310 s** | 0.387 s |
+| `strsplit()` flat, IPv6 | **0.561 s** | — | 0.729 s |
+| `strtoi()`, base 16 | **0.214 s** | — | *no analogue* |
+
+**PCRE is ahead of ICU on every pattern the tokenizer runs.** The splits are a
+wash and `stringi`'s `simplify = NA` matrix — the one structural rather than
+constant-factor advantage on offer — is *slower* than `unlist(strsplit())`.
+`stringi` wins on `nchar()`, `strrep()` and `paste0()`, all of which are
+sub-0.1 s stages, and it has no base-N integer parser at all. The one real win
+is `stri_detect_charclass()` at 0.169 s against 0.386 s for today's anchored
+hextet regex — and restructuring that check in base R as a negated scan plus
+`nchar()` reaches 0.260 s, capturing most of it for free. Tagging the input
+UTF-8 moves neither engine, so the gap is engine speed and not marshalling.
+
+So: **no dependency.** The measured conclusion is that a library swap was never
+the lever, which is the same answer §11.2 and §11.2.1 keep arriving at from
+different directions.
+
+#### What it found instead
+
+The comparison forced a question nobody had asked: *what does `perl = TRUE`
+change besides speed?* On these patterns, the answer was supposed to be
+nothing. It is not nothing.
+
+**PCRE's `$` also matches before a trailing newline. TRE's anchors at the end
+of the string.** Five of the seven anchored patterns in the package differ
+between the two engines on newline-terminated input — and exactly one of them
+was already running under PCRE: the IPv6 hextet validator at `ipv6.R#230`.
+Every other `perl = TRUE` site in `R/` uses an unanchored negated class, which
+is why IPv4 was never affected.
+
+The consequence was not a permissive parse. It was a **wrong** one:
+
+| literal | `addr_pton()` was | should be |
+|---|---|---|
+| `"1:2:3:4:5:6:7:8\n"` | `1:2:3:4:5:6:8000:0` | `NA` |
+| `"::1\n"` | `::8000:0` | `NA` |
+| `"fe80::1\n"` | `fe80::8000:0` | `NA` |
+| `"\n::1"` | `8000::1` | `NA` |
+
+With **no reason codes attached** — `addr_codes()` returned `character(0)`, the
+parse reporting unqualified success. For a package whose one job is saying what
+a literal means, returning a different address than the literal names is the
+worst failure mode available, and it is the host-confusion shape §5 exists to
+prevent.
+
+The `8000` is the tell. Two faults had to stack to produce it:
+
+1. The validator accepted `"8\n"`, because `$` let the newline through.
+2. **`strtoi()` returned `NA` for it and nothing checked.** The code reads a
+   value only where `bad` is `FALSE`, so `bad` and the conversion have to
+   agree — and that invariant was load-bearing, implicit, and unenforced. The
+   zeroing branch never ran, and the `NA_integer_` bit pattern was read back as
+   the unsigned word `0x80000000`.
+
+Both are fixed. The anchor is `\z`, PCRE's spelling of "end of string", which
+restores TRE's meaning exactly on all seven patterns and measures fractionally
+*faster* than `$` besides. Behind it, `if (anyNA(value)) bad <- bad | is.na(value)`
+reconciles the conversion with the validator, so the next miss is a rejection
+rather than a wrong address; `anyNA()` stops at the first hit, so the common
+case pays one scan.
+
+**The second fix is the one that matters.** The first closes a hole; the second
+changes the failure mode of the whole stage from silently-wrong to rejected. An
+unchecked `strtoi()` behind a validator is a hazard at any regex, and the regex
+is just what exposed it — the same distinction §11.2.1 drew between a defect
+and a constant factor, arriving this time on the correctness side.
+
+The lesson for §11.2's open optimizations: `perl = TRUE` is measured at 1.2x to
+3x on the remaining TRE call sites and is **not** a free swap. Every one of them
+is anchored, so each needs `\z` and each needs its own differential test before
+it moves. That work is not done here.
+
 ### 11.3 The naive second implementations **[implemented 2026-07-28]**
 
 Every optimization in §11.1 and §11.2 buys speed with machinery, and each piece
@@ -3788,7 +3891,7 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 | `vctrs` | Yes — the data model rests on it |
 | `rlang` | Yes — conditions, checks; already a `vctrs` dep |
 | `cli` | Open; nice, not load-bearing |
-| `stringi` | Open; benchmark base R first (O4) |
+| `stringi` | **No — closed 2026-07-29 (§11.2.2).** PCRE beats ICU on every tokenizer pattern measured, and the Unicode correctness it sells is not needed on an ASCII-only grammar. 34.7 MB and an ICU4C build, for a loss (O4) |
 | `bignum` | Suggests only, degrade gracefully |
 | `hedgehog` | Suggests only — **taken up 2026-07-29 (§11.9)**. Adds nothing transitively: it needs `testthat` + `rlang`, both already here (O9) |
 | `ipaddress` | **No.** Would import its `is_global` semantics and its gaps |
