@@ -164,7 +164,7 @@ integer_digits <- function(x) {
   # Digits only: no sign, no decimal point, no exponent. An address integer is
   # unsigned, and a negative one is the signed-32-bit bug of research 08
   # section 2 rather than an address.
-  s[is.na(s) | !grepl("^[0-9]+$", s)] <- NA_character_
+  s[is.na(s) | !grepl("^[0-9]+\\z", s, perl = TRUE)] <- NA_character_
   s <- sub("^0+(?=[0-9])", "", s, perl = TRUE)
   s[!is.na(s) & nchar(s) > decimal_max_digits] <- NA_character_
   s

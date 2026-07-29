@@ -7,9 +7,10 @@
   named**, with no reason code. `addr_pton("1:2:3:4:5:6:7:8\n")` came back as
   `1:2:3:4:5:6:8000:0`, `"::1\n"` as `"::8000:0"`. All such literals are now
   rejected with `bad_hextet`.
-* Two faults stacked. The hextet validator is the only anchored pattern in the
-  package that runs under `perl = TRUE`, and PCRE's `$` matches *before* a
-  trailing newline where R's default TRE engine anchors at end of string — so
+* Two faults stacked. The hextet validator was, at the time, the only anchored
+  pattern in the package running under `perl = TRUE`, and PCRE's `$` matches
+  *before* a trailing newline where R's default TRE engine anchors at end of
+  string — so
   `"8\n"` passed as a hextet. It is anchored with `\z` now. Behind it,
   `strtoi()` returned `NA` for the same piece and nothing checked the result,
   so the `NA_integer_` bit pattern was read back as the unsigned word
@@ -20,6 +21,21 @@
 
 ## Performance
 
+* The eleven remaining regex patterns on the address-parse path now run under
+  `perl = TRUE`. `addr_strict()` is **10% faster on IPv6** (3.55 s to 3.18 s per
+  1e6) and **7% faster on IPv4** (1.47 s to 1.35 s), `addr_pton()` 8% faster on
+  IPv6, and the internal WHATWG "ends in a number" gate is **1.8x** (0.57 s to
+  0.32 s). `addr_whatwg()`, `addr_aton()` and IPv4 `addr_pton()` are unchanged,
+  because the one migrated site on their path is the leading-zero rejection and
+  `addr_strict()` is the only dialect that rejects leading zeros.
+* Answers are unchanged: 1091 adversarial literals compared across all seven
+  entry points, `addr_codes()`, `ends_in_a_number()` and both `integer_to_addr()`
+  families, with **no row moving**. That is not a free swap. PCRE differs from
+  TRE twice — `$` also matches before a trailing newline, and `.` does *not*
+  match one — so eight anchors became `\z` and the two greedy runs to a final
+  separator took `(?s)`. Bolting `perl = TRUE` on without those rewrites moves
+  122 of the same rows, which is what the new `tests/testthat/test-regex-engine.R`
+  exists to prevent.
 * `addr_classify()` is **15.7x faster on IPv6** — 0.88 s per 1e6 addresses,
   down from 13.9 s. `extract_embeddings()` scattered its result back to one
   element per address by chopping into a `vctrs` slice per address, so it asked

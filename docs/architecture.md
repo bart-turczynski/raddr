@@ -2436,7 +2436,7 @@ the decisions are not relitigated.
 | O1 | Pure R vs compiled | **Closed 2026-07-29 with all five operations measured — see §11.2 and §11.1.7.** The record meets both targets in pure R; `within_any` meets target and beats C++ (0.96x / 0.24x); the parsers miss by 18x / 41x and format v6 by 7.5x, and that is the pure R floor on irregular string work. Still v0.1-pure and v0.2-decidable, because the API does not change either way. Plain C, not Rcpp. The fifth operation, classification, had never been timed against `ipaddress`, and measuring it turned up the one row that was **not** a floor: 76x–86x on IPv6, where the tuned lookups were 0.4 s of a 13.9 s call and `extract_embeddings()` was 11.7 s of it, chopping 1e6 `vctrs` slices of a nested record to deliver as few as 19. Fixed (`RADD-znxdxgyh`), **15.7x**, and classification was never evidence for compiled code — it was a container reshape wearing a floor's clothing, and what exposed it was a decomposition that did not add up rather than a wall clock |
 | O2 | Does `zone` participate in `==`? | **Settled 2026-07-26: no.** Equality over the 128 bits and family; `addr_zone()` queried separately. See §5.1.2 |
 | O3 | Cross-family ordering | **Settled 2026-07-26: total order, v4 before v6**, with `v6_4in6` ranked as `v6`. See §5.1.2 |
-| O4 | `stringi` vs base R for ASCII host tokenization | **Closed 2026-07-29: base R suffices, no dependency — see §11.2.2.** `bench/tokenize.R` runs every tokenizer pattern under TRE, PCRE and ICU with agreement asserted, and **PCRE is ahead of ICU on all of them**; the splits are a wash, `stringi`'s `simplify = NA` matrix is *slower* than `unlist(strsplit())`, and it has no base-N integer parser at all. Its one real win, `stri_detect_charclass()`, is two-thirds recoverable by restructuring the check in base R. The correctness case for `stringi` — locale-independent Unicode — is the strong one and is **absent** here, since `R/encoding.R` gates the input and the grammars are ASCII by definition. What the comparison did find was a defect: `perl = TRUE` is not a semantics-free swap, PCRE's `$` matches before a trailing newline, and the hextet validator was the one anchored pattern already running under it (`RADD-kurxtbqc`) |
+| O4 | `stringi` vs base R for ASCII host tokenization | **Closed 2026-07-29: base R suffices, no dependency — see §11.2.2.** `bench/tokenize.R` runs every tokenizer pattern under TRE, PCRE and ICU with agreement asserted, and **PCRE is ahead of ICU on all of them**; the splits are a wash, `stringi`'s `simplify = NA` matrix is *slower* than `unlist(strsplit())`, and it has no base-N integer parser at all. Its one real win, `stri_detect_charclass()`, is two-thirds recoverable by restructuring the check in base R. The correctness case for `stringi` — locale-independent Unicode — is the strong one and is **absent** here, since `R/encoding.R` gates the input and the grammars are ASCII by definition. What the comparison did find was a defect: `perl = TRUE` is not a semantics-free swap, PCRE's `$` matches before a trailing newline, and the hextet validator was the one anchored pattern already running under it (`RADD-kurxtbqc`). The migration itself followed as §11.2.3 (`RADD-shgcdcvj`), and it found the *second* way the engines differ, which the defect had hidden: PCRE's `.` does not match a newline either, so the two greedy runs to a final separator needed `(?s)` on top of the `\z` anchors |
 | O5 | Trie vs sorted masked vector for the 51 IANA rows plus the transition overlay | **Measured and closed 2026-07-28, see §11.1.6.** Neither, and not the walk either: grouping the blocks by prefix length — §11.1.5's containment trick, with `vec_match()` in place of `vec_in()` so the group reports *which* row — won every case and **shipped**, worth **36x** on the 276-row address-space table `addr_classify()` reads on every call. The sorted masked vector is *slower* than the walk on `special`; the trie pays to re-encode 1e6 addresses as bit strings on every call |
 | O6 | glibc and musl `pton` rows | **Settled 2026-07-29 by measuring them — see §3.3.0.** `data-raw/oracle-libc-linux.sh` runs both Python oracles under glibc 2.36 and musl 1.2.5 and commits four fixtures beside the Apple ones; `test-libc.R` asserts the divergence set. Findings: glibc and musl `inet_pton` **reject** the leading zeros Apple reads as decimal, in IPv4 and IPv6 alike; both reject every `inet_aton` overflow Apple wraps modulo 2^32; and the item's own premise about `aton` trailing garbage was **backwards** — glibc matches Apple, musl is the strict outlier. The composition of §3.2 holds on all three |
 | O6b | Whether glibc/musl `getaddrinfo` does the `fe80::/10` scope lift | **Settled 2026-07-29, and the answer is no — see §3.5.3.1.** `RADD-blpcanps`'s worst case holds: Linux leaves `fe80:abcd::1` alone at scope 0, so `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of `fe80::/10` rather than at a boundary. Linux `inet_pton` also takes no zone ID at all, so the §5.1 fold cannot arise there. Needed its own instrument, `oracle-zone-native.py`, because the corpus's `%lo0` is an Apple interface name and would have measured the container's interface table |
@@ -3268,7 +3268,113 @@ and a constant factor, arriving this time on the correctness side.
 The lesson for §11.2's open optimizations: `perl = TRUE` is measured at 1.2x to
 3x on the remaining TRE call sites and is **not** a free swap. Every one of them
 is anchored, so each needs `\z` and each needs its own differential test before
-it moves. That work is not done here.
+it moves. That work is not done here — it is §11.2.3.
+
+### 11.2.3 The TRE to PCRE migration, and the second way the engines differ **[verified 2026-07-29]**
+
+§11.2.2 measured every parse-path pattern under both of base R's engines and
+found PCRE ahead on all ten. This is that measurement cashed in: eleven patterns
+across `R/ipv4.R`, `R/ipv6.R` and `R/integer.R` moved to `perl = TRUE`.
+
+**It was not a mechanical swap, and the reason is not the one §11.2.2 knew
+about.** PCRE differs from TRE in two ways here, and only the first had shipped
+as a defect:
+
+1. **`$` also matches before a trailing newline.** TRE anchors at the end of the
+   string, which is what every grammar in this package means. This is
+   `RADD-kurxtbqc`. Eight of the eleven patterns are anchored, and each took `\z`.
+2. **`.` does *not* match a newline.** TRE's does. Two of the eleven are greedy
+   runs to a final separator — `^.*\.` for the last label of a host, `^.*:` for
+   the dotted-quad tail of an IPv6 body — and under PCRE a greedy run stops at an
+   embedded newline instead of crossing it. `1.2\n.3` keeps its middle part
+   rather than reducing to `3`; `1\n:2` does not match at all and is returned
+   whole. Both took `(?s)`.
+
+Fault 2 was invisible in §11.2.2 because the pattern that exposed fault 1 — the
+hextet grammar — contains no `.`. A session that had generalized from the first
+finding alone would have migrated these two sites and shipped the second.
+
+#### What it buys
+
+Interleaved passes over the two trees, 1e6 distinct addresses, minimum of seven:
+
+| surface | TRE | PCRE | |
+|---|---|---|---|
+| `addr_strict()` IPv6 | 3.55 s | **3.18 s** | −10% |
+| `addr_pton()` IPv6 | 3.67 s | **3.36 s** | −8% |
+| `addr_strict()` IPv4 | 1.47 s | **1.35 s** | −7% |
+| `ends_in_a_number()` | 0.572 s | **0.324 s** | **1.8x** |
+| `addr_whatwg()` IPv4 | 1.30 s | 1.31 s | — |
+| `addr_aton()` IPv4 | 1.65 s | 1.71 s | — |
+
+The three IPv4 dialects that did not move are the interesting row, and the reason
+is dialect rules rather than noise: the one migrated site on the IPv4 hot path is
+the leading-zero rejection at `R/ipv4.R`, and `rules_strict` is the **only**
+dialect with `leading_zeros = FALSE`. For every other dialect that expression is
+the constant `FALSE` and the scan never runs. The two sites in
+`parse_ipv4_number_slow()` need a radix prefix to be reached at all, so a corpus
+of plain decimal quads never touches them either.
+
+In situ on the 4e6 pieces `addr_strict()` actually splits, that one site is
+0.159 s under TRE against 0.071 s under PCRE — 2.2x, matching `bench/tokenize.R`
+— and 0.088 s is most of the 0.12 s the surface moved. Whole-parse timing on this
+machine has a run-to-run spread wider than that, which is why the table above is
+interleaved rather than run once per tree.
+
+`ends_in_a_number()` is the largest win and the only one that is not a constant
+factor's worth: four of the eleven patterns are in that one function.
+
+#### Verification
+
+Two directions, because agreement is the null result (§11.3) and a corpus that
+cannot fail proves nothing:
+
+- **The migration moves nothing.** 1091 adversarial literals — 600 random
+  addresses of both families, the §11.3 boundary literals, and every arrangement
+  of a separator, an anchor and a newline the rewrites could disturb — compared
+  across all seven entry points, `addr_codes()`, `ends_in_a_number()` and both
+  `integer_to_addr()` families. **No row moved**, on any of the eleven surfaces.
+- **The naive swap moves 122 rows** of that same corpus, so the corpus has teeth.
+  Bolting `perl = TRUE` on while leaving `$` and a bare `.` alone corrupts 61
+  rows of `addr_codes()` and flips 61 rows of `ends_in_a_number()`.
+
+The negative control is worth reading closely, because it does **not** reproduce
+`RADD-kurxtbqc`: no address moved. What moved was the *reason* — `"1.2.3.4\n"`
+went from no code at all to `not_a_number`, `"::\n"` from `bad_hextet` to
+`empty_group` — and `ends_in_a_number()`, which decides whether a WHATWG host
+gets a reg-name fallback or must parse as IPv4 or fail. A package whose product
+is the explanation and not just the verdict (§2) can be broken without a single
+address changing, and a suite that only checked addresses would have passed.
+
+`tests/testthat/test-regex-engine.R` carries the rewrites as (before, after)
+pairs and asserts agreement over the newline alphabet; asserts that the naive
+spellings *disagree*, so neither `\z` nor `(?s)` can be simplified away as
+noise; and walks the loaded namespace for any literal pattern reaching a
+`perl = TRUE` call site with a `$` in it. The last of those is the guard against
+the next bulk swap, and it fails on the naive tree.
+
+#### What stayed on TRE
+
+Thirteen patterns across eleven call sites in eight files, deliberately: the
+whitespace scan and zone strip in `R/dialects.R` and `R/parse.R`, the
+prefix-length check in `R/within.R`, the grouping strip and the `0x` strip in
+`R/encoding.R`, the whitespace truncation and leading-zero strip in `R/ipv4.R`,
+the dotted-tail rewrite and the same leading-zero strip in `R/ipv6.R`, the
+colon-run collapse in `R/format.R`, and the block-length read in
+`R/embedding.R`. None was measured by §11.2.2, none is on the per-piece path,
+and `$` is *correct* where they sit because TRE reads it as the end of the
+string. The hazard is a future reader moving one to `perl = TRUE` without
+touching its anchor, which is what the namespace guard and the comment at the
+hextet grammar are both there to catch.
+
+One of them is a trap worth naming. The leading-zero strip `^0+(.)` appears in
+both families and §11.2.2 measured it at 2.478 s against 1.915 s, so it looks
+like the best remaining candidate. Its PCRE form needs `(?s)` for the same reason
+as fault 2 above — without it, `"0\n"` is left alone where TRE reduces it to
+`"\n"` — and the obvious repair, `^0+(?=[0-9])` as already used in
+`R/integer.R`, is **not** equivalent: it declines a hex digit, so `"0a"` keeps
+its zero and the width computation downstream sees a different number.
+`(?s)^0+(?=.)` is the form that agrees.
 
 ### 11.3 The naive second implementations **[implemented 2026-07-28]**
 

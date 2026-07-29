@@ -134,7 +134,11 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   tail_value <- rep(NA_real_, n)
   dotted <- live & grepl(".", body, fixed = TRUE)
   if (any(dotted)) {
-    last <- sub("^.*:", "", body[dotted])
+    # `(?s)` because PCRE's `.` excludes newline where TRE's does not, and this
+    # run has to reach the *last* colon. Without it a body carrying an embedded
+    # newline before its final colon would keep everything from that newline on,
+    # and the dot counts below would then be compared against the wrong piece.
+    last <- sub("(?s)^.*:", "", body[dotted], perl = TRUE)
     # Every dot must be inside the final piece; "::1.2.3.4:5" is not a tail.
     dots_total <- nchar(body[dotted]) -
       nchar(gsub(".", "", body[dotted], fixed = TRUE))
@@ -185,7 +189,7 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   # simply the one it reaches first. Reporting it as a group count would send a
   # reader off to add groups, so an edge colon on an unelided literal is named
   # for what it is. A leading "::" is not one -- that row is elided.
-  edge <- miscounted & !elided & grepl("(^:|:$)", body)
+  edge <- miscounted & !elided & grepl("(^:|:\\z)", body, perl = TRUE)
   mask <- mark(mask, edge, "empty_group")
   mask <- mark(mask, miscounted, "wrong_group_count")
   live <- counted
@@ -207,7 +211,7 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   }
 
   # An empty piece anywhere is a stray colon: ":1", "1:", "1:::2" all land here.
-  stray <- live & grepl("(^:|::|:$)", full)
+  stray <- live & grepl("(^:|::|:\\z)", full, perl = TRUE)
   live <- live & !stray
   mask <- mark(mask, stray, "empty_group")
   if (!any(live)) {
@@ -222,12 +226,15 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
   #
   # The end anchor is `\z`, not `$`, and the difference is not cosmetic. Under
   # PCRE -- which is what `perl = TRUE` below selects -- `$` also matches
-  # *before a trailing newline*, so `"8\n"` satisfied `$` and was accepted as
-  # a hextet. TRE, R's default engine, anchors at the end of the string and
-  # rejects it, and the end of the string is what this grammar means. `\z` is
-  # PCRE's spelling of that, and it measures fractionally faster than `$`
-  # besides. This is the only anchored pattern in the package that runs under
-  # PCRE, which is why IPv6 was the only family affected.
+  # *before a trailing newline*, so a hextet of one digit and a newline
+  # satisfied `$` and was accepted. TRE, R's default engine, anchors at the end
+  # of the string and rejects it, and the end of the string is what this grammar
+  # means. `\z` is PCRE's spelling of that, and it measures fractionally faster
+  # than `$` besides. Every anchored pattern the parse path runs is under PCRE
+  # and spelled `\z` for this reason. The sites still on TRE -- zone stripping,
+  # prefix lengths, the dotted-tail rewrite above -- keep `$`, which is correct
+  # there because TRE reads it as the end of the string. Do not move one of
+  # those to `perl = TRUE` without changing its anchor in the same edit.
   pattern <- if (rules$leading_zeros) {
     "^0*[0-9a-fA-F]{0,4}\\z"
   } else {

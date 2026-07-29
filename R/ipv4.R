@@ -43,8 +43,21 @@ ends_in_a_number <- function(x) {
   if (!any(out)) {
     return(out)
   }
-  last <- sub("^.*\\.", "", sub("\\.$", "", x))
-  out & (grepl("^[0-9]+$", last) | grepl("^0[xX][0-9a-fA-F]*$", last))
+  # PCRE, and the two rewrites the engine forces are both load-bearing.
+  #
+  # `\z` rather than `$`, because PCRE's `$` also matches *before* a trailing
+  # newline where TRE's anchors at the end of the string, and the end of the
+  # string is what these grammars mean. That divergence is what produced the
+  # wrong-address defect fixed in the hextet validator; see the note in
+  # `parse_ipv6_addr()`.
+  #
+  # `(?s)` rather than a bare `.`, because PCRE's `.` excludes newline and TRE's
+  # does not. Without it a greedy run to the last separator stops at the first
+  # embedded newline instead of crossing it, so `1.2` newline `.3` would keep
+  # its middle part rather than reduce to the final one.
+  last <- sub("(?s)^.*\\.", "", sub("\\.\\z", "", x, perl = TRUE), perl = TRUE)
+  decimal <- grepl("^[0-9]+\\z", last, perl = TRUE)
+  out & (decimal | grepl("^0[xX][0-9a-fA-F]*\\z", last, perl = TRUE))
 }
 
 #' Parse one IPv4 part
@@ -109,13 +122,13 @@ parse_ipv4_number_slow <- function(parts, hex = TRUE, octal = TRUE) {
   base <- rep(10L, n)
   digits <- parts
 
-  is_hex <- if (hex) grepl("^0[xX]", parts) else rep(FALSE, n)
+  is_hex <- if (hex) grepl("^0[xX]", parts, perl = TRUE) else rep(FALSE, n)
   if (any(is_hex)) {
     base[is_hex] <- 16L
     digits[is_hex] <- substring(parts[is_hex], 3L)
   }
   if (octal) {
-    is_octal <- !is_hex & grepl("^0[0-9]+$", parts)
+    is_octal <- !is_hex & grepl("^0[0-9]+\\z", parts, perl = TRUE)
     if (any(is_octal)) {
       base[is_octal] <- 8L
       digits[is_octal] <- substring(parts[is_octal], 2L)
@@ -242,7 +255,11 @@ parse_ipv4_addr <- function(x, rules, codes = FALSE) {
   parsed <- parse_ipv4_number(flat, hex = rules$hex, octal = rules$octal)
   blank <- !nzchar(flat)
   nan <- parsed$status == "not_a_number"
-  zeroed <- if (rules$leading_zeros) FALSE else grepl("^0[0-9]", flat)
+  zeroed <- if (rules$leading_zeros) {
+    FALSE
+  } else {
+    grepl("^0[0-9]", flat, perl = TRUE)
+  }
   hexless <- if (!rules$empty_hex) {
     parsed$empty
   } else if (!is.null(rules$empty_hex_final) && !rules$empty_hex_final) {
