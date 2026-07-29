@@ -4,10 +4,12 @@ Report what an IP address literal means under each of the standards and
 implementations that disagree about it, and classify parsed values against the
 IANA special-purpose address registries.
 
-> **Status: pre-alpha.** The design is settled (`docs/architecture.md`). The
-> address type and the six dialect parsers exist and are tested against measured
-> oracles for IPv4 and IPv6; `addr_parse()`, formatting and classification do
-> not. The API is not stable and the package is not released.
+> **Status: pre-release.** The design is settled (`docs/architecture.md`) and
+> the v0.1 surface is implemented: the address type, the six dialects,
+> `addr_parse()`, RFC 5952 formatting, registry-backed classification,
+> containment, encoding round-trips and reverse pointers. Docs and CRAN posture
+> are the remaining work. The API is not yet stable and the package is not
+> released.
 
 ## The problem, in one string
 

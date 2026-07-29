@@ -18,49 +18,259 @@ knitr::opts_chunk$set(
 library(raddr)
 ```
 
-raddr reports what an IP address literal means under each of the standards and
-implementations that disagree about it. The parsers that do that are not written
-yet; what exists today is the value type they will return.
+## One string, three hosts
 
-## The address type
-
-`raddr_address()` is a low-level constructor over four 32-bit words. IPv4 lives
-in the last word:
+Here is an IP address literal: `"0177.0.0.1"`. Decide what you think it means
+before you read on, then ask raddr:
 
 ```{r}
-localhost <- raddr_address(0L, 0L, 0L, 2130706433L, "v4")
-localhost
+addr_parse("0177.0.0.1")
 ```
 
-The family has three states, not two, so the 4-in-6 form is not confused with
-the IPv4 address it carries:
+Three different answers, on one machine, for one string. The RFC dotted-quad
+grammar rejects it outright, because a leading zero is not part of that grammar.
+A browser reads the leading zero as an octal prefix and reaches `127.0.0.1` —
+loopback. POSIX `inet_pton` strips the zero and reads decimal, reaching
+`177.0.0.1` — a routable address in LACNIC's space, on the other side of the
+world.
+
+Every one of those readings is defensible and each is what some widely deployed
+thing actually does. Most libraries pick one and say nothing about the others.
+raddr does not pick.
+
+## Paper and reality
+
+The dialects sit on two axes, not one list. What a *standard* requires is one
+question; what an *implementation* does is a different one, and the second is
+not a degraded version of the first.
+
+| Axis | Dialect | Models |
+|---|---|---|
+| paper | `strict` | RFC dotted-quad grammar; Python `ipaddress`, Go, Rust |
+| paper | `whatwg` | the WHATWG URL host parser; what browsers do |
+| reality | `pton` | POSIX `inet_pton` |
+| reality | `aton` | BSD `inet_aton` |
+
+Each is an ordinary function over a character vector, returning an address
+vector with `NA` wherever that dialect refuses:
 
 ```{r}
-mapped <- raddr_address(0L, 0L, 65535L, 2130706433L, "v6_4in6")
-mapped == localhost
+literals <- c("0177.0.0.1", "192.0.048.1", "4294967296")
+
+addr_strict(literals)
+addr_whatwg(literals)
+addr_pton(literals)
+addr_aton(literals)
 ```
 
-## The zone travels beside the bits
+The dialect is chosen by calling a named function. There is deliberately no
+`strict = FALSE` argument and no mode buried in `...`, because an argument is
+much easier to helpfully default away than a function name is.
 
-An RFC 4007 zone ID names an interface, not an address, so it is stored
-separately and does not participate in equality. Two addresses that differ only
-by zone are the same address:
+## `addr_parse()` takes no mode argument
+
+`addr_parse()` runs every dialect, always, and hands back a record holding all
+of the readings at once:
 
 ```{r}
-lo0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", zone = "lo0")
-en0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", zone = "en0")
-
-lo0 == en0
-addr_zone(lo0)
+p <- addr_parse(literals)
+p
 ```
 
-## Ordering is total
-
-IPv4 sorts before IPv6, so `sort()` works on a vector that mixes families:
+The print method is quiet when the dialects agree and loud when they do not.
+Pull an individual reading back out with an accessor:
 
 ```{r}
-sort(c(mapped, localhost, lo0))
+addr_reading(p, "whatwg")
+addr_reading(p, "pton")
 ```
 
-Formatting is deliberately unfinished: the output above is the fully expanded
-form, not the RFC 5952 canonical form.
+`dialect` here is a **view selector on output, not a leniency knob on input**.
+The parsing already happened, under every dialect; choosing one now only chooses
+which finished reading to look at. That is why there is a `dialect` argument on
+the accessors and none on `addr_parse()`.
+
+The reason codes travel with the readings, so a refusal comes with its cause
+rather than as a bare failure:
+
+```{r}
+addr_codes(p, "strict")
+addr_outcome(p, "strict")
+```
+
+## Rejection is not missingness
+
+Each parse also carries a derived one-line summary:
+
+```{r}
+statuses <- addr_parse(c("127.0.0.1", "0177.0.0.1", "example.com", "999.1.1.1"))
+addr_status(statuses)
+```
+
+The four levels are doing real work, and none of them is `NA`:
+
+| status | meaning |
+|---|---|
+| `ok` | every dialect accepts, and they all yield the same address |
+| `divergent` | the dialects are not unanimous — on the value *or* on acceptance |
+| `not_an_address` | no dialect treats the input as an attempt at an IP address |
+| `malformed` | at least one treats it as an attempt; none accepts it |
+
+`example.com` and `999.1.1.1` both produce no address, and it would be easy to
+call both of them missing. They are not the same event. `example.com` is a
+hostname that was never an IP literal in the first place; `999.1.1.1` is an
+address literal that failed, and failed for a nameable reason:
+
+```{r}
+addr_codes(statuses[3])
+addr_codes(statuses[4])
+```
+
+`NA` does appear in this package, and it means one specific thing: *this dialect
+returned no address*. It is per-dialect, it sits in the reading, and it never
+propagates up into the status — because "nobody could read this" is itself a
+finding, not an absence of one.
+
+`divergent` covers disagreement about acceptance and not only about value. Under
+that definition `4294967296` is `divergent`: `aton` wraps it modulo 2^32 to
+`0.0.0.0` while both paper dialects reject it. Calling that `malformed` would
+lose the fact that something out there does accept it.
+
+## Why `addr_curl()` exists alongside the standards
+
+Two further dialects are precedence orderings over the reality primitives rather
+than separate parsers:
+
+```
+addr_getaddrinfo  =  pton, falling back to aton
+addr_curl         =  aton, falling back to addr_getaddrinfo
+```
+
+They matter because the composition is what software actually reaches. Consider
+`192.0.048.1`:
+
+```{r}
+addr_whatwg("192.0.048.1")
+addr_curl("192.0.048.1")
+```
+
+A browser refuses to dial that host. `curl` reaches `192.0.48.1`. If you
+validate a literal with one and fetch it with the other, the string that passed
+your check is not the string that determined your destination — and that gap is
+the entire reason this package reports every reading instead of one.
+
+The accessors admit the compositions too; the record stores the four primitives
+and resolves the other two on request:
+
+```{r}
+addr_reading(p, "curl")
+addr_reading(p, "getaddrinfo")
+```
+
+The asymmetry in the second ordering is deliberate. `curl` falls back to the
+resolver *entry point*, not to the bare parser underneath it, because curl's URL
+layer normalizes a numeric host `aton`-style and then hands `getaddrinfo`
+whatever survives. Composing it against `pton` instead gives the wrong answer
+for IPv6, where `aton` rejects everything and the composition is nothing but its
+fallback — and the entry point does something the bare parser does not:
+
+```{r}
+addr_pton("fe80:abcd::1")
+addr_getaddrinfo("fe80:abcd::1")
+addr_zone(addr_getaddrinfo("fe80:abcd::1"))
+```
+
+Two entry points into one C library, one string, different bits. `getaddrinfo`
+reads the second hextet of a link-local address as a scope ID and clears it from
+the address; `inet_pton` leaves it where it is. That is the IPv6 counterpart of
+`0177.0.0.1`, and it is why the fallback has to name the entry point.
+
+The zone travels beside the bits rather than inside them, because an RFC 4007
+zone identifies an interface and not an address. It takes no part in equality,
+and `addr_zone()` is how you tell two otherwise-identical addresses apart:
+
+```{r}
+addr_pton("fe80::1%lo0") == addr_pton("fe80::1%en0")
+```
+
+### The reality dialects model a measured platform
+
+`strict` and `whatwg` are fixed specifications and are the same everywhere.
+`pton` and `aton` are not: they model measured behavior, and the behavior varies
+by C library. raddr's readings are measured against Apple libc. glibc's
+`inet_aton` ignores trailing garbage where Apple's and musl's do not, and the
+glibc and musl `inet_pton` rows are not yet measured at all. Where a reality
+dialect is quoted here, read it as "what this libc does", not "what every libc
+does".
+
+Note that raddr itself is pure R. It does not call your system's resolver — it
+never touches the network and never performs a lookup — so these functions
+return the same answers on every machine, including the machine where that
+answer differs from the local libc.
+
+## Classification takes addresses, not strings
+
+Once you have an address, `addr_classify()` matches it against the IANA
+special-purpose address registries:
+
+```{r}
+addrs <- addr_getaddrinfo(
+  c("127.0.0.1", "100.64.0.1", "2001:db8::1", "2002::1")
+)
+addr_classify(addrs)
+```
+
+It refuses a character vector, and it refuses a parse record too:
+
+```{r, error = TRUE}
+addr_classify("127.0.0.1")
+```
+
+```{r, error = TRUE}
+addr_classify(addr_parse("0177.0.0.1"))
+```
+
+That second refusal is the point of the whole package restated one layer in. A
+parse record holds four readings which may be four different addresses. Silently
+classifying one of them would mean picking a dialect on your behalf, invisibly,
+inside a function whose name says nothing about parsing — and picking a dialect
+invisibly is the failure mode raddr exists to make impossible. Take one reading
+yourself, and the choice is in your code where you can see it.
+
+## Facts, not verdicts
+
+raddr reports. It returns no risk score, no allow/deny decision, and no "most
+restrictive reading wins" convenience. Those are policy, they depend on what you
+are defending, and they belong in a different package.
+
+That posture shows up in the classification columns, which are IANA's own values
+rather than something derived from them:
+
+```{r}
+teredo <- addr_classify(addr_pton("2001::1"))
+as.data.frame(teredo)[
+  , c("name", "globally_reachable", "footnotes", "registry")
+]
+```
+
+`globally_reachable` is `NA` there, and that is not a gap in raddr's data. IANA
+records the value for `2001::/32` as `N/A` with a footnote attached, and the
+`footnotes` column is what tells you so. A deprecated block reaches `NA` by a
+different route, and carries a `termination_date` that says which:
+
+```{r}
+as.data.frame(addr_classify(addr_pton("192.88.99.1")))[
+  , c("name", "globally_reachable", "termination_date")
+]
+```
+
+Two `NA`s, two different reasons, both recoverable. Collapsing them into one
+answer would be exactly the kind of tidying this package refuses to do.
+
+## Where to go next
+
+- `?dialects` for the six readers and what each one models.
+- `?addr_parse` and `?"parse-accessors"` for the record and how to take it apart.
+- `?addr_classify` for the registry layer, and `?addr_registry` for the vendored
+  snapshots and their version stamps.
+- `?addr_within` and `?addr_within_any` for containment against CIDR blocks.
