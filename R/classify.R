@@ -348,7 +348,7 @@ classify_codes_of <- function(x, kind, embedded) {
   # Only where the carve-out already let the form through: `::` and `::1` have
   # no kind at all (section 5.3.7), so this reports the tails between them and
   # 1.0.0.0 rather than re-deciding the threshold. Both shipped in-house guards
-  # use `tail32 > 1`, and changing it would change their behaviour; the fact
+  # use `tail32 > 1`, and changing it would change their behavior; the fact
   # that the tail is nonetheless unroutable is reported instead, at `may`.
   compatible <- !is.na(kind) & kind == "ipv4_compatible"
   if (any(compatible)) {

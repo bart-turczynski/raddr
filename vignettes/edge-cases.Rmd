@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 library(raddr)
 ```
 
-This is a "be warned" catalogue: the places where address handling surprises
+This is a "be warned" catalog: the places where address handling surprises
 people, and what raddr answers there.
 
 **Every table below is computed when this vignette is built**, from raddr's own
@@ -29,7 +29,7 @@ these tables change with it, and if they stop being true the package stops
 building.
 
 The framing between the tables is hand-written, and it is the part to read
-sceptically.
+skeptically.
 
 ```{r}
 show <- function(literals) {

@@ -95,7 +95,7 @@ No RFC defines a \verb{0x}-prefixed address encoding; it is a presentation
 convention, so raddr reads it and does not write it.
 
 Whitespace grouping -- \verb{c000 0201}, or a binary string spaced per octet -- is
-stripped on input by both string decoders. Nothing else is normalised away.
+stripped on input by both string decoders. Nothing else is normalized away.
 }
 
 \examples{

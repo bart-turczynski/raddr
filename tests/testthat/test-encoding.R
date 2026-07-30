@@ -233,7 +233,7 @@ test_that("a 0x prefix is read and never written", {
   expect_true(hex_to_addr("0xc0000201") == addr_pton("192.0.2.1"))
   expect_true(hex_to_addr("0XC0000201") == addr_pton("192.0.2.1"))
   expect_identical(addr_to_hex(hex_to_addr("0xc0000201")), "c0000201")
-  # The prefix is not a licence to drop digits.
+  # The prefix is not a license to drop digits.
   expect_true(is.na(hex_to_addr("0xc201")))
 })
 

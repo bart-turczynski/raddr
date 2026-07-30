@@ -125,7 +125,7 @@
 #'
 #' The same corpus was run under glibc 2.36 and musl 1.2.5 on 2026-07-29 by
 #' `data-raw/oracle-libc-linux.sh`, which is what fixes these functions to Apple
-#' rather than to a standard. Those fixtures are recorded, never modelled;
+#' rather than to a standard. Those fixtures are recorded, never modeled;
 #' `tests/testthat/test-libc.R` asserts the divergence set so a libc upgrade
 #' shows up as a changed file.
 #'
@@ -233,7 +233,7 @@ gai_extract_scope <- function(a) {
   # 0xFEBFFFFF inclusive. The /10 is what Apple's resolver tests, so the /10 is
   # what this models -- RFC 4291 section 2.5.6 also fixes the conformant format
   # at fe80::/64 with 54 zero bits between, but a stricter gate here would stop
-  # reproducing the behaviour this function exists to reproduce. The citation
+  # reproducing the behavior this function exists to reproduce. The citation
   # sources the BOUNDS; it is not a claim that the gate is conformance-checking.
   link_local <- !is.na(family) & family == "v6" &
     w1 >= 4269801472 & w1 <= 4273995775

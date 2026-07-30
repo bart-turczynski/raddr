@@ -164,7 +164,7 @@ table.
 
 The same corpus was run under glibc 2.36 and musl 1.2.5 on 2026-07-29 by
 \code{data-raw/oracle-libc-linux.sh}, which is what fixes these functions to Apple
-rather than to a standard. Those fixtures are recorded, never modelled;
+rather than to a standard. Those fixtures are recorded, never modeled;
 \code{tests/testthat/test-libc.R} asserts the divergence set so a libc upgrade
 shows up as a changed file.
 }

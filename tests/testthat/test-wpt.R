@@ -1,5 +1,5 @@
 # The WHATWG URL host corpus (RADD-xdgfyznt). See docs/architecture.md
-# section 12.1 for the licence mechanics and data-raw/vendor-wpt.R for how the
+# section 12.1 for the license mechanics and data-raw/vendor-wpt.R for how the
 # CSV below is derived from the vendored upstream bytes.
 #
 # What this file is for, stated narrowly, because the corpus invites a broader

@@ -79,12 +79,12 @@
 
 ## Documentation
 
-* The reality dialects are now documented as modelling **Apple** `inet_pton()`
+* The reality dialects are now documented as modeling **Apple** `inet_pton()`
   and `inet_aton()`, not POSIX and BSD. The same oracles were run under glibc
   2.36 and musl 1.2.5 (`data-raw/oracle-libc-linux.sh`, needs Docker), and there
   is no reality-side reading all three libcs agree on: glibc and musl reject the
   leading zeros Apple reads as decimal, and reject the overflow Apple wraps
-  modulo 2^32. Behavior is unchanged — raddr modelled Apple before and still
+  modulo 2^32. Behavior is unchanged — raddr modeled Apple before and still
   does, because a dialect that varied with the host would not be a function.
 * `addr_getaddrinfo()` and `addr_curl()` are Apple readings across the whole of
   `fe80::/10`: the scope lift they apply there is Apple's alone, and glibc and

@@ -242,7 +242,7 @@ decode_string <- function(x, digits, base, bad) {
 #' convention, so raddr reads it and does not write it.
 #'
 #' Whitespace grouping -- `c000 0201`, or a binary string spaced per octet -- is
-#' stripped on input by both string decoders. Nothing else is normalised away.
+#' stripped on input by both string decoders. Nothing else is normalized away.
 #'
 #' @param x For `addr_to_*()`, a `raddr_address` vector. For `bytes_to_addr()`,
 #'   a list of `raw` vectors of length 4 or 16. For `hex_to_addr()` and

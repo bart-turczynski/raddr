@@ -1040,7 +1040,7 @@ test_that("the wrapper's own record is not the embedded address's", {
 
 test_that("the same 128 bits classify alike whatever the literal said", {
   # The root cause behind CVE-2024-29415 and six more: Node's URL parser
-  # normalises `::ffff:169.254.169.254` to the hex form while the range check
+  # normalizes `::ffff:169.254.169.254` to the hex form while the range check
   # reads only the dotted one, so two spellings of one value take two paths.
   spellings <- c(
     "::ffff:169.254.169.254", "::ffff:a9fe:a9fe", "::FFFF:A9FE:A9FE",
