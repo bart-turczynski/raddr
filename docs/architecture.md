@@ -4169,6 +4169,63 @@ literals involved were already pinned (`test-codes.R`'s `trailing_dot`,
 because the migration depends on a vocabulary that no existing test forces to
 stay put.
 
+### 11.11 End-to-end against the prior R peers **[measured 2026-07-31]**
+
+The earlier performance sections compare raddr almost exclusively with
+`ipaddress`, even though the library-divergence survey (§3.7) also covers
+`iptools`. `bench/peers.R` makes the three-way comparison reproducible. It uses
+the two R peers from that survey rather than pulling unrelated cross-language
+implementations into a machine benchmark: `ipaddress` 1.0.3 and the final
+`iptools` release, 0.7.2.
+
+**These are string-facing, end-to-end timings.** Every measured call begins
+with the same canonical character vector and includes parsing. That is the
+only common input contract because `iptools` has no address-vector type. It is
+also deliberately a different question from §11.1.5, where the addresses were
+already parsed and raddr's IPv4 and IPv6 containment ran at 0.96x and 0.24x of
+`ipaddress`. Here the parser floor from §11.2 is part of every raddr row.
+
+One million rows, best of five, seed 20260731; R 4.6.0 on arm64 macOS 26.4.1:
+
+| Operation from character input | raddr | `ipaddress` | `iptools` | raddr / fastest |
+|---|---:|---:|---:|---:|
+| IPv4 parse + canonical format | 1.766 s | 0.375 s | **0.330 s** | **5.35x** |
+| IPv4 parse + integer | 2.025 s | 1.436 s | **0.068 s** | **29.78x** |
+| IPv6 parse + 16 bytes | 6.583 s | 0.194 s | **0.181 s** | **36.37x** |
+| IPv4 parse + within any of 11 blocks | 2.014 s | 0.092 s | **0.089 s** | **22.63x** |
+| IPv4 parse + multicast predicate | 1.773 s | **0.062 s** | 0.135 s | **28.60x** |
+| IPv6 parse + multicast predicate | 6.290 s | 0.140 s | **0.116 s** | **54.22x** |
+
+**All six comparisons assert agreement before timing: zero disagreements over
+six million answers.** The multicast rows use raddr's one-block
+`addr_within_any()` rather than `addr_classify()`, so all three sides answer
+the same boolean question; timing raddr's full registry record against a
+predicate would only restate §11.1.7's unlike-for-like warning. The corpora
+force one quarter of the multicast inputs inside the relevant block so the
+agreement checks are not vacuous.
+
+The integer row needs the same qualification. raddr returns lossless decimal
+character strings by default, `ipaddress` returns `bignum::biginteger`, and
+`iptools` returns an R double. All three are exact over IPv4, and normalization
+for the agreement assertion happens **outside** the timed region. The 29.78x is
+therefore a real end-to-end cost comparison, but not evidence that the three
+return types offer the same contract. `iptools` has no corresponding exact
+IPv6 integer operation.
+
+**The result verifies the existing diagnosis rather than overturning it.**
+When values are already parsed, raddr's vector operations remain competitive;
+when a public call begins with text, pure-R parsing dominates the total. IPv4
+round-trip is the mild case at 5.35x. The other raddr rows add work after the
+same parse and land between 22.63x and 54.22x, the same range as §11.2's
+18x IPv4 and 41x IPv6 parser ratios. This three-way run found no new
+algorithmic defect and no disagreement to investigate. It strengthens the v0.2
+case for moving parsing—not the record or containment representation—to plain
+C.
+
+`iptools` is archived and absent from the active CRAN index on R 4.6.0.
+The benchmark header gives the archived 0.7.2 source URL and keeps all three
+packages optional; none belongs in `Imports`.
+
 ---
 
 ## 12. Dependencies
