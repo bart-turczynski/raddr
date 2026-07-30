@@ -23,7 +23,7 @@ repos:
         name: verify (mirrors CI)
         entry: Rscript -e
         args:
-          - 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }; rcmdcheck::rcmdcheck(args = "--as-cran", error_on = "warning")'
+          - 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }; words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }; rcmdcheck::rcmdcheck(args = "--as-cran", error_on = "warning")'
         language: system
         pass_filenames: false
         always_run: true
