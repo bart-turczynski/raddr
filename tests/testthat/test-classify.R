@@ -1199,3 +1199,65 @@ test_that("it is a fact accessor, not a verdict, and refuses a raddr_parse", {
   expect_identical(addr_global_reachability(addr_pton(character())), logical())
   expect_true(is.na(addr_global_reachability(addr_pton(NA_character_))))
 })
+
+# --- the reserved u-byte (RFC 6052 section 2.2) ------------------------------
+
+test_that("a non-zero reserved u-byte is reported, and changes no reading", {
+  # Section 2.2 reserves bits 64-71 and says they MUST be set to zero. Section
+  # 2.3 says to remove that octet before reading the embedded address, which is
+  # what the two-segment geometry does -- so the violation is about the
+  # container, and the extracted address must come back identical either way.
+  clean <- "64:ff9b:1:c000:2:2100::"
+  dirty <- "64:ff9b:1:c000:ff02:2100::"
+
+  expect_false("nat64_u_byte_nonzero" %in% codes_of(clean)[[1L]])
+  expect_true("nat64_u_byte_nonzero" %in% codes_of(dirty)[[1L]])
+
+  expect_equal(
+    field(addr_embeddings(addr_pton(dirty))[[1L]], "address"),
+    field(addr_embeddings(addr_pton(clean))[[1L]], "address")
+  )
+  expect_equal(
+    field(addr_embeddings(addr_pton(dirty))[[1L]], "address"),
+    addr_pton("192.0.2.33")
+  )
+})
+
+test_that("the well-known prefix cannot violate the u-byte", {
+  # Under 64:ff9b::/96 the reserved octet is INSIDE the prefix, so it is zero by
+  # construction and the rule is unreachable there. Asserted rather than
+  # assumed: if a prefix at another length is ever added, this is what says the
+  # reasoning has to be redone.
+  every <- addr_pton(sprintf("64:ff9b::%x:%x", 0:255, 0:255))
+  fired <- vapply(
+    field(addr_classify(every), "codes"),
+    function(codes) "nat64_u_byte_nonzero" %in% codes,
+    logical(1)
+  )
+  expect_false(any(fired))
+
+  # And the octet the rule reads is genuinely inside that prefix.
+  expect_true(addr_within(addr_pton("64:ff9b::ffff:ffff"), "64:ff9b::/96"))
+})
+
+test_that("the u-byte rule is graded must and fires on no other mechanism", {
+  entry <- addr_codes_registry()
+  entry <- entry[entry$code == "nat64_u_byte_nonzero", ]
+  expect_identical(entry$strength, "must")
+  expect_identical(entry$layer, "classify")
+  expect_identical(entry$rfc, "RFC 6052 section 2.2")
+
+  # The same bits set under a mechanism that is not NAT64 draw nothing: the
+  # reservation is RFC 6052's, and it binds IPv4-embedded IPv6 addresses only.
+  others <- addr_pton(c(
+    "2002:c000:201:ff00::",              # 6to4
+    "2001:0:4136:e378:ff00:63bf:3fff:fdd2", # Teredo
+    "::ffff:192.0.2.33"                   # IPv4-mapped
+  ))
+  fired <- vapply(
+    field(addr_classify(others), "codes"),
+    function(codes) "nat64_u_byte_nonzero" %in% codes,
+    logical(1)
+  )
+  expect_false(any(fired))
+})

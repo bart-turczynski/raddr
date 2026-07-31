@@ -255,7 +255,7 @@ Reporting only the MUST rules would collapse a spectrum into a binary. The
 grade follows the rule's *substance*, not a keyword search: RFC 4291 and RFC
 8215 invoke RFC 2119 nowhere, so grading by keyword would mark a binding format
 definition as unspecified purely because of how its author wrote it down. See
-`vignette("reason-codes")` for all 23 codes.
+`vignette("reason-codes")` for all `r nrow(codes)` codes.
 
 ### RFC 6890 is a stale snapshot
 

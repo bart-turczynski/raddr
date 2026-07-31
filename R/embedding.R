@@ -530,6 +530,13 @@ nat64_prefix <- function(prefix, arg = "prefix") {
 #' global -- see [addr_global_reachability()] for the fact, which is a fact and
 #' not a permission.
 #'
+#' This function emits **no** codes at all, including
+#' `nat64_u_byte_nonzero`: a code is a property of a classification, and a
+#' caller-supplied prefix produces a reading rather than a classification. RFC
+#' 6052 section 2.2's reserved octet sits at bits 64-71 whatever the prefix
+#' length, so a caller who wants that check under their own prefix can make it
+#' directly. [addr_classify()] reports it for the prefixes raddr names.
+#'
 #' @param x A `raddr_address` vector.
 #' @param prefix A single CIDR block, as a string: an IPv6 prefix at one of the
 #'   six lengths RFC 6052 section 2.2 permits (`/32`, `/40`, `/48`, `/56`,

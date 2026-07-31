@@ -65,6 +65,13 @@ section 5 says in terms that it does not reach the local-use prefix either.
 So no classify code is emitted here even when the embedded address is not
 global -- see \code{\link[=addr_global_reachability]{addr_global_reachability()}} for the fact, which is a fact and
 not a permission.
+
+This function emits \strong{no} codes at all, including
+\code{nat64_u_byte_nonzero}: a code is a property of a classification, and a
+caller-supplied prefix produces a reading rather than a classification. RFC
+6052 section 2.2's reserved octet sits at bits 64-71 whatever the prefix
+length, so a caller who wants that check under their own prefix can make it
+directly. \code{\link[=addr_classify]{addr_classify()}} reports it for the prefixes raddr names.
 }
 
 \examples{

@@ -992,6 +992,7 @@ vocabulary, because its own is fixed downstream.
 | `nat64_wk_embedded_not_global` | `classify` | RFC 6052 §3.1 | the NAT64 well-known prefix carries a non-global embedded IPv4 |
 | `sixtofour_embedded_not_global` | `classify` | RFC 3056 §9 | a 6to4 `V4ADDR` is not in the format of a global unicast address |
 | `teredo_client_not_global` | `classify` | RFC 4380 §4 | a global Teredo address embeds a non-global client IPv4 |
+| `nat64_u_byte_nonzero` | `classify` | RFC 6052 §2.2 | bits 64-71 are reserved and MUST be zero, and are not |
 | `link_local_outside_fe80_64` | `classify` | RFC 4291 §2.5.6 | the address is in `fe80::/10` but outside `fe80::/64` |
 | `link_local_reserved_range` | `classify` | RFC 3927 §2.1 | the address is in `169.254.0.0/24` or `169.254.255.0/24` |
 | `ipv4_compatible_low_tail` | `classify` | RFC 4291 §2.5.5.1 | the deprecated `::a.b.c.d` tail is below `1.0.0.0` |
@@ -1644,16 +1645,36 @@ the five shorter lengths those bits are in the suffix, where they belong to the
 address — which this function reads rather than grades. Nothing checks them
 today; see §5.3.7.2.
 
-##### 5.3.7.2 The u-byte is unchecked on the address **[open]**
+##### 5.3.7.2 The u-byte is reported, not enforced **[implemented 2026-07-31]**
 
-RFC 6052 §2.2 reserves bits 64-71 and says they MUST be set to zero. raddr's
-geometry *skips* those bits, so the extraction is correct whatever they hold —
-but a non-zero u-byte is a violation raddr currently observes and does not
-report, for `nat64_wk` and `nat64_local` as much as for a supplied prefix. The
-constant `nat64_u_byte` has been in `R/transition.R` since the overlay landed
-with no consumer other than the `/96` prefix check above. Reporting it is a
-code-layer change (`must` strength, uniform across all three routes), not a
-per-function one, which is why it is not folded into `addr_nat64_embeddings()`.
+RFC 6052 §2.2 reserves bits 64-71 "for compatibility with the host identifier
+format defined in the IPv6 addressing architecture" and says they MUST be set to
+zero. raddr's geometry *skips* those bits — §2.3 says to remove the u octet
+before reading, which is exactly what the two-segment rows at `/40`, `/48` and
+`/56` encode — so a violation changes no extracted address.
+
+It is reported anyway, as `nat64_u_byte_nonzero` at `must` strength. A MUST raddr
+can see and does not say is the failure mode this package exists to avoid, and
+the constant `nat64_u_byte` had sat in `R/transition.R` since the overlay landed
+with no consumer at all. What the code reports is a **malformed container, not a
+wrong reading**, and its summary says so: an otherwise well-formed NAT64 address
+with a non-zero u-byte is hand-built.
+
+**Only `nat64_local` can reach it.** Under the well-known `/96` the reserved
+octet lies inside the prefix and is therefore zero by construction of
+`64:ff9b::/96` — asserted over all 65,536 combinations of the two trailing
+hextets rather than argued. The emission condition is written over both kinds
+regardless, because it is a fact about the geometry rather than about which
+prefix matched, and a prefix added later at another length would otherwise slip
+through unreported.
+
+`addr_nat64_embeddings()` does not emit it, and that is the same boundary
+§5.3.7.1 already draws rather than a gap: that function emits **no** codes at
+all. Codes are a property of a classification, and a caller-supplied prefix
+produces a reading, not a classification. A caller who wants the check under
+their own prefix has the geometry —
+`addr_transition_registry("embeddings")` — and the reserved octet is at a fixed
+position independent of prefix length.
 
 ---
 

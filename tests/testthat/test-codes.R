@@ -68,6 +68,7 @@ test_that("each classify code carries the strength its RFC actually states", {
       nat64_wk_embedded_not_global = "must",
       sixtofour_embedded_not_global = "must",
       teredo_client_not_global = "must",
+      nat64_u_byte_nonzero = "must",
       link_local_outside_fe80_64 = "must",
       link_local_reserved_range = "must",
       ipv4_compatible_low_tail = "may",
@@ -191,6 +192,7 @@ classify_corpus <- c(
   "64:ff9b::a9fe:a9fe",                   # nat64_wk_embedded_not_global
   "2002:a00:1::",                         # sixtofour_embedded_not_global
   "2001:0:4136:e378:8000:63bf:f5ff:fffe", # teredo_client_not_global
+  "64:ff9b:1:c000:ff02:2100::",           # nat64_u_byte_nonzero
   "febf::1",                              # link_local_outside_fe80_64
   "169.254.255.5",                        # link_local_reserved_range
   "::2",                                  # ipv4_compatible_low_tail

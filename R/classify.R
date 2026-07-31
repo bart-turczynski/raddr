@@ -403,6 +403,36 @@ classify_codes_of <- function(x, kind, embedded) {
     !is.na(kind) & kind == "teredo" & !embedded$global$client
   )
 
+  # --- and one that is about the CONTAINER rather than either address --------
+  #
+  # RFC 6052 section 2.2 reserves bits 64-71 "for compatibility with the host
+  # identifier format defined in the IPv6 addressing architecture" and says
+  # they MUST be set to zero. raddr's geometry SKIPS those bits -- section 2.3
+  # says to remove the u octet before reading, which is what the two-segment
+  # rows at /40, /48 and /56 encode -- so a violation changes no extracted
+  # address. It is reported anyway: a MUST raddr can see and does not say is
+  # the shape of thing this package exists to avoid, and a non-zero u-byte on
+  # an otherwise well-formed NAT64 address is a hand-built address.
+  #
+  # Only `nat64_local` can reach it. Under the well-known /96 the reserved
+  # octet lies INSIDE the prefix, so it is zero by construction of
+  # 64:ff9b::/96 -- the condition is written over both kinds anyway, because it
+  # is a fact about the geometry rather than about which prefix matched, and a
+  # future prefix at another length would otherwise slip through unreported.
+  nat64 <- !is.na(kind) & kind %in% c("nat64_wk", "nat64_local")
+  if (any(nat64)) {
+    at <- which(nat64)
+    words <- lapply(
+      c("w1", "w2", "w3", "w4"),
+      function(nm) widen_word(field(x, nm))
+    )
+    hit <- rep(FALSE, n)
+    hit[at] <- read_bits(
+      words, nat64_u_byte[["offset"]], nat64_u_byte[["length"]], at
+    ) != 0
+    mask <- add_classify_code(mask, "nat64_u_byte_nonzero", hit)
+  }
+
   new_list_of(
     codes_from_mask(mask, classify_code_levels, classify_code_bits),
     ptype = character()

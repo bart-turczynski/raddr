@@ -172,6 +172,19 @@ raddr_codes <- local({
       strength = "must"
     ),
     raddr_codes_row(
+      "nat64_u_byte_nonzero", "classify", "RFC 6052 section 2.2",
+      paste(
+        "Bits 64-71 of an IPv4-embedded IPv6 address are reserved for",
+        "compatibility with the RFC 4291 host identifier format and MUST be",
+        "set to zero. They are not. The extracted address is unaffected --",
+        "section 2.3's algorithm removes the u octet before reading, and so",
+        "does raddr -- so this reports a malformed container, not a wrong",
+        "reading. It can only fire under 64:ff9b:1::/48: at the well-known",
+        "/96 those bits are inside the prefix and are zero by construction."
+      ),
+      strength = "must"
+    ),
+    raddr_codes_row(
       "link_local_outside_fe80_64", "classify", "RFC 4291 section 2.5.6",
       paste(
         "The address is inside the fe80::/10 reservation but outside",
