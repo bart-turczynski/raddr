@@ -477,8 +477,20 @@ test_that("this pair is the one where editorial and served dates disagree", {
 
   # Both halves disagree with their header, in the same direction: IANA edited
   # the registry after the export was deployed.
-  expect_gt(v4$last_updated, v4$last_modified_date)
-  expect_gt(v6$last_updated, v6$last_modified_date)
+  #
+  # Compared as `Date`, not as the stored strings. The strings are ISO-8601, so
+  # lexicographic order IS date order and the comparison was never wrong -- but
+  # `expect_gt()` is documented over numbers, and testthat < 3.3.0 built its
+  # failure message with `act$val - exp$val` and then forced that message even
+  # when the expectation PASSED (3.2.3, R/expectation.R:52-53). So `expect_gt()`
+  # on character errored unconditionally there, with "non-numeric argument to
+  # binary operator". That was the seventh failure in docs/r-floor-check.md, and
+  # like the other six it was a dependency-version artifact rather than anything
+  # to do with R 4.0. `as.Date()` states the intent and leaves the message
+  # formattable on every testthat: the difference is a `difftime`, which
+  # `sprintf("%.3g", ...)` accepts.
+  expect_gt(as.Date(v4$last_updated), as.Date(v4$last_modified_date))
+  expect_gt(as.Date(v6$last_updated), as.Date(v6$last_modified_date))
 
   # And the stamp follows the editorial dates, so it is a day later than the
   # header rule produced.
