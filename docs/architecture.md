@@ -496,6 +496,20 @@ not "in the bits or out of them" but "kept or lost", and a parser that answers
 `fe80::1` to `fe80::1%lo0%en0%wat` has silently discarded the part of the input
 that decides which host it is.
 
+**The full peer corpus confirms this is the whole shape, not a hand-picked
+example [verified 2026-07-31; `RADD-etaiwlju`].**
+`data-raw/peer-conformance.R` ran 2,063 unique non-missing adversarial literals
+through raddr, R `ipaddress` 1.0.3, R `iptools` 0.7.2, Python 3.14.6, Go 1.26.5
+and Rust 1.91.1. Rust and raddr `strict` agreed on every row; Python and Go had
+zero zone-free divergences from it. The two R peers agreed with each other on
+every row but accepted 396 inputs beyond `strict`: 289 match an existing
+`pton`-family raddr reading, 83 accept and discard one zone, and 24 truncate at
+the first `%`. There is therefore no parser fix to import into raddr. The
+"perfect" answer is the named contract plus preservation: retain `strict`,
+report the 289 reality readings under their real dialect, and refuse to copy
+the 107 lossy zone readings. The reproducible matrix and primary-doc links are
+in `docs/research/09-peer-parser-conformance.md`.
+
 **And Python keeps the zone but cannot render it [verified 2026-07-27].**
 Found while writing the survey, on CPython 3.9.6, 3.12.13 and 3.14.6 alike:
 

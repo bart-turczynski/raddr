@@ -21,6 +21,7 @@ pick.**
 | `06-library-divergence.md` | How other libraries *classify* addresses, and where they disagree with IANA |
 | `07-block-semantics.md` | What each special-purpose block is for, and how naive classifiers misread it |
 | `08-encoding-reverse.md` | Reverse pointers, numeric encodings, prefix notation, round-trip failures |
+| `09-peer-parser-conformance.md` | Executed hard-case parser comparison across raddr, all surveyed R peers, and canonical Python, Go, and Rust libraries |
 
 ## How to read these
 
