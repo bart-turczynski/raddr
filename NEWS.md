@@ -36,6 +36,13 @@ single answer.
   `format()`, `as.character()`, comparison, equality, and combination methods.
 * `addr_family()`, `addr_zone()`, `addr_expand()`, and `addr_format()` — the
   latter emitting RFC 5952 canonical text.
+* raddr requires vctrs 0.7.0 or later. Earlier versions modify record vectors
+  in place instead of returning a modified copy, which made the readings held
+  in a parse depend on the order they were read in: `addr_reading(p, "curl")`
+  returned `NA` and left `p` corrupted, so a later `addr_reading(p, "aton")`
+  returned `NA` too for a literal it had read as an address before the first
+  call. The answer is the version floor rather than a defensive copy, because
+  vctrs 0.7.0 fixed the bug upstream and a workaround would outlive it.
 
 ## Classification against the IANA registries
 
