@@ -23,7 +23,7 @@ Depends:
     R (>= 4.0.0)
 Imports:
     rlang,
-    vctrs
+    vctrs (>= 0.7.0)
 URL: https://github.com/bart-turczynski/raddr
 BugReports: https://github.com/bart-turczynski/raddr/issues
 X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,

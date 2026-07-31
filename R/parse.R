@@ -332,6 +332,16 @@ gai_whitespace <- function(input) {
   grepl("[ \t\r\n\v\f]", sub("%.*$", "", input)) & !is.na(input)
 }
 
+# `a` is one of the record's OWN stored fields at every call site below, so this
+# is only safe because `vec_assign()` returns a modified copy and leaves `a`
+# alone. That is the documented contract, but vctrs < 0.7.0 broke it for
+# `vctrs_rcrd` types specifically -- it assigned in place -- and `raddr_address`
+# is a `vctrs_rcrd`. The effect was not a wrong return value but a corrupted
+# record: blanking the `aton` field here left every LATER read of the same
+# vector `NA`, so an accessor's answer depended on which accessor had been
+# called before it. `DESCRIPTION` floors vctrs at 0.7.0 for this reason and no
+# other; see `RADD-vppmbsia`, and the non-mutation test in
+# tests/testthat/test-invariants.R that pins the property rather than the floor.
 blank_address <- function(a, at) {
   if (!any(at)) {
     return(a)

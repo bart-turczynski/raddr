@@ -276,6 +276,66 @@ test_that("the record's readings are the standalone parsers' answers", {
   }
 })
 
+test_that("reading a dialect does not modify the record it read from", {
+  # The accessors are pure: `addr_parse()` stores the four primitives once and
+  # `addr_reading()` only ever looks. Nothing in the signatures says so, though,
+  # and two internals -- `blank_address()` and `compose_dialects()` -- reach the
+  # record's own stored fields and pass them to `vctrs::vec_assign()`, which is
+  # contractually copy-on-assign but was not always.
+  #
+  # vctrs < 0.7.0 assigned in place for `vctrs_rcrd` types (fixed upstream in
+  # 0.7.0, #1951), and `raddr_address` is one. Under it, resolving the `curl`
+  # composition blanked the record's stored `aton` reading as a side effect, so
+  # `addr_reading(p, "aton")` answered 1.2.3.4 before a `curl` read and NA
+  # after: same object, same argument, two answers. `DESCRIPTION` floors vctrs
+  # at 0.7.0 to exclude that, but a floor is a claim about a dependency, and
+  # this is the property the floor exists to protect, so it is asserted here
+  # directly. It cannot be version-gated into failing on a fixed vctrs, and is
+  # not meant to be -- it is here to fail if the pattern is reintroduced.
+  literals <- corpus_literals()
+
+  for (dialect in all_dialects) {
+    p <- addr_parse(literals)
+    # A second, independently parsed record rather than a saved copy of `p`'s
+    # fields: an in-place write is visible through every reference to the vector
+    # it mutates, so a "before" snapshot taken from `p` would be changed by the
+    # very thing it is supposed to detect.
+    untouched <- addr_parse(literals)
+
+    invisible(addr_reading(p, dialect))
+
+    expect_identical(p, untouched, info = dialect)
+  }
+})
+
+test_that("dialect readings do not depend on the order they are read in", {
+  # The user-visible shape of the same bug, stated as the symptom rather than
+  # the mechanism: every dialect must give the same answer whether it is asked
+  # first or last. `curl` reads `aton` and `getaddrinfo` blanks it, so the
+  # damaging order was `curl` before `aton` -- but pinning one pair would pin
+  # the bug that happened, not the property, so this compares every dialect
+  # against a record on which it is the only question asked.
+  literals <- corpus_literals()
+
+  alone <- lapply(all_dialects, function(dialect) {
+    addr_reading(addr_parse(literals), dialect)
+  })
+  names(alone) <- all_dialects
+
+  # Every dialect read in sequence off one record, then again in reverse, so no
+  # single ordering can be the lucky one.
+  for (order in list(all_dialects, rev(all_dialects))) {
+    p <- addr_parse(literals)
+    for (dialect in order) {
+      expect_identical(
+        addr_reading(p, dialect),
+        alone[[dialect]],
+        info = paste(dialect, "in", paste(order, collapse = ">"))
+      )
+    }
+  }
+})
+
 test_that("classification never errors on anything addr_parse produced", {
   # Section 5.3: classification is total, and the input it has to be total over
   # is whatever came out of the parser -- including the rejections, which are
