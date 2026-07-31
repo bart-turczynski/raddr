@@ -20,6 +20,30 @@ On every commit, lightweight hooks run: end-of-file fixer, trailing-whitespace t
 
 ### Pre-push verify gate
 
-On `git push`, the `verify` hook runs the project's verify command — the same chain CI runs. Server-side branch protection is unavailable on this GitHub plan, so this local pre-push gate is the stand-in for branch protection: it blocks a push whose tree would turn CI red.
+On `git push`, the `verify` hook runs the project's verify command: `lintr::lint_package()`, then `spelling::spell_check_package()`, then `rcmdcheck::rcmdcheck(args = "--as-cran", error_on = "warning")`. Server-side branch protection is unavailable on this GitHub plan, so this local pre-push gate is the stand-in for branch protection.
+
+`.github/workflows/R-CMD-check.yaml` mirrors that chain across platforms. **It has never run.** It was written on 2026-07-31, and the repository has had no reachable remote since 2026-07-20, so until a first successful push the local hook is not a stand-in for CI — it is the only gate there is. This file previously described the hook's chain as "the same chain CI runs" while no `.github/` directory existed at all; the workflow now exists so that sentence becomes true on the first push rather than remaining a claim with nothing behind it.
+
+#### What the local gate does not cover
+
+The hook checks whatever host invokes it, which for the whole of 0.1.0's development was **one platform and one R version**: macOS arm64 (Darwin 25.4.0) on R 4.6.0. CRAN checks Windows, Linux and r-devel. That gap cannot be closed locally, and it is worth stating rather than discovering at submission.
+
+Two qualifications, because the gap is narrower than "single platform" suggests and also wider in one specific place:
+
+- **Narrower than it sounds for semantics.** The package's platform-varying behavior is already measured rather than assumed. The reality dialects model Apple's libc deliberately (architecture §3.1), and `data-raw/oracle-libc-linux.sh` runs the same oracles under glibc 2.36 and musl 1.2.5 with `tests/testthat/test-libc.R` asserting the divergence set (§3.3.0). So a cross-platform CI failure would be a build or check-mechanics failure, not a wrong address reading — the readings have three libcs behind them already.
+- **Wider at the declared R floor.** `DESCRIPTION` declares `Depends: R (>= 4.0.0)`, and nothing has ever run on R 4.0. That floor is a claim, not a measurement — the same shape as the `Language: en-US` field before `RADD-bxjyndha` put a guard behind it. The workflow's `oldrel-1` and `oldrel-2` entries probe toward it without reaching it. Either verify the floor or lower it to what has actually been checked.
+
+### Backups, while there is no reachable remote
+
+`origin` returns HTTP 403 (account suspended since 2026-07-20), so pushing is not available and the repository lives on one disk. Two local layers stand in, following the convention already used by sibling repos in `~/Projects/_backups/`:
+
+- A `--mirror` clone at `~/Projects/_backups/raddr.git`, wired as the `backup` remote. Refresh with `git push backup --all && git push backup --tags`.
+- Timestamped full bundles, `raddr_<branch>_<YYYYmmdd-HHMMSS>.bundle`, written with `git bundle create <path> --all` and checked with `git bundle verify`. A bundle is a single self-contained file holding every ref, so it is the copy to move off the machine.
+
+Both are on the same physical disk as the working tree, which protects against a bad rebase but not against losing the disk. Moving a bundle off-machine is a manual step and remains one.
+
+### The tracker is not in git unless it is snapshotted
+
+`.fp/` is gitignored, so no commit, bundle or clone contains the issue tracker — while `docs/architecture.md` cites `RADD-*` ids throughout as the evidence behind its decisions. Run `sh data-raw/snapshot-tracker.sh` to regenerate `docs/tracker-snapshot.md`, which is the only copy of that reasoning in git. Refresh it before taking a bundle you intend to keep. `fp` stays authoritative; the snapshot is a backstop, and it is overwritten wholesale on every run.
 
 @FP_AGENTS.md
