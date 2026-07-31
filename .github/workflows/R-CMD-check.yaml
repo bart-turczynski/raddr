@@ -71,8 +71,13 @@ jobs:
           - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,  r: 'release'}
           # DESCRIPTION declares Depends: R (>= 4.0.0). These two probe toward
-          # that floor without reaching it -- see AGENTS.md on why the floor is
-          # still a claim rather than a measurement.
+          # that floor without reaching it, and they cannot reach it here:
+          # setup-r-dependencies resolves against current CRAN, where rappdirs
+          # and glue declare R (>= 4.1) and so cannot install on 4.0 at all.
+          # The floor is measured instead by data-raw/check-r-floor.sh, which
+          # pins dated snapshots to get an installable closure --
+          # docs/r-floor-check.md is the transcript, Status OK. So these entries
+          # guard the versions between the floor and release, not the floor.
           - {os: ubuntu-latest,  r: 'oldrel-1'}
           - {os: ubuntu-latest,  r: 'oldrel-2'}
 
