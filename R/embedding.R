@@ -22,7 +22,7 @@
 # says which field each came from, which is the fact the RFC states.
 raddr_embedding_roles <- c("embedded", "server", "client")
 
-new_raddr_embedding <- function(kind = factor(levels = raddr_embedded_kinds),
+new_raddr_embedding <- function(kind = factor(levels = raddr_embedding_kinds),
                                 role = factor(levels = raddr_embedding_roles),
                                 address = raddr_address(),
                                 category = factor(
@@ -227,7 +227,7 @@ read_embedded <- function(words, segments, at) {
 # Returns the column and, separately, whether each role's extracted address is
 # global. The three MUST rules of section 5.2.2 are stated about the embedded
 # address rather than the outer one, so the code layer needs an answer the
-# `raddr_embedding` record does not carry -- see `embedded_is_global()`.
+# `raddr_embedding` record does not carry -- see `global_reachability()`.
 extract_embeddings <- function(x, kind) {
   n <- vec_size(x)
   empty <- empty_raddr_embedding()
@@ -297,7 +297,7 @@ extract_embeddings <- function(x, kind) {
   rows <- new_raddr_embedding(
     kind = factor(
       column("kind", character(1L))[order_in_element],
-      levels = raddr_embedded_kinds
+      levels = raddr_embedding_kinds
     ),
     role = factor(role, levels = raddr_embedding_roles),
     address = address,
@@ -327,7 +327,7 @@ extract_embeddings <- function(x, kind) {
   slots[sort(unique(at))] <- vec_chop(rows, indices = groups)
   out$embeddings <- new_list_of(slots, ptype = empty)
 
-  global <- embedded_is_global(inner)
+  global <- global_reachability(inner)
   for (name in unique(role)) {
     out$global[[name]][at[role == name]] <- global[role == name]
   }
@@ -335,8 +335,9 @@ extract_embeddings <- function(x, kind) {
   out
 }
 
-# Whether an extracted address is a global IPv4 address, which is the antecedent
-# of all three of the MUST rules in section 5.2.2 and is worded three ways:
+# Whether an address is in globally reachable space. Written for the EXTRACTED
+# address, because that is the antecedent of all three of the MUST rules in
+# section 5.2.2, and it is worded three ways:
 #
 #   RFC 6052 section 3.1  "non-global IPv4 addresses, such as those defined in
 #                          [RFC1918] or listed in Section 3 of [RFC5735]"
@@ -373,7 +374,15 @@ extract_embeddings <- function(x, kind) {
 # This is not the `category` deny-list section 5.3.3 forbids. It reads ONE
 # positive level, only in the layer that has no other column, and a level added
 # later changes no answer that layer gives today.
-embedded_is_global <- function(class) {
+#
+# NOTHING HERE IS SPECIFIC TO AN EXTRACTED ADDRESS. The rule reads two registry
+# layers, and both cover IPv6 as well -- so the same body answers the question
+# for an outer address, and `addr_global_reachability()` is that export. It was
+# internal for as long as raddr was its own only consumer, and the argument for
+# exporting it is that the alternative is worse: a policy layer that cannot
+# reach this fact has to rebuild it from `category`, which is precisely the
+# deny-list section 5.3.3 forbids, in the layer that can least afford it.
+global_reachability <- function(class) {
   registry <- field(class, "registry")
   category <- field(class, "category")
 
@@ -381,4 +390,221 @@ embedded_is_global <- function(class) {
   from_space <- !is.na(registry) & registry == "address_space"
   out[from_space] <- category[from_space] == "global"
   out
+}
+
+# --- the caller-supplied NAT64 prefix (section 8.1) --------------------------
+#
+# The one extraction raddr cannot reach from the address, and the reason is not
+# a gap in the table: RFC 6052 section 2.2 lets an operator embed IPv4 under any
+# Network-Specific Prefix at any of six lengths, and nothing in the resulting
+# address says which prefix -- or whether it is NAT64 at all. A prefix table can
+# name the two FIXED prefixes and must stay silent about the rest, which is what
+# `embedded_kind = NA` means and why section 5.3.7 says an `NA` there is not a
+# clean bill of health.
+#
+# So the prefix arrives as an argument. That is the whole of the difference,
+# and it is confined to this function: `addr_classify()` is untouched, and the
+# row this returns carries `nat64_nsp` so a caller can never mistake a reading
+# it configured for one raddr concluded.
+#
+# The geometry is the same table the fixed prefixes read, keyed on length, so
+# the u-byte split at /40, /48 and /56 is handled here for free -- which is the
+# point. That splice is the part a consumer would get wrong: at /48 a naive
+# 32-bit read from the prefix boundary turns `192.0.2.33` into `192.0.0.2`.
+
+# The prefix, validated as an RFC 6052 prefix specifically.
+# `parse_within_blocks()` already refuses a malformed block, a non-CIDR and host
+# bits set; what it cannot know is that only six lengths are permitted and that
+# this one has to be IPv6.
+nat64_prefix <- function(prefix, arg = "prefix") {
+  if (!is.character(prefix) || length(prefix) != 1L) {
+    abort(
+      c(
+        sprintf("`%s` must be a single CIDR block, as a string.", arg),
+        i = paste(
+          "One call reads one prefix. Two prefixes of different lengths are",
+          "two different readings of the same address, so raddr does not",
+          "merge them -- loop over the prefixes instead."
+        )
+      ),
+      class = "raddr_error_type"
+    )
+  }
+
+  parsed <- parse_within_blocks(prefix, arg = arg)
+  if (parsed$space != "v6") {
+    abort(
+      c(
+        sprintf("`%s` must be an IPv6 prefix.", arg),
+        x = sprintf('"%s" is IPv4.', prefix),
+        i = "A NAT64 prefix is the IPv6 side: RFC 6052 section 2.2."
+      ),
+      class = "raddr_error_block"
+    )
+  }
+
+  len <- parsed$len
+  if (!len %in% nat64_prefix_lengths) {
+    abort(
+      c(
+        sprintf("`%s` is not a permitted NAT64 prefix length.", arg),
+        x = sprintf('"%s" is a /%d.', prefix, len),
+        i = sprintf(
+          "RFC 6052 section 2.2 permits %s, and no others.",
+          paste0("/", nat64_prefix_lengths, collapse = ", ")
+        )
+      ),
+      class = "raddr_error_block"
+    )
+  }
+
+  # At /96, and only at /96, the reserved u-byte at bits 64-71 lies INSIDE the
+  # prefix -- so RFC 6052 section 2.2's "MUST be set to zero" is a statement
+  # about the prefix itself, and a caller who configured one with those bits set
+  # has configured a prefix the RFC forbids. At the five shorter lengths those
+  # bits are in the suffix and belong to the address, which this function reads
+  # rather than grades.
+  if (len == 96L) {
+    u_byte <- read_bits(
+      parsed$words, nat64_u_byte[["offset"]], nat64_u_byte[["length"]], 1L
+    )
+    if (u_byte != 0) {
+      abort(
+        c(
+          sprintf("`%s` has a non-zero reserved u-byte.", arg),
+          x = sprintf('"%s" has bits 64-71 set to %d.', prefix, u_byte),
+          i = paste(
+            "RFC 6052 section 2.2 reserves those bits and says they MUST be",
+            "set to zero. At /96 they are part of the prefix."
+          )
+        ),
+        class = "raddr_error_block"
+      )
+    }
+  }
+
+  len
+}
+
+#' Read the IPv4 address a caller-supplied NAT64 prefix embeds
+#'
+#' [addr_classify()] names NAT64 only from the two prefixes that are written
+#' down -- the RFC 6052 Well-Known Prefix `64:ff9b::/96` and the RFC 8215
+#' local-use prefix `64:ff9b:1::/48`. A Network-Specific Prefix is invisible to
+#' a prefix table, so raddr states a NAT64 kind only affirmatively and
+#' `addr_embedded_kind()` returns `NA` under an operator's own prefix. This
+#' function is the opt-in for a caller who knows the prefix and wants the
+#' address read under it.
+#'
+#' @section The reading is yours, and it is labeled that way:
+#'
+#' Nothing in an IPv6 address says it is NAT64 under some prefix, so supplying
+#' one is an assertion, not a discovery -- and a wrong assertion produces a
+#' plausible wrong IPv4 address rather than an error. Every row this returns
+#' therefore carries `kind = "nat64_nsp"`, a level [addr_classify()] can never
+#' emit, so a configured reading stays distinguishable from one raddr reached
+#' from the address alone.
+#'
+#' `addr_classify()` is unchanged by this call. There is no way to register a
+#' prefix so that classification starts seeing it: that would make the same
+#' address classify differently depending on state held elsewhere.
+#'
+#' @section The u-byte split is why this is not a one-liner:
+#'
+#' RFC 6052 section 2.2 reserves bits 64-71, so at `/40`, `/48` and `/56` the
+#' embedded address is **not contiguous** -- it resumes after the reserved
+#' octet, and reading 32 bits from the prefix boundary yields a wrong address
+#' that looks right. Under a `/48`, `192.0.2.33` read that way comes back as
+#' `192.0.0.2`. This function reads the segments from the same geometry table
+#' the fixed prefixes use, published as
+#' `addr_transition_registry("embeddings")`.
+#'
+#' @section No RFC 2119 rule attaches to the result:
+#'
+#' RFC 6052 section 3.1's MUST-drop is written about the Well-Known Prefix
+#' alone: "translators MUST NOT translate packets in which an address is
+#' composed of the Well-Known Prefix and a non-global IPv4 address". It states
+#' no equivalent requirement for a Network-Specific Prefix, and RFC 8215
+#' section 5 says in terms that it does not reach the local-use prefix either.
+#' So no classify code is emitted here even when the embedded address is not
+#' global -- see [addr_global_reachability()] for the fact, which is a fact and
+#' not a permission.
+#'
+#' @param x A `raddr_address` vector.
+#' @param prefix A single CIDR block, as a string: an IPv6 prefix at one of the
+#'   six lengths RFC 6052 section 2.2 permits (`/32`, `/40`, `/48`, `/56`,
+#'   `/64`, `/96`). One call reads one prefix.
+#'
+#' @return A `list_of<raddr_embedding>` the same length as `x`, shaped exactly
+#'   as [addr_embeddings()] is: one row for each address that lies under
+#'   `prefix`, and zero rows for each that does not.
+#'
+#' @seealso [addr_embeddings()] for the mechanisms raddr names on its own, and
+#'   [addr_transition_registry()] for the geometry this reads.
+#'
+#' @examples
+#' a <- addr_pton(c("2001:db8:122:344::c000:221", "2001:db8::1", "8.8.8.8"))
+#'
+#' # Under the operator's own /96: one reading, two addresses it does not cover
+#' addr_nat64_embeddings(a, "2001:db8:122:344::/96")
+#'
+#' # Classification still says nothing about it, and that is not a disagreement
+#' addr_embedded_kind(a)
+#'
+#' # RFC 6052 section 2.4's own worked example, at the /48 where the reserved
+#' # u-byte splits the octets: both of these embed 192.0.2.33
+#' under <- addr_pton(c("2001:db8:122:c000:2:2100::", "2001:db8:c000:221::"))
+#' addr_nat64_embeddings(under[1], "2001:db8:122::/48")
+#' addr_nat64_embeddings(under[2], "2001:db8::/32")
+#'
+#' @export
+addr_nat64_embeddings <- function(x, prefix) {
+  check_raddr_address(x)
+  len <- nat64_prefix(prefix)
+
+  n <- vec_size(x)
+  empty <- empty_raddr_embedding()
+  slots <- rep(list(empty), n)
+
+  # `%in% TRUE` rather than `isTRUE`-per-element: `addr_within()` returns NA for
+  # an address that is itself NA, and an unknown address embeds nothing.
+  at <- which(addr_within(x, prefix) %in% TRUE)
+  if (!length(at)) {
+    return(new_list_of(slots, ptype = empty))
+  }
+
+  segments <- raddr_transition_embeddings[
+    raddr_transition_embeddings$kind == "nat64" &
+      raddr_transition_embeddings$prefix_len == len, ,
+    drop = FALSE
+  ]
+  words <- lapply(
+    c("w1", "w2", "w3", "w4"),
+    function(nm) widen_word(field(x, nm))
+  )
+
+  address <- new_raddr_address(
+    w1 = rep(0L, length(at)),
+    w2 = rep(0L, length(at)),
+    w3 = rep(0L, length(at)),
+    w4 = narrow_word(read_embedded(words, segments, at)),
+    family = factor(rep("v4", length(at)), levels = addr_families),
+    zone = rep(NA_character_, length(at))
+  )
+
+  rows <- new_raddr_embedding(
+    kind = factor(
+      rep("nat64_nsp", length(at)),
+      levels = raddr_embedding_kinds
+    ),
+    role = factor(
+      rep("embedded", length(at)),
+      levels = raddr_embedding_roles
+    ),
+    address = address,
+    category = field(addr_classify(address), "category")
+  )
+
+  slots[at] <- vec_chop(rows, indices = as.list(seq_along(at)))
+  new_list_of(slots, ptype = empty)
 }

@@ -1065,3 +1065,137 @@ test_that("the recursion is one level deep, and stops on its own", {
     expect_equal(vec_size(field(inner, "embeddings")[[1L]]), 0L, info = literal)
   }
 })
+
+# --- addr_global_reachability() ----------------------------------------------
+
+test_that("each registry layer answers in its own terms", {
+  # The two halves of the rule, and the case each one exists for. Without the
+  # special-purpose column 192.0.0.9 takes a MUST-drop it does not deserve;
+  # without `category = global` the address-space layer has nothing to say
+  # about 8.8.8.8 at all.
+  expect_identical(
+    addr_global_reachability(addr_pton(c(
+      "8.8.8.8", "192.0.0.9", "127.0.0.1", "224.0.0.1", "192.88.99.1"
+    ))),
+    c(TRUE, TRUE, FALSE, FALSE, NA)
+  )
+
+  # One rule, both families.
+  expect_identical(
+    addr_global_reachability(addr_pton(c(
+      "2001:4860:4860::8888", "fe80::1", "fc00::1", "2002:c058:6301::"
+    ))),
+    c(TRUE, FALSE, FALSE, NA)
+  )
+})
+
+test_that("where the special-purpose layer answered, it is IANA's column", {
+  # Not a re-derivation: the same value the record carries, unmodified.
+  a <- addr_pton(c(
+    "127.0.0.1", "192.0.0.9", "192.0.0.170", "fe80::1", "64:ff9b::1", "100::1"
+  ))
+  cl <- addr_classify(a)
+  at <- field(cl, "registry") %in% "special_purpose"
+
+  expect_true(all(at))
+  expect_identical(
+    addr_global_reachability(cl),
+    field(cl, "globally_reachable")
+  )
+})
+
+test_that("the NA tier is exactly the blocks IANA left open", {
+  # The docs claim one block, measured. If IANA ever fills it in, or a new row
+  # arrives with no policy, this is where that shows up rather than in a
+  # consumer silently reading NA as FALSE.
+  reg <- addr_registry()
+  open <- reg[is.na(reg$globally_reachable), "block"]
+
+  # Four rows across both families, and they are open for three unrelated
+  # reasons -- two withdrawn blocks, one whose answer follows the embedded IPv4
+  # and one whose relay advertisement is per-deployment. None of them may be
+  # read as FALSE.
+  expect_identical(
+    open,
+    c("192.88.99.0/24", "2001::/32", "2001:10::/28", "2002::/16")
+  )
+
+  # The measured claim the rule is written against is about IPv4 specifically:
+  # exactly one block leaves the question open there.
+  expect_identical(reg[is.na(reg$globally_reachable) & reg$space == "v4",
+                       "block"], "192.88.99.0/24")
+
+  # And its 6to4 image one level down, which is the reason the tier is not
+  # hypothetical.
+  expect_true(is.na(addr_global_reachability(addr_pton("192.88.99.1"))))
+  expect_true(is.na(addr_global_reachability(addr_pton("2002:c058:6301::"))))
+})
+
+test_that("every IPv4 /8 gets an answer from one layer or the other", {
+  # The address-space layer covers all 256, so no ordinary IPv4 address can
+  # fall through both layers and read NA for want of a row.
+  eights <- addr_pton(sprintf("%d.0.0.1", 0:255))
+  got <- addr_global_reachability(eights)
+
+  expect_length(got, 256L)
+  expect_false(anyNA(got))
+  expect_identical(sum(got), 220L)
+})
+
+test_that("the accessor takes an address, a classification or an embedding", {
+  a <- addr_pton("64:ff9b::a9fe:a9fe")
+
+  # The outer block is globally reachable and the IPv4 inside it is not. Both
+  # facts, neither collapsed into the other.
+  expect_true(addr_global_reachability(a))
+  expect_false(addr_global_reachability(addr_embeddings(a)[[1L]]))
+
+  expect_identical(
+    addr_global_reachability(addr_classify(a)),
+    addr_global_reachability(a)
+  )
+
+  # Teredo's two rows are answered independently -- a private server with a
+  # global client is two different answers in one address, and reducing them to
+  # one is the decision raddr does not make.
+  rows <- addr_embeddings(addr_pton("2001:0:a00:1:8000:63bf:f7ff:f7f7"))[[1L]]
+  expect_identical(as.character(field(rows, "role")), c("server", "client"))
+  expect_identical(addr_global_reachability(rows), c(FALSE, TRUE))
+})
+
+test_that("it agrees with the fact the code layer already graded on", {
+  # The MUST rules fire on an affirmative FALSE and nowhere else, so the
+  # exported accessor and the internal grading cannot be allowed to drift.
+  literals <- c(
+    "64:ff9b::a9fe:a9fe",    # non-global embedded: the rule fires
+    "64:ff9b::c01f:c401",    # 192.31.196.1, an AMT carve-out IANA marks global
+    "2002:c058:6301::"       # the NA tier: no rule may fire
+  )
+  a <- addr_pton(literals)
+  inner <- lapply(addr_embeddings(a), addr_global_reachability)
+
+  expect_identical(unlist(inner), c(FALSE, TRUE, NA))
+
+  fired <- vapply(
+    literals,
+    function(literal) {
+      "nat64_wk_embedded_not_global" %in% codes_of(literal)[[1L]]
+    },
+    logical(1)
+  )
+  expect_identical(unname(fired), c(TRUE, FALSE, FALSE))
+})
+
+test_that("it is a fact accessor, not a verdict, and refuses a raddr_parse", {
+  expect_error(
+    addr_global_reachability(addr_parse("127.0.0.1")),
+    class = "raddr_error_type"
+  )
+  expect_error(
+    addr_global_reachability("127.0.0.1"),
+    class = "raddr_error_type"
+  )
+
+  expect_identical(addr_global_reachability(addr_pton(character())), logical())
+  expect_true(is.na(addr_global_reachability(addr_pton(NA_character_))))
+})

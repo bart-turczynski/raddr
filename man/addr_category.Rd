@@ -56,7 +56,10 @@ that is \code{loopback}, with neither fact collapsed into the other.
 
 \code{NA} from \code{addr_embedded_kind()} means no mechanism prefix matched. It does
 \strong{not} mean the address is not NAT64: RFC 6052 permits a network-specific
-prefix at six lengths, and a prefix table cannot see one.
+prefix at six lengths, and a prefix table cannot see one. A caller who knows
+their operator's prefix can read the address under it with
+\code{\link[=addr_nat64_embeddings]{addr_nat64_embeddings()}}, which is opt-in precisely because the prefix
+cannot come from the address.
 }
 
 \examples{

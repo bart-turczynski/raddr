@@ -769,7 +769,10 @@ class_field <- function(x, field_name, arg = "x") {
 #'
 #' `NA` from `addr_embedded_kind()` means no mechanism prefix matched. It does
 #' **not** mean the address is not NAT64: RFC 6052 permits a network-specific
-#' prefix at six lengths, and a prefix table cannot see one.
+#' prefix at six lengths, and a prefix table cannot see one. A caller who knows
+#' their operator's prefix can read the address under it with
+#' [addr_nat64_embeddings()], which is opt-in precisely because the prefix
+#' cannot come from the address.
 #'
 #' @param x A `raddr_address` or `raddr_class` vector.
 #'
@@ -807,6 +810,83 @@ addr_embedded_kind <- function(x) {
 #' @export
 addr_embeddings <- function(x) {
   class_field(x, "embeddings")
+}
+
+#' Whether an address is in globally reachable space
+#'
+#' The two-layer positive fact raddr already uses internally to decide the
+#' antecedent of RFC 6052 section 3.1, RFC 3056 section 9 and RFC 4380
+#' section 4. It is a **fact, not a verdict**: it reports what the two vendored
+#' registry layers say, and says nothing about whether a caller should permit
+#' the address.
+#'
+#' @section The two layers, and why both:
+#'
+#' Neither layer answers alone, and each fixes what the other gets wrong:
+#'
+#' \describe{
+#'   \item{special-purpose}{IANA's own `globally_reachable` column, unmodified.
+#'     Without it the five blocks IANA marks globally reachable -- PCP and TURN
+#'     anycast, AS112 twice, AMT -- read as non-global.}
+#'   \item{address space}{that layer has no policy column at all, and the
+#'     question it does answer is whether the space is delegated to an RIR,
+#'     which is `category = "global"`. Without it `8.8.8.8` reads as non-global
+#'     and `224.0.0.0/4` reads as nothing -- CVE-2025-8267's shape.}
+#' }
+#'
+#' This is **not** the `category` deny-list [addr_category()] warns against. It
+#' reads one *positive* level, only in the layer that has no other column, and
+#' a level added later changes no answer that layer gives today. Reaching this
+#' fact through this function rather than rebuilding it from `category` is the
+#' whole reason it is exported.
+#'
+#' @section `NA` is a third answer, not a missing one:
+#'
+#' `NA` means the registries leave the question open, and it must not be read
+#' as `FALSE`. Today exactly one block is in that tier: `192.88.99.0/24`, which
+#' IANA withdrew and gave no policy at all, together with its 6to4 image
+#' `2002:c058:6301::`. Asserting a MUST-drop there would be reading IANA's
+#' `N/A` as a `FALSE` one level down.
+#'
+#' Handle it explicitly. R propagates `NA` rather than resolving it: `any()`
+#' returns `NA` instead of `FALSE`, `which()` drops the element entirely, and
+#' `if` raises an error on it. A policy layer must branch on all three values
+#' rather than let the third fall through to either side. raddr reports it;
+#' deciding what it costs is the caller's.
+#'
+#' @param x A `raddr_address`, `raddr_class` or `raddr_embedding` vector. An
+#'   embedding is classified by its extracted address, so the answer is the
+#'   same one the classify layer used when grading that embedding.
+#'
+#' @return A logical vector the same length as `x`: `TRUE`, `FALSE` or `NA`.
+#'
+#' @seealso [addr_classify()] for the whole record, including the
+#'   `globally_reachable` column this reads. [addr_category()] for why the
+#'   descriptive vocabulary is not a policy input.
+#'
+#' @examples
+#' # The address-space layer answers for an ordinary host, the special-purpose
+#' # layer for a carve-out, and neither for the withdrawn anycast prefix.
+#' addr_global_reachability(addr_pton(c("8.8.8.8", "192.0.0.9", "192.88.99.1")))
+#'
+#' # Both families, one rule
+#' addr_global_reachability(addr_pton(c("2001:4860:4860::8888", "fe80::1")))
+#'
+#' # The outer address and what it embeds are separate questions: this block is
+#' # globally reachable and the IPv4 inside it is not
+#' a <- addr_pton("64:ff9b::a9fe:a9fe")
+#' addr_global_reachability(a)
+#' addr_global_reachability(addr_embeddings(a)[[1]])
+#'
+#' @export
+addr_global_reachability <- function(x) {
+  if (is_raddr_embedding(x)) {
+    return(global_reachability(addr_classify(field(x, "address"))))
+  }
+  if (is_raddr_class(x)) {
+    return(global_reachability(x))
+  }
+  global_reachability(addr_classify(x))
 }
 
 # --- Printing ----------------------------------------------------------------

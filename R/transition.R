@@ -236,6 +236,33 @@ raddr_embedded_kinds <- names(
   transition_geometry_kind[!is.na(transition_geometry_kind)]
 )
 
+# The `kind` vocabulary of a `raddr_embedding`, which is ONE LEVEL WIDER than
+# the one above, and the extra level is the difference between the two ways an
+# extraction can be justified.
+#
+# Every level of `raddr_embedded_kinds` is a mechanism `addr_classify()` names
+# from the prefix table, so the extraction follows from the address alone.
+# `nat64_nsp` is the RFC 6052 section 2.2 Network-Specific Prefix, which no
+# prefix table can hold -- an operator may pick any prefix at any of six
+# lengths, and nothing in the address says which. `addr_nat64_embeddings()`
+# reads one because a CALLER supplied it, so the resulting row is caller-
+# asserted rather than prefix-derived, and the two must not be confusable.
+#
+# The split is why this is a second vector rather than a level appended to the
+# first: `raddr_embedded_kinds` means "what classification can conclude", and
+# `addr_embedded_kind()` is still drawn from it, so `nat64_nsp` can never
+# appear in a classification. Widening the one vocabulary would have made that
+# guarantee unstatable.
+raddr_embedding_kinds <- c(raddr_embedded_kinds, "nat64_nsp")
+
+# The six prefix lengths RFC 6052 section 2.2 permits, derived from the
+# geometry rather than transcribed beside it (P9).
+nat64_prefix_lengths <- sort(unique(
+  raddr_transition_embeddings$prefix_len[
+    raddr_transition_embeddings$kind == "nat64"
+  ]
+))
+
 #' The transition-prefix overlay
 #'
 #' The prefixes whose classification needs more granularity than the IANA

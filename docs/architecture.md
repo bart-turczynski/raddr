@@ -1133,6 +1133,19 @@ This is **not** the `category` deny-list §5.3.3 forbids. It reads one *positive
 level, only in the layer that has no other column, and a level added later
 changes no answer that layer gives today.
 
+**It is exported, as of 2026-07-31.** Nothing in the rule is specific to an
+extracted address — both layers cover IPv6 too — so the same body answers the
+question for an outer address, and `addr_global_reachability()` is that export.
+It stayed internal for as long as raddr was its own only consumer. The argument
+for exporting it is that the alternative is worse: §5.3.3 tells a policy layer
+not to enumerate `category`, which leaves an external consumer with no
+sanctioned route to the positive fact and a strong incentive to rebuild it from
+the vocabulary it was just warned off. The export is a *fact* accessor, named so
+it cannot be read as allow/deny, and the three-valued return is the contract.
+`NA` is a third answer, and R propagates it rather than resolving it — `any()`
+returns `NA` instead of `FALSE`, `which()` drops the element, `if` errors — so
+the docs say in terms that a consumer must branch on all three.
+
 **A disagreement worth recording: RFC 7050 versus IANA, on `192.0.0.170`**
 **[verified 2026-07-27].** RFC 7050 §2 constructs `Pref64::WKA` for NAT64
 discovery and gives `64:ff9b::192.0.0.170` as a worked example, justifying the
@@ -1592,6 +1605,56 @@ invisible to a prefix table and raddr may only ever say `nat64_wk` or
 The IID is matched by comparison against both permitted forms, never by
 `bitwAnd` — §5.1.1 again, since `w3` could hold `0x80000000`.
 
+##### 5.3.7.1 The opt-in for a network-specific prefix **[implemented 2026-07-31]**
+
+Affirmative-only is the right default and it leaves a caller who *does* know
+their operator's prefix with nowhere to go — so `addr_nat64_embeddings(x,
+prefix)` takes the prefix as an argument and reads the address under it. The
+prefix arrives from outside because it cannot come from the address; that is the
+whole of the difference, and it is confined to one function.
+
+Three properties keep the opt-in from eroding the default:
+
+1. **Classification is untouched.** There is no way to register a prefix so that
+   `addr_classify()` starts seeing it. The same address must not classify
+   differently depending on state held elsewhere.
+2. **The row says how it was justified.** Every extraction carries
+   `kind = nat64_nsp`, a level in `raddr_embedding_kinds` and deliberately *not*
+   in `raddr_embedded_kinds` — so it can never appear in a classification, and a
+   reading the caller configured is never confusable with one raddr concluded. A
+   wrong prefix produces a plausible wrong IPv4 address rather than an error, so
+   the label is the only thing carrying that distinction.
+3. **No RFC 2119 rule attaches.** RFC 6052 §3.1's MUST-drop is written about the
+   Well-Known Prefix alone, and RFC 8215 §5 says in terms that it does not reach
+   the local-use prefix. There is no equivalent requirement for a
+   network-specific prefix, so no code is emitted here even when the embedded
+   address is not global. The fact is available from
+   `addr_global_reachability()`; the policy is the consumer's.
+
+The geometry is the same length-keyed table the fixed prefixes read, so the
+u-byte split at `/40`, `/48` and `/56` is handled by construction. That splice is
+the reason this belongs in raddr at all: a consumer reading 32 contiguous bits
+from the prefix boundary turns `192.0.2.33` into `192.0.0.2` under a `/48`.
+Verified against RFC 6052 §2.4's own worked example at all six lengths.
+
+One check is on the prefix rather than the address. At `/96`, and only there,
+the reserved u-byte at bits 64-71 falls *inside* the prefix, so §2.2's "MUST be
+set to zero" is a statement about the caller's configuration and is refused. At
+the five shorter lengths those bits are in the suffix, where they belong to the
+address — which this function reads rather than grades. Nothing checks them
+today; see §5.3.7.2.
+
+##### 5.3.7.2 The u-byte is unchecked on the address **[open]**
+
+RFC 6052 §2.2 reserves bits 64-71 and says they MUST be set to zero. raddr's
+geometry *skips* those bits, so the extraction is correct whatever they hold —
+but a non-zero u-byte is a violation raddr currently observes and does not
+report, for `nat64_wk` and `nat64_local` as much as for a supplied prefix. The
+constant `nat64_u_byte` has been in `R/transition.R` since the overlay landed
+with no consumer other than the `/96` prefix check above. Reporting it is a
+code-layer change (`must` strength, uniform across all three routes), not a
+per-function one, which is why it is not folded into `addr_nat64_embeddings()`.
+
 ---
 
 ## 6. Public API
@@ -1732,6 +1795,9 @@ addr_embedded_kind(a)    # factor, affirmative only (section 5.3.7)
 addr_embeddings(a)       # list_of<raddr_embedding>, always. Replaces
                          #   addr_embedded_scope(); see section 5.3.5
 addr_within(a, blocks)   addr_within_any(a, blocks)
+
+addr_global_reachability(a)        # logical, THREE-valued (section 5.2.2)
+addr_nat64_embeddings(a, prefix)   # list_of<raddr_embedding> (section 5.3.7.1)
 ```
 
 The three field accessors each take **either** a `raddr_address`, which they
@@ -1739,6 +1805,12 @@ classify, **or** a `raddr_class` a caller already holds. Everything else on the
 record is reached with `as.data.frame()` rather than nine more accessors: a
 record is one column under `vctrs`' default, which is right inside a data frame
 and wrong for someone who wants to read `globally_reachable`.
+
+The two below the gap are the seams a policy layer needs and the record does not
+carry. `addr_global_reachability()` also accepts a `raddr_embedding`, so the same
+question can be put to an outer address and to what it embeds;
+`addr_nat64_embeddings()` takes a `raddr_address` only, since a prefix is read
+against bits rather than against a classification.
 
 `is_raddr_class()` and `is_raddr_embedding()` ship alongside, matching
 `is_raddr_address()` and `is_raddr_parse()`. There is no public

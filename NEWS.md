@@ -34,6 +34,31 @@
 
 ## New features
 
+* `addr_global_reachability()` exports the two-layer positive fact raddr
+  already used internally to decide the antecedent of RFC 6052 §3.1, RFC 3056
+  §9 and RFC 4380 §4: IANA's `globally_reachable` column where the
+  special-purpose layer answered, `category = "global"` where only the
+  address-space layer did, and `NA` where neither settled it. It is a **fact,
+  not a verdict**, and the `NA` is a third answer rather than a missing one —
+  today `192.88.99.0/24` and its 6to4 image. It takes a `raddr_address`, a
+  `raddr_class` or a `raddr_embedding`, so the same question can be asked of an
+  outer address and of what it embeds. Previously a policy layer had no
+  sanctioned route to this fact and would have had to rebuild it from
+  `category`, which is exactly the deny-list `addr_category()` warns against.
+
+* `addr_nat64_embeddings()` reads the IPv4 address embedded under a
+  **caller-supplied** RFC 6052 Network-Specific Prefix. `addr_classify()` names
+  NAT64 only from the two written-down prefixes and still does: an operator's
+  own prefix is invisible to a prefix table, and nothing about this call
+  changes what classification concludes. Because supplying a prefix is an
+  assertion rather than a discovery, every row comes back as `nat64_nsp`, a
+  `kind` classification can never emit. The reserved u-byte at bits 64-71
+  splits the embedded octets at `/40`, `/48` and `/56`, so a contiguous 32-bit
+  read from the prefix boundary returns a plausible wrong address — under a
+  `/48`, `192.0.2.33` reads as `192.0.0.2`. That splice is the reason this
+  belongs in raddr rather than in each consumer. Checked against RFC 6052
+  §2.4's own worked example at all six permitted lengths.
+
 * `addr_registry_snapshot()` returns one content-addressed id for the whole
   vendored payload — a `sha256:` digest over a canonical manifest of the four
   source keys and their per-file checksums, in a fixed order. It is the value to
