@@ -13,8 +13,6 @@ authoritative and `fp context <id>` remains the way to read an issue.
 
 ```
 
-RADD-okhcvxed [in-progress] run: a local stand-in for CI, plus the NEWS vctrs floor
-
 RADD-purmngor [todo] [low] Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
 
 RADD-fuarjmzn [todo] [low] compose_dialects() has no slot for a guard-then-parse dialect
@@ -170,6 +168,8 @@ RADD-cjalqlqs [done] run: clear what is actionable from the fp backlog
 RADD-qsjqkqjk [done] NEWS.md never mentions the vctrs floor that fixed the record corruption
 
 RADD-kblrnovf [done] The CI matrix needs a local stand-in, because CI has never run and cannot
+
+RADD-okhcvxed [done] run: a local stand-in for CI, plus the NEWS vctrs floor
 
 ```
 
@@ -1316,6 +1316,24 @@ Worth recording that the intervening commit 95fe18b does NOT touch .Rbuildignore
 ROBOTSTXTR DURABILITY DONE ANYWAY, which matters more than the merge because its work was single-copy: created ~/Projects/_backups/robotstxtr.git holding all three branches with both snapshot files present on chore/tracker-snapshot, wired the backup remote, and took a verified bundle. That closes the robotstxtr half of RADD-vzugxqfb. rurl's half remains, blocked on its live session.
 
 sitemapr's mirror was also refreshed and now carries dcdc09d on main. That push used --no-verify deliberately: sitemapr's pre-push hook runs its full suite and timed out at two minutes, and the gate exists to stop bad code being PUBLISHED, not to stop a local durability copy being made. A backup you cannot take because the tests are red is not a backup. Stating it rather than leaving it implicit.
+
+#### 2026-07-31 — bartek@turczynski.pl
+
+Merge thread CLOSED for both quiet siblings, 2026-07-31.
+
+robotstxtr: 1c8d4bf on main, cherry-picked by the owner after the tool-permission layer denied it to me three times. Verified: it sits directly on 8ec12ae, so the unrelated 95fe18b (the trailing-colon IPv6 fix) was NOT imported; data-raw/snapshot-tracker.sh and design/tracker-snapshot.md are both present on main; ^data-raw$ is in .Rbuildignore; tree clean. Mirror refreshed to 1c8d4bf and a verified bundle taken.
+
+sitemapr: dcdc09d on main, directly on a101863, none of the 16 intervening feature commits imported. Mirror refreshed.
+
+MY ERROR IN THE HANDOFF, worth recording because it cost a round trip. The command I handed over was 'git -C <path> checkout main && git cherry-pick 8cc816e'. git -C binds only to the FIRST command, so the cherry-pick ran in the owner's current directory - raddr - where that sha does not exist, and failed with 'fatal: bad revision'. No damage, because rev-parse fails before touching anything. I had verified the sha, the conflict-freedom and the branch state, and not the shell semantics of the line I actually wrote. Corrected to 'git -C ~/Projects/robotstxtr cherry-pick 8cc816e', which applied cleanly.
+
+Side effect the owner should know: robotstxtr is now left on main rather than the fix/ssrf-trailing-colon-and-reason-misnomers branch it was on before this run. My restore had put it back; the checkout main in the handoff command moved it off again.
+
+STATE OF THIS EPIC NOW:
+- RADD-vzugxqfb: robotstxtr half DONE (mirror + backup remote + verified bundle). rurl half still blocked on its live session.
+- RADD-qlvqqktk: NOW UNBLOCKED for sitemapr and robotstxtr - the merge decision that gated it is resolved and the script is on main in both, so documenting how to run it no longer documents something a reader cannot reach. The rurl third stays blocked, and separately needs a different answer because rurl has no AGENTS.md at all.
+- RADD-rrrrooen: unchanged, needs a rurl-side convention choice.
+- RADD-sqnutdey: unchanged, blocked on rurl's session.
 
 
 
@@ -2742,20 +2760,21 @@ Left open deliberately as a separate concern: no inst/WORDLIST and no spelling d
 
 ## RADD-okhcvxed: run: a local stand-in for CI, plus the NEWS vctrs floor
 
-**Status:** in-progress
+**Status:** done
 
 ### Description
 
-RUN RADD-okhcvxed · PHASE: active
-trigger:  owner - find a local alternative to the GitHub Actions flow; suspension appealed, awaiting review
-anchor:   chore/o12-row-disposition@cd287c4 (dev also at cd287c4 after consolidation)
-session:  claude/$CLAUDE_CODE_SESSION_ID
-baseline: 0 err / 0 warn / 1 NOTE (suspended github URLs 404). lint+spell clean.
-env:      docker running; rocker/r-ver mechanism proven by data-raw/check-r-floor.sh
+RUN RADD-okhcvxed · PHASE: done
+trigger:  owner - find a local alternative to the GitHub Actions flow; suspension appealed
+anchor:   chore/o12-row-disposition@cd287c4
+final:    0 err / 0 warn / 1 NOTE at 5dc41a0 - identical to baseline, lint+spell clean
 --- units ---
-ci-local   RADD-kblrnovf active -   (local matrix: 2 Linux rows; windows unreachable)
-news       RADD-qsjqkqjk active -   (NEWS.md silent on vctrs (>= 0.7.0))
-done first: RADD-jqjqmtzy closed (bundle on this disk only, risk accepted), RADD-gzsnqsth closed (dev ff'd to cd287c4, 3 pointers deleted, done-policy settled)
+ci-local   RADD-kblrnovf done 127a302 (3 of 6 rows measured; windows unreachable)
+news       RADD-qsjqkqjk done 5ebb18e
+regen      (integration)  done 5dc41a0
+also closed: RADD-jqjqmtzy, RADD-gzsnqsth, RADD-jlfhnbgu, RADD-etaiwlju
+filed:     RADD-gausndsk (epic), RADD-vzugxqfb
+open call: robotstxtr cherry-pick of 8cc816e onto main - blocked by tool permissions, owner to run
 
 ### Comments
 
@@ -2801,6 +2820,26 @@ RADD-rrrrooen - CONFIRMED, all four sub-claims. rurl _pkgdown.yml has no destina
 RADD-vzugxqfb - CONFIRMED. ~/Projects/_backups/ holds raddr.git and sitemapr.git plus bundles for those two only. No rurl.git, no robotstxtr.git, and neither repo has a backup remote.
 
 PACKAGE COMPLETENESS, bearing on RADD-tazdtmvw and RADD-rzdchzcs: no TODO, FIXME or XXX anywhere in R/, man/, vignettes/ or tests/; no 'not implemented' stubs; no skip() calls across 24 test files; no empty Rd sections; @noRd applied only to internal snake_case helpers, never to anything using the exported addr_* convention. So the v0.1 root epic and Epic M are not hiding unfinished code - they are waiting on the CRAN submission, which is waiting on the appeal.
+
+#### 2026-07-31 — bartek@turczynski.pl
+
+FINAL. Green gate, run closed.
+
+FINAL GATE on a clean tree at 5dc41a0: lintr no lints, spelling no errors, R CMD check --as-cran 0 errors / 0 warnings / 1 NOTE - the same suspended-account 404 NOTE as baseline. No new failures. The pre-push hook fired on the backup refresh and independently agreed: 0 errors, 0 warnings, 1 note.
+
+COMMITS: 127a302 (RADD-kblrnovf, local CI matrix + the AGENTS.md correction + the emitter fix), 5ebb18e (RADD-qsjqkqjk, NEWS vctrs floor), 5dc41a0 (tracker snapshot regenerated). Backups refreshed: mirror at 5dc41a0, fresh bundle verified with complete history.
+
+BOTH UNITS DONE. RADD-kblrnovf measured three of six CI rows locally, all Status: 1 NOTE, and found two harness defects and zero package defects. RADD-qsjqkqjk put the vctrs floor into NEWS with the observable symptom rather than the internals.
+
+ALSO CLOSED THIS RUN, outside the two units: RADD-jqjqmtzy (bundle on this disk only, risk accepted and written down rather than left as a todo that would never be actioned), RADD-gzsnqsth (dev fast-forwarded 18 commits to cd287c4, three merged pointers deleted with -d, done-policy settled), RADD-jlfhnbgu and RADD-etaiwlju (closed under that policy).
+
+RECONCILIATION the owner asked for. Found three open children under a done parent - RADD-fpipnsmz, closed by me while filing its own follow-ups beneath it, which reintroduced the exact 'tracker cannot say what is left' failure RADD-gzsnqsth existed to fix, within the hour. Corrected with RADD-gausndsk. Verified against code that RADD-purmngor and RADD-fuarjmzn both still hold exactly as written (compose_dialects at R/dialects.R:193-198 is pure fallback; the gate and scope lift are still ad-hoc at 210-213), that the package carries no TODO, stub, skipped test or empty Rd section, and that RADD-qlvqqktk's own premise is wrong in one place - rurl has no AGENTS.md at all.
+
+SIBLING MERGE: sitemapr done (dcdc09d cherry-picked onto main, no feature commits imported), robotstxtr NOT done - three tool-permission denials, so I stopped rather than hunt for a phrasing, and restored that repo to exactly how I found it. Work safe on chore/tracker-snapshot at 8cc816e, and its durability is now covered anyway by a new mirror plus a verified bundle, which closes the robotstxtr half of RADD-vzugxqfb.
+
+MY OWN MISSES THIS RUN, recorded so they are not repeated: I proposed merging branches into main without checking they were cut from feature branches, which would have dragged 16 unrelated commits including a breaking change into sitemapr's main - caught by checking before acting, not by the plan. And I under-briefed RADD-kblrnovf on trailing-whitespace stripping despite having learned that exact lesson earlier in the same session; the pre-commit hook caught it instead of me.
+
+Logs kept outside the repo throughout, in the session scratchpad, because tmp/ is gitignored but not Rbuildignored.
 
 
 
@@ -3103,6 +3142,31 @@ Correction to this issue's premise, verified 2026-07-31: RURL HAS NO AGENTS.md. 
 sitemapr and robotstxtr both DO have AGENTS.md, each carrying only the generic 'do not commit .fp/' line at line 5 with no refresh discipline. raddr's section is at AGENTS.md:46-48.
 
 Also relevant to what this issue is worth right now: the snapshot commits in sitemapr (be19de6) and robotstxtr (8cc816e) sit on an unmerged chore/tracker-snapshot branch in each repo, absent from their checked-out branches. Documenting a refresh discipline for a script that is not on the working branch would document something a reader cannot run. So the merge decision comes first.
+
+#### 2026-07-31 — bartek@turczynski.pl
+
+UNBLOCKED for two of three repos as of 2026-07-31. The blocker recorded earlier - that the snapshot script sat on an unmerged branch, so documenting a refresh discipline would document something a reader could not run - is gone: the script is now on main in sitemapr (dcdc09d) and robotstxtr (1c8d4bf).
+
+So the sitemapr and robotstxtr thirds are actionable now, each needing its own wording rather than a copy of raddr's, because the output paths differ (sitemapr docs/tracker-snapshot.md, robotstxtr design/tracker-snapshot.md) and raddr's version cites raddr-specific evidence. The script's CITED_BY and PRECEDENT knobs already record what each repo's correct answer is.
+
+The rurl third remains blocked twice over: on its live session, and on the fact that it has no AGENTS.md to add a section to.
+
+#### 2026-07-31 — bartek@turczynski.pl
+
+Two of three thirds delivered 2026-07-31; only the rurl third remains.
+
+robotstxtr `664cc78` on main, sitemapr `aa3188b` on main. Each adds a '### The tracker is not in git unless it is snapshotted' section under Git hygiene, written against that repo's own facts rather than copied from raddr's wording, as this issue required:
+
+- robotstxtr: output `design/tracker-snapshot.md`, and the section says why not `docs/` — `docs` is the gitignored pkgdown site (verified, `.gitignore:51`). Citing docs named as `NEWS.md`, the release audits under `design/`, and the test suite, matching the script's CITED_BY.
+- sitemapr: output `docs/tracker-snapshot.md`, and the section says the opposite thing for the opposite reason — `docs/` is committed source here because `_pkgdown.yml` sets `destination: site` and `site/` is gitignored (`.gitignore:38`). Citing docs named as `docs/architecture.md` and its neighbours, matching CITED_BY.
+
+Both hang the refresh trigger off a backup practice that exists: each repo has a `backup` remote pointing at a mirror under ~/Projects/_backups/ and timestamped bundles. So the 'phrase it against whatever it does have' clause needed no fallback in either case.
+
+One thing the issue did not anticipate, found while verifying: sitemapr's snapshot commit dcdc09d is on main but main is NOT an ancestor of the checked-out branch chore/site-nlptpmdq-crossport-verify, so the script is absent from the working branch. Committed via a throwaway worktree on main rather than moving the owner's checkout, and the section's last paragraph tells a reader who cannot find the script to merge main rather than add a second copy.
+
+Mirrors and bundles refreshed for both; both bundles verify as complete history.
+
+Remaining: the rurl third, still blocked twice over — live concurrent session, and no AGENTS.md to add a section to (creating one is a larger call about how that repo instructs agents). Returning this to todo rather than done for that reason.
 
 
 
