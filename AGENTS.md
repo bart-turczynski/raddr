@@ -52,6 +52,10 @@ Do not give `origin` a second push URL to fan out to several remotes on one `git
 
 ### The tracker is not in git unless it is snapshotted
 
-`.fp/` is gitignored, so no commit, bundle or clone contains the issue tracker — while `docs/architecture.md` cites `RADD-*` ids throughout as the evidence behind its decisions. Run `sh data-raw/snapshot-tracker.sh` to regenerate `docs/tracker-snapshot.md`, which is the only copy of that reasoning in git. Refresh it before taking a bundle you intend to keep. `fp` stays authoritative; the snapshot is a backstop, and it is overwritten wholesale on every run.
+`.fp/` is gitignored, so no commit, bundle or clone contains the issue tracker — while the tree cites `RADD-*` ids as the evidence behind its decisions. Run `sh data-raw/snapshot-tracker.sh` to regenerate `docs/tracker-snapshot.md`, which is the only copy of that reasoning in git. Refresh it before taking a bundle you intend to keep. `fp` stays authoritative; the snapshot is a backstop, and it is overwritten wholesale on every run.
+
+This file used to name `docs/architecture.md` as the thing doing the citing, which undersold the surface by enough to misprice the risk. Measured 2026-08-01: **51 distinct ids are cited outside the snapshot, and all 51 resolve inside it** — zero dangling references. They appear in `R/parse.R`, ten files under `tests/testthat/`, six under `bench/`, and the measurement transcripts `docs/release-build.md`, `docs/r-floor-check.md` and `docs/check-matrix.md`. So losing `.fp/` without a current snapshot would strand a comment in shipped source and the provenance of every transcript, not one architecture document. Re-run that count rather than trusting this one if the tree has moved much: `comm -23` of the ids cited outside the file against the ids inside it should stay empty.
+
+One consequence is not fixed by refreshing the snapshot. `.Rbuildignore` excludes `^docs$`, so the snapshot does not ship while `R/parse.R` does — a reader of the CRAN tarball meets `RADD-vppmbsia` at `R/parse.R:343` with nothing to resolve it against, and cannot reach the repository either while GitLab is private and GitHub 404s. Comments in shipped source should therefore be self-contained, carrying the id as a back-reference rather than as the explanation (`RADD-lfjdkynn`).
 
 @FP_AGENTS.md
