@@ -20,7 +20,6 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   │   ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
 │   │   ├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
 │   │   └── RADD-pjdrpurv [done] cran-comments.md never named the version it describes
-│   ├── RADD-dhregqdz [todo] main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
 │   ├── RADD-jexznlus [done] Vignette: the paper/reality model
 │   ├── RADD-kdpoamxh [done] Per-code documentation
@@ -29,7 +28,8 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   ├── RADD-hnczgkcf [done] Provenance lines carried an impossible curl version
 │   ├── RADD-dtmpmpct [done] Nothing pins the URL-parser vs addr_curl() boundary
 │   ├── RADD-uvddposi [done] Pin the 0.1.0 release artifact: build, checksum, and keep the check log
-│   └── RADD-axckljjq [done] cran-comments.md still says no platform other than macOS has been checked; three have
+│   ├── RADD-axckljjq [done] cran-comments.md still says no platform other than macOS has been checked; three have
+│   └── RADD-dhregqdz [done] main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
 ├── RADD-vppmbsia [done] [high] addr_reading(p, "curl") silently corrupts the record under vctrs < 0.7.0
 ├── RADD-ecdkfojz [done] Epic A — Package foundations
 │   ├── RADD-hgttcsvm [done] Fill in real DESCRIPTION metadata
@@ -855,7 +855,7 @@ Done in be3d974 (geometry) and 6cfbad8 (extraction). Did not port ip-address (JS
 
 ## RADD-dhregqdz: main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
 
-**Status:** todo | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
+**Status:** done | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
 
 ### Description
 
@@ -881,6 +881,27 @@ THE DECISION THIS ISSUE HOLDS OPEN, deliberately not made here because it is the
 Note that option 2's cost grows: the queue was 92 commits a week ago and is 97 now.
 
 RELATED, and the reason this is filed under Epic M rather than standalone: RADD-yrppvxdi's re-tag step interacts with it. Whatever tree is re-tagged for submission has to be a tree main can reach, or the tag stays orphaned from the default branch after the release too.
+
+### Comments
+
+#### 2026-08-01 — bartek@turczynski.pl
+
+RESOLVED 2026-08-01 via merge request !3 on GitLab. Option 1 of the two this issue held open: fast-forward, not a 102-commit MR replay.
+
+main was b2ecdae (end of Epic C, 2026-07-26). It is now 1b6c02b, identical to dev. `git merge-base --is-ancestor v0.1.0 main` now answers YES -- the release tag is reachable from the default branch for the first time since it was cut. A clone taking the default branch gets the whole package rather than one that stops before IPv6 parsing exists.
+
+WHY OPTION 1 RATHER THAN 2. The suspension did not merely delay the squash-per-slice record, it destroyed it: PRs #3, #4 and #5 are on a host that 403s, and reconstructing 102 commits as merge requests on GitLab would have invented a paper trail for a forge that has no #3, #4 or #5 to be consistent with. The cost this issue named is real and is accepted -- main now carries individual commits rather than one squashed commit per slice.
+
+HOW IT WAS SEQUENCED, since the queue was three deep and not one:
+- !1 chore/o12-row-disposition -> dev, 7 commits, squash UNTICKED.
+- !2 chore/gitlab-remote-setup -> dev, 3 commits, squash UNTICKED.
+- !3 dev -> main, fast-forward, source branch deliberately NOT removed.
+- !4 fix/mirror-head-guard -> dev, then !5 dev -> main.
+
+Squash was unticked deliberately on !1 and !2 against the project default of default_on. This repository's commit bodies are where measurement transcripts live, so squashing separately-argued findings destroys more than it tidies. Squash suits an epic; it does not suit a branch of independent findings. The project setting is a per-MR default, not a mandate, which is what makes that choice available.
+
+ONE TRAP WORTH NAMING for whoever runs the next dev -> main promotion: remove_source_branch_after_merge is TRUE on this project, so an MR from dev would delete dev on merge. !3 and !5 both passed --remove-source-branch=false explicitly.
+
 
 
 
@@ -4952,6 +4973,41 @@ That is better than it sounds for this package specifically. docs/check-matrix.m
 BLOCKED, needs the owner: 'glab api --method PUT projects/85027325 -f issues_access_level=disabled -f wiki_access_level=disabled -f snippets_access_level=disabled -f container_registry_access_level=disabled' was refused by the sandbox permission classifier as a remote-service mutation. Not retried. Merge requests and CI stay enabled by design; the four above are unused because fp is the tracker.
 
 STILL OPEN: the main fast-forward (RADD-dhregqdz) was deliberately NOT done -- main is now a protected branch on GitLab, and the owner's standing rule is to confirm before merging into a protected branch.
+
+#### 2026-08-01 — bartek@turczynski.pl
+
+GitLab project configuration settled 2026-08-01 (owner ran both PUTs; the sandbox classifier refuses remote-service mutations from the agent).
+
+FEATURE SURFACE -- issues, wiki, snippets and container registry all access_level=disabled; merge_requests and builds stay enabled. fp is the tracker, so a second issue surface on GitLab would only invite state that no snapshot covers.
+
+MERGE BEHAVIOUR -- was merge_method=merge with squash_option=default_off, which does NOT match the documented branch -> commit -> push -> PR -> squash-merge flow and would have put merge commits into a history that has been strictly linear to date. Now merge_method=ff, squash_option=default_on: one commit per MR on the target, linear. ff refuses a merge when the target has moved, so the source gets rebased first; that costs nothing here because no non-linear merge has ever happened in this repo.
+
+remove_source_branch_after_merge was already true and matches the flow's delete-branch step.
+
+NOT SET, deliberately: only_allow_merge_if_pipeline_succeeds stays false while no .gitlab-ci.yml exists -- turning it on now would block every MR on a pipeline that never runs. It is the setting that makes GitLab genuinely surpass the local hook as a gate, so it belongs in the same slice as the CI file, not before it.
+
+CAVEAT ON default_on, worth recording because it cuts against the recommendation that produced it: squash is a per-MR DEFAULT, not a mandate, and it should be unchecked for branches whose individual commits carry reasoning worth keeping. This repository's commit messages are unusually load-bearing -- they are where the measurement transcripts live -- so squashing chore/o12-row-disposition's 7 commits into 1 would destroy more than it tidies. Squash suits an epic; it does not suit a branch of separately-argued findings.
+
+SECURITY -- the API response body includes runners_token in plaintext, so it has been printed to a terminal and into a session transcript twice. Reset it via Settings > CI/CD > Runners (the API reset endpoint is deprecated). Low urgency while the project is private and holds no CI variables; do it before .gitlab-ci.yml gives a registered runner something worth reaching.
+
+#### 2026-08-01 — bartek@turczynski.pl
+
+MERGE QUEUE DRAINED 2026-08-01. Five merge requests, the first on this remote ever. main and dev both at 1b6c02b; local, origin and backup verified in exact agreement at 3 heads and tags.
+
+ORDERING WAS CHOSEN TO AVOID THE GATE, not just to be tidy. Merging server-side means dev and main advance on GitLab without a local push, so neither promotion ran rcmdcheck --as-cran. Only the two branch pushes that carried new commits paid the gate. Local refs were then fast-forwarded from the fetched remote. Two gate runs instead of four, with no loss of guarantee: the gate had already passed on the commits themselves.
+
+Both promotions to main were true fast-forwards, confirmed by origin/dev and origin/main resolving to the identical sha rather than to a merge commit -- which is merge_method=ff doing what it was set for earlier today.
+
+A REAL DEFECT SURFACED, in code written an hour earlier, and the script found it by failing where it was designed to fail. After chore/o12-row-disposition merged and was deleted, the drain died on 'deletion of the current branch prohibited'. A bare repo will not delete the ref HEAD points at, and a mirror clone inherits HEAD from whatever branch was checked out at clone time rather than from the default branch. backup had pinned a topic branch since the day it was created -- invisible for as long as that branch lived, then fatal to EVERY future refresh the moment it merged. The failure was engineered to arrive precisely when the first real tidy-up happened.
+
+Fixed in !4: HEAD is repointed at main when the branch it names is gone from local, but only for a filesystem mirror where HEAD is a writable file. A hosted remote's equivalent is the default-branch project setting, unreachable over the wire, so that path warns and fails rather than pretending. Reproduced in scratch repositories before and after.
+
+Worth keeping: this is the second time the verification half of that script paid for itself. It caught the unpushed-branch false alarm on day one and a genuine deferred-failure bug on day one as well. A refresh command without a verification step would have reported success both times.
+
+STILL OPEN on this issue:
+1. .gitlab-ci.yml. Now known feasible -- pipeline 2724038277 succeeded on native amd64 saas-linux-small-amd64. Native amd64 would retire the two emulation caveats standing in docs/check-matrix.md rather than reproduce them. Windows stays uncovered; those shared runners are paused.
+2. only_allow_merge_if_pipeline_succeeds is false and should be flipped in the same slice as (1), not before -- turning it on with no .gitlab-ci.yml would block every MR on a pipeline that never runs.
+3. runners_token was printed in plaintext by two API responses and wants resetting via Settings > CI/CD > Runners.
 
 
 
