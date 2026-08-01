@@ -80,6 +80,40 @@ refs_remote() {
 		awk '{print $2" "$1}' | sort
 }
 
+# A bare repository refuses to delete the branch its HEAD points at: "deletion
+# of the current branch prohibited". A mirror clone inherits HEAD from whatever
+# branch was checked out when it was made, NOT from the default branch, so the
+# mirror ends up pinning a topic branch. That is harmless right up until the
+# branch is merged and pruned, at which point every future refresh fails on it
+# -- which is exactly what happened on 2026-08-01, when `backup` still pointed
+# at chore/o12-row-disposition after it merged.
+#
+# Only fixable here for a mirror on the local filesystem, where HEAD is a file
+# this script can write. On a hosted remote the equivalent is the project's
+# default branch setting, which git cannot change over the wire, so that case is
+# reported and left alone.
+ensure_remote_head() {
+	remote="$1"
+	head_ref=$(git ls-remote --symref "$remote" HEAD 2>/dev/null |
+		awk '$1 == "ref:" {print $2; exit}')
+	[ -n "$head_ref" ] || return 0
+	# Still points at something local has: nothing to do.
+	git show-ref --verify --quiet "$head_ref" && return 0
+
+	url=$(git remote get-url "$remote" 2>/dev/null || echo "")
+	default_ref=refs/heads/main
+	git show-ref --verify --quiet "$default_ref" || return 0
+
+	if [ -d "$url" ]; then
+		git -C "$url" symbolic-ref HEAD "$default_ref"
+		echo "  HEAD pointed at ${head_ref#refs/heads/}, which local no longer has; repointed to main"
+	else
+		echo "  WARNING: HEAD points at ${head_ref#refs/heads/}, which local no longer has."
+		echo "  Change the default branch on the host; a prune of that ref will fail until then."
+		status=1
+	fi
+}
+
 status=0
 tmp="${TMPDIR:-/tmp}/mirror-drain.$$"
 mkdir -p "$tmp"
@@ -97,6 +131,7 @@ for remote in $MIRROR_TARGETS; do
 		echo
 		continue
 	fi
+	ensure_remote_head "$remote"
 	if git push --no-verify --prune "$remote" \
 		'+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'; then
 		:
