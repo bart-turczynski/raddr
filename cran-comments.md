@@ -17,10 +17,23 @@ The note is from `checking CRAN incoming feasibility`, and reports two things:
 ## Test environments
 
 * local: macOS 26.4.1 (aarch64-apple-darwin23), R 4.6.0 (2026-04-24)
+* Ubuntu (container, emulated x86_64): R 4.6.1 (2026-06-24) — 1 note
+* Ubuntu (container, emulated x86_64): R Under development (unstable)
+  (2026-07-30 r90327) — 1 note
+* x86_64 Linux (container): R 4.0.0, the floor `DESCRIPTION` declares — OK,
+  0 errors, 0 warnings, 0 notes
 
-No other platform has been checked. The package is pure R — no compiled code,
-no `SystemRequirements`, and no network access at any point — and depends only
-on rlang and vctrs.
+**Windows has not been checked.** No Windows machine is available here, and
+nothing else in the list approximates it. That is the one gap I know of and
+would rather state than leave for the reviewer to find.
+
+The three container rows were run locally rather than on CI, which has never
+executed: the GitHub account hosting the repository is suspended, which is also
+what the URL note above is about. They are emulated amd64 on an arm64 host, so
+they are close to a CI runner and not identical to one.
+
+The package is pure R — no compiled code, no `SystemRequirements`, and no
+network access at any point — and depends only on rlang and vctrs.
 
 ## Downstream dependencies
 
