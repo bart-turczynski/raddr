@@ -18,7 +18,7 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
 │   │   └── RADD-fgciezpx [todo] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
 │   ├── RADD-yrppvxdi [todo] Submit 0.1.0 to CRAN once the account suspension is lifted
-│   │   ├── RADD-dyqrejxf [todo] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
+│   │   ├── RADD-dyqrejxf [done] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
 │   │   ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
 │   │   ├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
 │   │   └── RADD-pjdrpurv [done] cran-comments.md never named the version it describes
@@ -1119,7 +1119,7 @@ Implementation deliberately deferred to RADD-xdgfyznt — a cph entry now would 
 
 ## RADD-dyqrejxf: v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
 
-**Status:** todo | **Parent:** yrppvxdipdzfceotkqiaqeoqcjfcvqof
+**Status:** done | **Parent:** yrppvxdipdzfceotkqiaqeoqcjfcvqof
 
 ### Description
 
@@ -1161,6 +1161,27 @@ Option 2 is the lower-risk default. Recording both so the trade is visible rathe
 ### Related
 
 Independent of, and more urgent than, `RADD-fgciezpx` (CI). Also independent of the CRAN submission blocker in `RADD-yrppvxdi` — the `URL`/`BugReports` 404s are a separate external wait, and settling the tag does not move them.
+
+### Comments
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+RESOLVED 2026-08-02 by option 2, the lower-risk of the two the description recorded: cut a new version rather than move a published tag. Commit eb5d5c4, annotated tag v0.1.1 at fd5d8a0, on origin and backup.
+
+WHY OPTION 2 AND NOT OPTION 1. v0.1.0 exists on origin and on the backup mirror, so moving it is a published-history rewrite -- the same class of operation that had just cost a cleanup earlier the same day when a squash forked main from dev. Cutting 0.1.1 rewrites nothing, and the version number costs nothing because 0.1.0 was never published anywhere. v0.1.0 survives as an honest record of what was checked on 2026-07-31, which is worth more than the number.
+
+THE AMBIGUITY WAS IN A SECOND PLACE, found while fixing the first. NEWS.md filed both dependency-floor bullets under '# raddr 0.1.0' while neither is true of the 0.1.0 tarball -- the vctrs floor landed in 99e9e05, after the tag. They now sit under 0.1.1, and the 0.1.0 heading says plainly that it was tagged during development and never published.
+
+A THIRD PLACE, which is the one worth remembering because nothing pointed at it: R/codes.R defaulted `since = "0.1.0"` for every reason code. That column is exported through addr_codes_registry() and exists so consumers can pin against the version a code appeared in -- and a consumer can only ever install 0.1.1, so the column was naming a version nobody can obtain. Now 0.1.1. The test asserts the FORMAT (^[0-9]+\.[0-9]+\.[0-9]+$) and not the value, so nothing pinned this; it had to be read for.
+
+DONE-LIST STATUS from the description:
+1. Exactly one tree is the submission candidate, identified uniquely -- YES, v0.1.1 at eb5d5c4, and 0.1.1 exists nowhere else.
+2. That tree contains 99e9e05 -- YES.
+3. Transcripts name a commit sha rather than only a version -- PARTIAL, and deliberately so. docs/dep-floor-check.md was regenerated so the release evidence names raddr_0.1.1.tar.gz. docs/r-floor-check.md and docs/check-matrix.md still name 0.1.0 and were LEFT alone: they are transcripts of runs that really did check that tree, and rewriting them would falsify the record to tidy it. The general fix -- transcripts naming shas -- is not done and is not what this issue was about.
+4. cran-comments.md describes the designated tree -- YES, 'a new submission of raddr 0.1.1'.
+
+UNCHANGED, and stated so the release is not mistaken for progress toward CRAN: RADD-yrppvxdi is untouched. DESCRIPTION's URL and BugReports still 404 on the suspended GitHub account, and a private GitLab does not substitute. What this fixes is that the thing eventually submitted is now unambiguously identified; it does not make it submittable.
+
 
 
 
