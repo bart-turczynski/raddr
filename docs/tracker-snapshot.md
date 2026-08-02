@@ -16,7 +16,7 @@ authoritative and `fp context <id>` remains the way to read an issue.
 RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and registry-backed classification
 ├── RADD-rzdchzcs [in-progress] Epic M — Docs and CRAN posture
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
-│   │   └── RADD-fgciezpx [in-progress] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
+│   │   └── RADD-fgciezpx [done] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
 │   ├── RADD-olitgnsw [todo] [low] Re-run the floor scripts when the floors move; nothing currently triggers that
 │   ├── RADD-xxuzwmuj [todo] Windows is the last unreached row of six and is checked by nothing: run win-builder
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
@@ -30,7 +30,6 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   ├── RADD-uvddposi [done] Pin the 0.1.0 release artifact: build, checksum, and keep the check log
 │   ├── RADD-axckljjq [done] cran-comments.md still says no platform other than macOS has been checked; three have
 │   └── RADD-dhregqdz [done] main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
-├── RADD-ggzaedxe [todo] The lowest-coverage files are build-time table constructors, not a testing gap; one real assertion hides among them
 ├── RADD-vppmbsia [done] [high] addr_reading(p, "curl") silently corrupts the record under vctrs < 0.7.0
 ├── RADD-ecdkfojz [done] Epic A — Package foundations
 │   ├── RADD-hgttcsvm [done] Fill in real DESCRIPTION metadata
@@ -126,9 +125,10 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   ├── RADD-jwansvgt [done] Epic N's O-rows still carry pre-re-measurement claims, one of them wrong
 │   ├── RADD-hmiflaok [done] Five complete upstream drafts live only in gitignored _scratch/
 │   └── RADD-hxrovdee [done] The O12 row still said 'File on rurl' after the report was filed
-└── RADD-lwjlpzxl [done] Outbound — guard reports against sitemapr and robotstxtr
-    ├── RADD-sytkadrv [done] Guard defect to file on sitemapr + robotstxtr: a trailing separator defeats the fail-closed posture
-    └── RADD-jbqmznoz [done] Guard mislabel to file on sitemapr + robotstxtr: 100.64.0.0/10 is not cloud-metadata
+├── RADD-lwjlpzxl [done] Outbound — guard reports against sitemapr and robotstxtr
+│   ├── RADD-sytkadrv [done] Guard defect to file on sitemapr + robotstxtr: a trailing separator defeats the fail-closed posture
+│   └── RADD-jbqmznoz [done] Guard mislabel to file on sitemapr + robotstxtr: 100.64.0.0/10 is not cloud-metadata
+└── RADD-ggzaedxe [done] The lowest-coverage files are build-time table constructors, not a testing gap; one real assertion hides among them
 
 RADD-purmngor [todo] [low] Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
 
@@ -1385,7 +1385,7 @@ Verified: 1604 pass / 0 fail / 0 skip, lint clean, R CMD check --as-cran 0/0/0.
 
 ## RADD-fgciezpx: Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
 
-**Status:** in-progress | **Parent:** vvdpvysmyifknyumggnbohvccjyzvogu
+**Status:** done | **Parent:** vvdpvysmyifknyumggnbohvccjyzvogu
 
 ### Description
 
@@ -1502,6 +1502,32 @@ DONE-WHEN, item by item:
 4. BLOCKED, needs the owner, exactly as the 2026-08-01 comment predicted. 'glab api --method PUT projects/85027325?only_allow_merge_if_pipeline_succeeds=true' was refused by the sandbox classifier as a remote-service mutation. Not retried. Current value measured as False. Nothing else here is blocked on it.
 
 TRANSCRIPT: docs/gitlab-ci.md. Commits 800dddd (the file), 97e694c (the libcurl fix), 9a909b8 (transcript + doc updates).
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+MERGED. MR !16 -> dev, fast-forward, squash unticked (following !1 and !2: the libcurl finding is separately argued in its own commit body and squashing would destroy it), source branch removed. dev is now 9a909b8 + the snapshot commit c38c7c3.
+
+THE MR PIPELINE IS ITSELF A MEASUREMENT, and it answers a question item 4 depends on. Pipeline 2725144884, source merge_request_event: check:linux-release success in 112s, check:linux-devel 'manual'. Final pipeline status SUCCESS with a manual job sitting in it -- which confirms allow_failure: true keeps the devel job non-blocking. Flipping only_allow_merge_if_pipeline_succeeds will therefore not deadlock merges behind a job nobody runs. That was worth knowing before flipping it rather than after.
+
+The two stale origin branches noticed earlier this session (chore/fill-the-pre-submission-quality-queue, chore/submission-off-the-v01-plan) are gone in the same pass. origin now carries exactly dev and main.
+
+SNAPSHOT REFRESHED, 148 issues, and the citation-surface count in AGENTS.md re-measured while there: 54 distinct RADD ids cited outside docs/tracker-snapshot.md, all 54 resolving inside it, zero dangling. The 2026-08-01 figure of 51 came from a narrower sweep that missed data-raw/ and docs/upstream-reports/ entirely -- the same shape of undercount as the docs/architecture.md claim that paragraph exists to correct, so it is named in the commit rather than quietly replaced.
+
+STAYING IN-PROGRESS on item 4 alone. Everything else in the done list is satisfied and evidenced. The remaining step is one owner-run command:
+
+  glab api --method PUT 'projects/85027325?only_allow_merge_if_pipeline_succeeds=true'
+
+Refused by the sandbox classifier from here, twice now, consistent with the 2026-08-01 note.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+ITEM 4 DONE, 2026-08-02, owner-run. only_allow_merge_if_pipeline_succeeds is now true, confirmed in the PUT response.
+
+One adjacent setting read off the same response and worth recording because it interacts: allow_merge_on_skipped_pipeline is FALSE. That is the right value here and is not a trap, but only because of how the rules are written -- the workflow's first rule matches every merge_request_event, and check:linux-release carries no rules of its own so it runs in every pipeline the workflow allows. There is therefore no MR path that produces a skipped pipeline. A future job that adds rules: to itself should keep that in mind: a rule set that skips the ONLY blocking job would make MRs unmergeable rather than unchecked.
+
+ALL FOUR DONE-WHEN ITEMS SATISFIED. Closing.
+
+Evidence trail: docs/gitlab-ci.md (transcript), commits 800dddd / 97e694c / 9a909b8 / c38c7c3, MR !16, pipelines 2725127124 (the failure), 2725132733 (both jobs green on branch), 2725144884 (merge_request_event), 2725151083 and 2725153811 (dev pushes).
 
 
 
@@ -1706,7 +1732,7 @@ Implementation note worth keeping: the codes come out of the engines themselves,
 
 ## RADD-ggzaedxe: The lowest-coverage files are build-time table constructors, not a testing gap; one real assertion hides among them
 
-**Status:** todo | **Parent:** tazdtmvwzachzhvyjfxexfpyhuypyavp
+**Status:** done | **Parent:** tazdtmvwzachzhvyjfxexfpyhuypyavp
 
 ### Description
 
@@ -1750,6 +1776,25 @@ This issue is a decision, not a coverage-raising task, and it should not be clos
 1. `code_bits_for()`'s 31-level ceiling either has a test asserting it fires, or a stated reason it does not need one.
 2. The remaining zero-coverage lines are documented as build-time constructors rather than left to be re-discovered — one comment or one line in the coverage note, whichever the tree already has a place for.
 3. No test exists whose only purpose is to raise a percentage.
+
+### Comments
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Measured at 45230cb+ before touching anything, and the issue's numbers reproduce exactly: package 97.63%, R/transition.R 50.00% with 5 zero-coverage lines (33, 127-130), R/codes.R 71.88% with 9 (71-74, 286-289, 351). Confirmed there are no call sites in tests/ for any of the five constructors.
+
+Done when 1: code_bits_for() now has a test, in test-codes.R under a RADD-ggzaedxe section. Two test_that blocks: 31 levels yield distinct, non-NA, positive bits topping out at 2^30, and a 32nd errors. The second genuinely depends on the stopifnot -- without it the call returns a mask with an NA bit rather than raising. The section also pins WHY the cap is 31 and not 32: as.integer(2^31) is NA, not a negative, so a 32nd code would produce a bit that silently matches nothing. That coercion is measured rather than asserted in a comment.
+
+Done when 2: documented in three places. docs/architecture.md gains S11.12 'What the coverage floor is measuring' -- the table there names the uncovered FUNCTIONS rather than line numbers, deliberately, since a line number in a doc goes stale exactly the way the 44-line reading did. R/codes.R and R/transition.R each carry a comment at their first row constructor saying the same thing self-containedly, with the id as a back-reference, because docs/ does not ship (AGENTS.md).
+
+Done when 3: no coverage-chasing test was added. The four pure row-shape constructors were left alone and are documented instead.
+
+Coverage after: 97.85% (from 97.63%), R/codes.R 84.38% (from 71.88%), R/transition.R unchanged at 50.00%. The move came entirely from the ceiling test -- a side effect of testing the one branch worth testing, not the goal. Full suite green, lintr clean, spelling clean. Committed as 8b5c046 on chore/coverage-floor-is-build-time-tables.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Merged. MR !17 squashed into dev as 7015880; its pipeline (#7, refs/merge-requests/17/head) passed check:linux-release. check:linux-devel stayed manual, which is the .gitlab-ci.yml rule for MR pipelines rather than a skipped check. Local branch deleted, remote heads back to dev + main.
+
 
 
 
@@ -5476,6 +5521,33 @@ STANDING RULE this replaces the caveat with: check the EFFECTIVE setting before 
 
 MAINTENANCE COMPLETED IN THE SAME PASS: snapshot regenerated at 145 issues; AGENTS.md corrected where it named docs/architecture.md as the whole citation surface (it is 52 ids across R/, tests/, bench/ and docs/); fresh verified bundle at ~/Projects/_backups/raddr_dev_20260802-124641.bundle, "records a complete history", carrying both heads and v0.1.0. Previous raddr bundle was from 2026-08-01 16:28 and predated the entire merge queue drain.
 
+#### 2026-08-02 — bartek@turczynski.pl
+
+CI child RADD-fgciezpx landed 2026-08-02 (MR !16 -> dev). .gitlab-ci.yml runs green on shared native amd64; docs/gitlab-ci.md is the transcript.
+
+ITEM 2 OF THIS ISSUE -- only_allow_merge_if_pipeline_succeeds -- is the ONE thing left, and it is still blocked the same way every other project mutation has been: the sandbox classifier refuses it from the agent. Measured current value: False. The command for the owner is
+
+  glab api --method PUT 'projects/85027325?only_allow_merge_if_pipeline_succeeds=true'
+
+One thing was checked before recommending the flip, because it is the failure mode that would make it annoying rather than useful: MR pipeline 2725144884 finished with status SUCCESS while carrying check:linux-devel in 'manual' state. allow_failure: true keeps that job non-blocking, so turning the setting on will not deadlock merges behind a manual job nobody runs.
+
+Also settled here in passing: origin now carries exactly dev and main. The two merged-but-undeleted MR branches (chore/fill-the-pre-submission-quality-queue, chore/submission-off-the-v01-plan) are gone, and mirror-drain.sh reports local, backup and origin in exact agreement at 4 heads and tags.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+ITEMS 1 AND 2 CLOSED 2026-08-02.
+
+1. .gitlab-ci.yml landed via MR !16 and runs green on shared native amd64. RADD-fgciezpx is done; docs/gitlab-ci.md is the transcript.
+2. only_allow_merge_if_pipeline_succeeds flipped to true by the owner, in the same slice as (1) exactly as this item required. Verified in the PUT response. The sequencing caution held up: turning it on before a pipeline existed would have blocked every MR.
+
+ITEM 3 IS STILL OPEN AND WAS RE-EXPOSED TODAY. runners_token was printed in plaintext AGAIN, by the PUT response for item 2 -- so that is now at least three API responses carrying it, not two. Nothing about the CI work changed its status either way.
+
+The 2026-08-01 analysis stands and so does its honest gap: on GitLab 19.3.0-pre the legacy registration-token path is very likely off, which would make the string an inert retained field rather than a credential, but that was never CONFIRMED and still has not been. The five-second check is unchanged -- Settings > CI/CD > Runners: if there is no legacy 'Registration token' section with a reset control, only 'New project runner', then the string cannot register anything and there is nothing to reset.
+
+One thing that did change and is worth stating plainly: the reasoning that placed item 3 before the CI work was 'a live registration token plus a pipeline is what creates real exposure'. The pipeline now exists. That does not make the token live -- it probably is not -- but it does remove the argument that the question could wait for a quieter moment.
+
+Issue stays in-progress on item 3 alone.
+
 
 
 
@@ -6060,6 +6132,10 @@ Stale figure correction, 2026-08-02. The 2026-07-30 comment on this issue closes
 Re-measured today at 45230cb: the file is still 50.00% and still the lowest, but it has **5** zero-coverage lines, not 44. The print methods named there have since been covered. Package coverage is 97.63%.
 
 The remaining 5 lines are not print methods and not a testing gap — they are build-time row constructors with zero call sites in tests/. Same for the 9 in R/codes.R, which that advisory did not mention and which is the second-lowest file at 71.88%. Followed up as RADD-ggzaedxe; do not work from the 44.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Coverage note from 2026-07-30 on this issue is superseded: R/transition.R at 50% with '44 zero-coverage lines, mostly vctrs/S3 print methods' no longer describes the tree. The print methods have since been covered; re-measured 2026-08-02 the file had 5 zero-coverage lines and the same 50%. See RADD-ggzaedxe and docs/architecture.md S11.12 for what the number is actually measuring before re-deriving anything from it.
 
 
 
