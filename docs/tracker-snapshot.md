@@ -17,13 +17,13 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 ├── RADD-rzdchzcs [in-progress] Epic M — Docs and CRAN posture
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
 │   │   └── RADD-fgciezpx [todo] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
-│   ├── RADD-lfjdkynn [todo] [high] vctrs (>= 0.7.0) is unproven and rlang has no floor: the backward range is checked by nothing
 │   ├── RADD-yrppvxdi [todo] Submit 0.1.0 to CRAN once the account suspension is lifted
 │   │   ├── RADD-dyqrejxf [todo] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
 │   │   ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
 │   │   ├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
 │   │   └── RADD-pjdrpurv [done] cran-comments.md never named the version it describes
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
+│   ├── RADD-lfjdkynn [done] [high] vctrs (>= 0.7.0) is unproven and rlang has no floor: the backward range is checked by nothing
 │   ├── RADD-jexznlus [done] Vignette: the paper/reality model
 │   ├── RADD-kdpoamxh [done] Per-code documentation
 │   ├── RADD-oqevkuzo [done] CRAN posture
@@ -2746,7 +2746,7 @@ Verify gate green: 0 errors, 0 warnings, 1 pre-existing NOTE. Full suite green a
 
 ## RADD-lfjdkynn: vctrs (>= 0.7.0) is unproven and rlang has no floor: the backward range is checked by nothing
 
-**Status:** todo | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
+**Status:** done | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
 
 ### Description
 
@@ -2810,6 +2810,30 @@ R/parse.R:343 carries the comment '...see `RADD-vppmbsia`, and the non-mutation 
 This lands here rather than in its own issue because this issue already rewrites the vctrs floor story and R/parse.R:343 is the shipped explanation of that same bug. Make the comment self-contained -- state what vctrs < 0.7.0 does to a vctrs_rcrd in vec_assign() -- and keep the id as a back-reference rather than as the explanation.
 
 Not a submission blocker; R CMD check never looks at comment prose. Worth doing in the same pass because the pass is already touching that bug's story.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+MEASURED 2026-08-02, and both floors hold. Commit a0321fc, transcript docs/dep-floor-check.md, script data-raw/check-dep-floor.sh (shellcheck clean).
+
+RESULT: R 4.0.0 (x86_64-pc-linux-gnu) with vctrs EXACTLY 0.7.0 and rlang 1.1.7 -- R CMD check --as-cran, Status OK, 0 errors 0 warnings 0 notes, full suite and vignettes. The declared vctrs floor is honest and needed no change.
+
+THE ASSERT IS EQUALITY, NOT >=, and that is the whole methodological point. check-r-floor.sh asserts `if (v < "0.7.0") quit(1)` and installs 0.7.2, so it passes without ever testing the declared minimum -- a check that looks like a floor measurement and is not one. The same shape of unguarded claim as the R floor before RADD-dcquzofl, and as the unversioned Imports that produced RADD-vppmbsia in the first place.
+
+THE RLANG HALF, which this issue asked about and the run answered rather than guessed: vctrs 0.7.0 declares rlang (>= 1.1.7). So raddr's rlang floor was REAL but INHERITED -- imposed by a dependency, stated by nobody. DESCRIPTION now declares rlang (>= 1.1.7) and NEWS.md records that it adds no practical constraint, since vctrs 0.7.0 forces the same version. No unversioned Imports entry remains in the package.
+
+Worth noting raddr's OWN rlang need is far lower than 1.1.7 -- NAMESPACE imports only abort, arg_match0 and is_string. Declaring 1.1.7 states what was TESTED rather than what is minimally sufficient. That is the right trade here: the alternative is an untested lower number, which is the exact defect being closed.
+
+TWO CAVEATS TRAVEL WITH THE RESULT, both in the script header rather than only here.
+
+1. It moves R and vctrs to their floors TOGETHER, at the owner's direction. Defensible -- DESCRIPTION promises the conjunction, and it is the weakest configuration the package claims -- but a failure would not have attributed to either axis alone. A BASE= override re-runs the same vctrs downgrade on a current R to separate them. It was not needed, because the run passed.
+
+2. It builds FROM raddr-rfloor:4.0.0 rather than rebuilding that closure. Deliberate: that image already solves R 4.0 defaulting to C++11 against BH headers requiring C++14, which is a ninety-line problem, and duplicating it would invite drift. The cost is a documented prerequisite -- run check-r-floor.sh first if the image is absent, which the script checks and says rather than silently building something subtly different.
+
+The CRAN archive was used rather than a third snapshot date, because a dated snapshot names a moment and not a version; pinning 0.7.0 by date means finding the window between it and 0.7.1 and re-finding it whenever the host prunes. cpp11 is installed first, since the 0.7.2 in the base image arrived as a Posit binary and left no LinkingTo toolchain.
+
+INCIDENTAL, and the gate catching it is the system working: the push failed first time on spelling, because 'rlang' had never appeared in user-facing text before and inst/WORDLIST did not carry it. Added. RADD-bxjyndha put that guard there.
+
+NOT CLOSED BY THIS: a floor that holds today is not a floor that holds forever. This is a script to re-run when either floor moves, not a result to cite indefinitely.
 
 
 
