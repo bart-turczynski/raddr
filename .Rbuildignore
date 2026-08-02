@@ -14,6 +14,11 @@
 # Shared scaffold layer: everything below is dev tooling, not package content,
 # and would otherwise trip "non-standard files/directories" in R CMD check.
 ^\.github$
+^\.gitlab-ci\.yml$
+# The CI job library. It has to live under the project directory because that
+# is the only thing GitLab's cache can carry, which puts it inside the package
+# root while R CMD build runs -- so it is ignored here rather than moved.
+^\.rlib$
 ^\.editorconfig$
 ^\.env$
 ^\.env\.example$

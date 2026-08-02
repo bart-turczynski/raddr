@@ -25,6 +25,9 @@ vectors/
 *.Rproj
 *.Rcheck/
 *.tar.gz
+# The GitLab CI job library (R_LIBS_USER), which lands inside the project
+# directory so the runner cache can carry it.
+.rlib/
 src/*.o
 src/*.so
 src/*.dll

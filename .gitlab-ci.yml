@@ -1,0 +1,159 @@
+# The first CI this package has ever actually run.
+#
+# .github/workflows/R-CMD-check.yaml declares six matrix rows and has never
+# executed once -- the GitHub account has been suspended since 2026-07-20, and
+# GitLab does not read .github/. This file is two jobs, not six rows, and the
+# difference is deliberate: five of those six rows are already answered by
+# measurements in docs/ (the pre-push hook for macOS release; check-matrix.sh
+# for the two Ubuntu rows; check-r-floor.sh and check-dep-floor.sh for the two
+# oldrel rows, which only probe toward a floor that is measured directly). What
+# CI adds is not another row. It is the things a laptop structurally cannot
+# assert about itself, and there are four:
+#
+#   1. A CLEAN CLONE. Every local measurement runs against a working tree that
+#      has been lived in. Nothing has ever proven the package checks from what
+#      git actually contains.
+#   2. A CLEAN PACKAGE LIBRARY. The host library accumulated over 0.1.0's whole
+#      development. An accidental dependency on something installed but not
+#      declared would be invisible to it and fatal on a user's machine.
+#   3. NATIVE amd64. docs/check-matrix.md carries two harness caveats because
+#      its Ubuntu rows run emulated on an arm64 Mac -- a source-built `fs`
+#      needing libuv1-dev, and GNU tar 1.35 unable to extract into a
+#      subdirectory under emulation. Native execution retires both rather than
+#      reproducing them. Whether it does is a question for the first green run,
+#      not something this comment gets to assert in advance.
+#   4. A RESULT TIED TO A COMMIT. The hook proves a tree passed on the way out;
+#      it leaves no artifact saying which one.
+#
+# WHAT THIS DOES NOT ADD, stated so the gap is not quietly closed by implication:
+# not Windows, which is still checked by nothing (RADD-xxuzwmuj holds that, and
+# the answer there is win-builder, not a runner -- GitLab's two Windows shared
+# runners report online=true but status=paused); not macOS beyond the pre-push
+# hook, and a self-hosted Mac runner is REJECTED, not pending (see RADD-fgciezpx
+# for why a route to an already-covered platform is worth nothing); not minimum
+# dependency versions, which check-dep-floor.sh measures at exactly vctrs 0.7.0
+# on R 4.0.0; and no additional semantic diversity, since the libc dialects are
+# already measured under glibc and musl by data-raw/oracle-libc-linux.sh
+# independent of any pipeline.
+#
+# THE CHECK COMMANDS ARE NOT HERE. They are in data-raw/verify.sh, which the
+# pre-push hook also calls. That is what keeps "the hook runs the same chain as
+# CI" a fact instead of a hand-maintained coincidence, and it is what would make
+# a migration back to GitHub small: a provider installs an environment and calls
+# a script.
+
+default:
+  image: rocker/r-ver:latest
+  # Free-tier compute minutes are finite and superseded pipelines answer a
+  # question nobody is still asking.
+  interruptible: true
+
+workflow:
+  rules:
+    # Merge requests are the job that matters: this is the gate an MR must pass
+    # before RADD-vvdpvysm's only_allow_merge_if_pipeline_succeeds means
+    # anything.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Manually started from the UI or the API. This is how a branch gets proven
+    # before it has an MR -- `glab ci run -b <branch>` -- which is how this file
+    # itself was first exercised.
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    # A branch push with an MR already open would otherwise run the same commit
+    # twice, once as a branch pipeline and once as an MR pipeline.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Ordinary pushes are checked on the two long-lived branches only. Every
+    # other branch push has already met the identical chain in the pre-push
+    # hook, so spending runner minutes to re-run it is not evidence.
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+
+variables:
+  # A project-local library, so the cache below has something to carry and so
+  # the job cannot silently depend on whatever the image happens to ship.
+  R_LIBS_USER: "$CI_PROJECT_DIR/.rlib"
+  # rcmdcheck shells out to `R CMD check`; keeping sources makes a traceback in
+  # the log point at a line rather than at a byte offset.
+  R_KEEP_PKG_SOURCE: "yes"
+  GIT_DEPTH: "1"
+
+.r-job:
+  variables:
+    # The images carry no LaTeX toolchain and gain nothing from one. The
+    # pre-push hook deliberately does not set this; see data-raw/verify.sh.
+    NO_MANUAL: "1"
+  cache:
+    # Keyed on DESCRIPTION, so the library is rebuilt exactly when the declared
+    # closure changes and reused when it has not. Shared-runner caches are
+    # best-effort and frequently cold: this is a speed optimisation, never a
+    # correctness input. `policy` stays the default pull-push.
+    key:
+      files:
+        - DESCRIPTION
+    paths:
+      - .rlib/
+  before_script:
+    # The same apt list data-raw/check-matrix.sh maintains, for the same
+    # reasons: pandoc so the vignettes really re-build instead of being skipped,
+    # libhunspell-dev and libxml2-dev for spelling, qpdf for the PDF checks
+    # --as-cran performs, and libuv1-dev because fs links libuv and is how
+    # testthat and rmarkdown both reach the filesystem through pkgload. That
+    # last one only bites where fs is built from source, which is every job that
+    # does not get a binary -- so it is required here and was discovered rather
+    # than anticipated over there. On GitHub, setup-r-dependencies resolves this
+    # whole category automatically; this line is the hand-maintained stand-in.
+    #
+    # Every command below is a literal block scalar. That is not a style
+    # choice: a plain YAML scalar may not contain ": ", and the vctrs assert
+    # further down calls message("vctrs: ", v). It parsed as a mapping and the
+    # file was rejected. Keeping the whole list in one form stops the next
+    # command from re-discovering that.
+    - |
+      apt-get update
+    - |
+      apt-get install -y --no-install-recommends \
+        pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf
+    - |
+      mkdir -p "$R_LIBS_USER"
+    # Every Suggests package is installed deliberately, for the reason the
+    # GitHub workflow gives: a check that skips is not a check that passed.
+    # tests/testthat/test-hedgehog.R skips whole when hedgehog is absent, and
+    # the bignum, bit64 and digest paths do the same.
+    - |
+      Rscript -e 'p <- c("rlang", "vctrs", "bignum", "bit64", "digest", "hedgehog", "knitr", "rmarkdown", "spelling", "testthat", "lintr", "rcmdcheck"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); print(ok); if (!all(ok)) quit(status = 1)'
+    # Asserted rather than assumed, because vctrs is the one dependency whose
+    # version has already produced a wrong conclusion. vctrs < 0.7.0 modifies
+    # vctrs_rcrd types in place in vec_assign(), which corrupts raddr_address
+    # (RADD-vppmbsia). A job resolving 0.6.5 -- from a stale cache, say -- would
+    # report test failures that have nothing to do with the thing it is varying.
+    - |
+      Rscript -e 'v <- packageVersion("vctrs"); message("vctrs: ", v); if (v < "0.7.0") quit(status = 1)'
+    # The record of what "current" resolved to on this run. No date is pinned,
+    # deliberately: these jobs ask about platform and about upcoming R, and both
+    # questions are only meaningful against packages as they are now. Since
+    # "current" is not reproducible, only this record makes a run checkable
+    # after the fact. data-raw/check-r-floor.sh pins precisely because it asks a
+    # different question.
+    - |
+      Rscript -e 'cat(R.version.string, "\n"); cat("platform:", R.version[["platform"]], "\n"); cat("repos:", getOption("repos")[["CRAN"]], "\n"); ip <- installed.packages(); ip <- ip[is.na(ip[, "Priority"]), c("Package", "Version"), drop = FALSE]; write.table(ip[order(rownames(ip)), ], quote = FALSE, row.names = FALSE, col.names = FALSE)'
+  script:
+    - |
+      sh data-raw/verify.sh
+
+check:linux-release:
+  extends: .r-job
+
+check:linux-devel:
+  extends: .r-job
+  image: rocker/r-ver:devel
+  # Scheduled or started by hand, not run per merge request, and the reason is
+  # cost rather than value. This image resolves against cloud.r-project.org
+  # because p3m serves no binaries built against R-devel, so every dependency is
+  # a source build -- a long job on a free-tier minute budget. It catches
+  # upcoming breakage, which is worth having before a release and is not worth
+  # paying for on every MR.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
+    - when: manual
+      allow_failure: true
