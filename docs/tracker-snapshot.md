@@ -17,8 +17,6 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 ├── RADD-rzdchzcs [in-progress] Epic M — Docs and CRAN posture
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
 │   │   └── RADD-fgciezpx [done] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
-│   ├── RADD-olitgnsw [todo] [low] Re-run the floor scripts when the floors move; nothing currently triggers that
-│   ├── RADD-xxuzwmuj [todo] Windows is the last unreached row of six and is checked by nothing: run win-builder
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
 │   ├── RADD-lfjdkynn [done] [high] vctrs (>= 0.7.0) is unproven and rlang has no floor: the backward range is checked by nothing
 │   ├── RADD-jexznlus [done] Vignette: the paper/reality model
@@ -29,7 +27,9 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 │   ├── RADD-dtmpmpct [done] Nothing pins the URL-parser vs addr_curl() boundary
 │   ├── RADD-uvddposi [done] Pin the 0.1.0 release artifact: build, checksum, and keep the check log
 │   ├── RADD-axckljjq [done] cran-comments.md still says no platform other than macOS has been checked; three have
-│   └── RADD-dhregqdz [done] main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
+│   ├── RADD-dhregqdz [done] main stops at Epic C: 97 commits, the 0.1.0 tag and the whole release live off it
+│   └── RADD-xxuzwmuj [done] Windows is the last unreached row of six and is checked by nothing: run win-builder
+├── RADD-olitgnsw [todo] [low] Re-run the floor scripts when the floors move; nothing currently triggers that
 ├── RADD-vppmbsia [done] [high] addr_reading(p, "curl") silently corrupts the record under vctrs < 0.7.0
 ├── RADD-ecdkfojz [done] Epic A — Package foundations
 │   ├── RADD-hgttcsvm [done] Fill in real DESCRIPTION metadata
@@ -1795,6 +1795,10 @@ Coverage after: 97.85% (from 97.63%), R/codes.R 84.38% (from 71.88%), R/transiti
 
 Merged. MR !17 squashed into dev as 7015880; its pipeline (#7, refs/merge-requests/17/head) passed check:linux-release. check:linux-devel stayed manual, which is the .gitlab-ci.yml rule for MR pipelines rather than a skipped check. Local branch deleted, remote heads back to dev + main.
 
+#### 2026-08-02 — bartek@turczynski.pl
+
+Slice closed out. MR !18 (tracker snapshot) merged as 57359b2; both local branches deleted, remote heads back to dev + main. Mirror drained: backup and origin both verify at 4 heads and tags, matching local.
+
 
 
 
@@ -3385,7 +3389,7 @@ addr_registry_version(), addr_registry_outdated(max_age = 365). Unknown dates de
 
 ## RADD-olitgnsw: Re-run the floor scripts when the floors move; nothing currently triggers that
 
-**Status:** todo | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
+**Status:** todo | **Parent:** tazdtmvwzachzhvyjfxexfpyhuypyavp
 
 ### Description
 
@@ -5548,6 +5552,29 @@ One thing that did change and is worth stating plainly: the reasoning that place
 
 Issue stays in-progress on item 3 alone.
 
+#### 2026-08-02 — bartek@turczynski.pl
+
+GITLAB CONFIG RE-MEASURED 2026-08-02, now that CI exists. Four results, one of them a drift from what this issue records.
+
+1. only_allow_merge_if_pipeline_succeeds is TRUE, with allow_merge_on_skipped_pipeline FALSE. The 2026-08-01 comment left it false deliberately, 'in the same slice as the CI file'; that slice happened and the setting went with it. AGENTS.md had not caught up -- it still said protection 'has no opinion about whether the tree passes --as-cran', which is now incomplete on the merge path. Corrected in c678a79 / MR !19, with the three qualifications that make the gate narrower than it sounds: the two settings are load-bearing together, check:linux-devel is manual + allow_failure so a green MR is not two-platform evidence, and dev is unprotected so a direct push still reaches it under the local hook alone.
+
+2. DRIFT: squash_option is default_off. This issue records 'Now merge_method=ff, squash_option=default_on' as of 2026-08-01. merge_method is still ff, so half of that pair held and half did not. I cannot tell from here whether it was reverted deliberately -- the same comment argues squash 'does not suit a branch of separately-argued findings', which is a reason someone might have turned it back off -- or whether it never persisted. Recording the discrepancy rather than guessing. No practical effect on today's work: MRs !17, !18 and !19 all passed --squash explicitly.
+
+3. protected_tags is STILL EMPTY. Measured as empty on 2026-08-01 and unchanged. main is protected against force-push and non-Maintainer merge, but v0.1.0 -- the annotated tag RADD-uvddposi pinned the release artifact against -- can be moved or deleted by anyone who can push. That is the one asymmetry left in the protection story. Owner action; the sandbox classifier refuses remote-service mutations from me.
+
+4. runners_token: blast radius still small and now measurable rather than assumed. No CI variables, no deploy keys, and no project-registered runners -- every runner visible to the project is instance_type shared. So the token reaches nothing this project owns. But the trigger this issue named ('do it before .gitlab-ci.yml gives a registered runner something worth reaching') has partly fired, since the CI file now exists. Still low urgency, still owner action.
+
+Also confirmed unchanged and relevant to RADD-xxuzwmuj: both Windows shared runners remain active=false / paused=true.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Epic M now rests on this issue alone, and what is left in it is two owner-only GitLab actions. Both attempted or considered today; the protected-tags POST was attempted once and refused by the sandbox classifier, same as the 2026-08-01 feature-surface PUTs. Not worked around.
+
+1. PROTECTED TAGS -- still empty. Exact call if you want it from the CLI: glab api --method POST projects/85027325/protected_tags -f 'name=v*' -f 'create_access_level=40'. Or Settings > Repository > Protected tags, wildcard v*, Maintainers. This is the one asymmetry left: main is protected against force-push and non-Maintainer merge, but v0.1.0 and v0.1.1 can be moved or deleted by anyone who can push, and v0.1.1 is now the tag a Windows-checked artifact was built ten commits past.
+2. RUNNERS_TOKEN reset -- Settings > CI/CD > Runners; the API reset endpoint is deprecated, so this is a UI action regardless of the classifier. Blast radius re-measured today and still small: no CI variables, no deploy keys, no project-registered runners.
+
+Also recorded above: squash_option reads default_off while this issue records default_on as of 2026-08-01. Not acted on, since I cannot tell a deliberate revert from a setting that never took.
+
 
 
 
@@ -5970,7 +5997,7 @@ The FOURTH fact -- embeddings = one row, role = embedded, address = 169.254.169.
 
 ## RADD-xxuzwmuj: Windows is the last unreached row of six and is checked by nothing: run win-builder
 
-**Status:** todo | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
+**Status:** done | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
 
 ### Description
 
@@ -6006,6 +6033,63 @@ Already argued in `docs/check-matrix.md:47-52` and not reopened here: there is n
 ### Not in scope
 
 Setting up any Windows CI. GitLab's two Windows shared runners report `online=true` but `status=paused` (measured in RADD-fgciezpx), so that route does not exist on this plan either. This issue is one check, not a pipeline.
+
+### Comments
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+WIN-BUILDER SUBMITTED 2026-08-02, on the owner's explicit go.
+
+ARTIFACT: raddr_0.1.1.tar.gz, 342934 bytes, sha256 bf2b6383551168f0012f0d06e7cf72ff68f074ed004d68345cd6d92ba770d7fe. Built with R CMD build from a clean dev at 5478163 (git status empty at build time), which is 10 commits past the v0.1.1 tag at fd5d8a0. Every one of those 10 is docs, CI, tracker snapshot or test material -- no R/ behavior change beyond the two comments added by RADD-ggzaedxe -- so this is the v0.1.1 package, checked as the tree stands today.
+
+Per docs/release-build.md, that sha256 records what one run produced and is NOT a verified-artifact fingerprint: R CMD build embeds a Packaged: timestamp, so a rebuild of the same tree differs in bytes. Anything comparing trees must compare extracted contents.
+
+UPLOADED to both queues by FTP, response 226 on each: ftp://win-builder.r-project.org/R-release/ and /R-devel/. Both listings show the file present at 03:56PM, so both were accepted and are queued rather than rejected.
+
+RESULTS COME BY EMAIL to bartek@turczynski.pl (the Authors@R cre address) and are not otherwise reachable -- win-builder mails a per-run URL that cannot be guessed or polled. So there is nothing for me to watch here; the next step needs the email.
+
+NOT YET DONE, and deliberately not pre-written: done-when 1 (record the result in docs/check-matrix.md, replacing the unreachable row) and done-when 2 (name Windows in cran-comments.md test environments) both need the actual result. done-when 3 stands ready: a Windows-only failure in a pure-R package with two dependencies would be a surprising result to triage, not patch around.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Queue polling stopped at the owner's request; the ticket is the reminder. State at 16:05 on 2026-08-02: both tarballs still in the win-builder incoming directories, neither picked up yet.
+
+TO RESUME, once the emails arrive: they carry a per-run result URL each. Record the outcome in docs/check-matrix.md by REPLACING the 'unreachable / checked by nothing' row (docs/check-matrix.md:21, :47, :99 all state it in those words -- :99 is the one that refuses to soften it), then name Windows in cran-comments.md's test-environment list, the same discipline RADD-axckljjq applied.
+
+THE TARBALL LIVES IN A SESSION SCRATCHPAD and should be assumed gone. It is reproducible: R CMD build against dev at 5478163. The rebuild will NOT match sha256 bf2b638... because R CMD build embeds a Packaged: timestamp -- that is expected and is not evidence of a different tree. Compare extracted contents if it ever matters.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+WIN-BUILDER R-DEVEL RESULT IN, 2026-08-02: Status 1 NOTE on Windows Server 2022 x64, R Under development r90327 ucrt, x86_64-w64-mingw32. Tests 37s OK, vignettes re-built, PDF 17s and HTML manuals OK, install clean and staged with no warnings. Result URL https://win-builder.r-project.org/v1y4h2q88Yd8/. Transcript committed as docs/win-builder.md (2d593ef, MR !20).
+
+THE FINDING, which is not the pass. The note carries one line no other environment has ever produced: 'Possibly misspelled words in DESCRIPTION: IANA'. This is NOT a Windows behavior difference. 'checking CRAN incoming feasibility' spell-checks DESCRIPTION via utils::aspell, which silently checks nothing when no aspell binary exists. Measured rather than assumed: aspell, hunspell and ispell are all absent from the dev machine and Sys.which('aspell') is empty from R; the Linux CI images are the same. So on macOS, both rocker containers and both GitLab runners, that section produced no output because it never ran -- not because it passed. Structurally identical to the libcurl4-openssl-dev finding in RADD-fgciezpx: a check that was inert locally rather than passing, found only by running elsewhere.
+
+IANA is a false positive and inst/WORDLIST does NOT suppress it -- WORDLIST feeds the spelling package's test (which passes on the same run, visible as spelling.R OK) and not R CMD check's own dictionary. Two unrelated mechanisms with the same subject. Nothing to fix in the package; preempted in cran-comments.md instead.
+
+DONE-WHEN STATUS. 2 is done: cran-comments.md names Windows, loses its 'Windows has not been checked' claim, gains the IANA explanation, and also gained the two native GitLab CI rows which were missing. 3 is moot for devel -- nothing failed. 1 is PARTIAL and deliberately so: the matrix row is windows-latest/release and the R-release run was still sitting in the incoming queue at 16:2x. docs/check-matrix.md records the row as still unanswered rather than claiming devel closes it, and keeps its 2026-07-31 narrative intact per the transcript rule in AGENTS.md, carrying the change as a dated note instead.
+
+STAYS IN-PROGRESS pending the R-release email.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+R-RELEASE RESULT IN, and it is the second half of the same submission rather than a new run. Owner asked exactly that; confirmed from the log rather than from memory of what was uploaded: log directory d:/RCompile/CRANguest/R-release, R version 4.6.1 (2026-06-24 ucrt), URL https://win-builder.r-project.org/eo4W4VtKXGmM/. Status: 1 NOTE. Two uploads on 2026-08-02 produced two runs and two emails; nothing was resubmitted.
+
+ALL THREE DONE-WHEN CONDITIONS ARE NOW MET.
+
+1. R 4.6.1 on Windows IS the windows-latest/release row, so the row is answered rather than approximated, and every one of the six matrix rows now has a run behind it. docs/check-matrix.md records it in the dated note and leaves the 2026-07-31 narrative untouched -- the AGENTS.md transcript rule -- with the row line pointing at the note.
+2. cran-comments.md lists both Windows environments, drops the R-devel-only hedge, and explains the IANA note.
+3. Nothing failed, so there is nothing to triage.
+
+THE TWO RUNS AGREE COMPLETELY: same note text, every timed stage within a second (tests 37s vs 38s, PDF manual 17s both). Recorded as one line, not a paragraph. Six weeks of R development apart on a pure-R package with two dependencies and no compiled code -- disagreement would have been the finding, agreement is the null result. The IANA note appearing on BOTH Windows runs and on none of the five non-Windows environments is consistent with the aspell explanation rather than complicating it: it tracks the presence of the binary, not the R version.
+
+Transcript docs/win-builder.md now covers both runs side by side. MR !21.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+CLOSED. MR !21 merged as 8c9b0c9; branch deleted local and remote; mirror drained and both backup and origin verify at 4 heads and tags matching local.
+
+Final state of the six-row matrix: every row now has a run behind it. macOS release on the host, Ubuntu release and devel emulated (RADD-kblrnovf) and again native on GitLab CI (RADD-fgciezpx), oldrel-1/-2 dominated by the measured R 4.0.0 floor (RADD-dcquzofl), and windows-latest/release answered directly by win-builder R 4.6.1. The 'checked by nothing' line that this issue was filed against no longer appears in the tree.
+
 
 
 
