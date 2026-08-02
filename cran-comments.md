@@ -4,9 +4,15 @@ This is a new submission of raddr 0.1.1.
 
 0 errors | 0 warnings | 1 note
 
-The note is from `checking CRAN incoming feasibility`, and reports two things:
+The note is from `checking CRAN incoming feasibility`, and reports three things:
 
 * New submission.
+* One possibly misspelled word in `DESCRIPTION`: `IANA`, the Internet Assigned
+  Numbers Authority, whose special-purpose address registry is the data this
+  package ships. It is spelled correctly. This appears only where a spell
+  checker is installed — on the environments below that have no `aspell`, the
+  check produces no output rather than passing — so it is reported by the
+  Windows environment alone.
 * Two URLs return 404 — `https://github.com/bart-turczynski/raddr` and
   `https://github.com/bart-turczynski/raddr/issues`, cited from `DESCRIPTION`
   and `man/raddr-package.Rd`. The repository is not publicly reachable at the
@@ -22,15 +28,24 @@ The note is from `checking CRAN incoming feasibility`, and reports two things:
   (2026-07-30 r90327) — 1 note
 * x86_64 Linux (container): R 4.0.0, the floor `DESCRIPTION` declares — OK,
   0 errors, 0 warnings, 0 notes
+* GitLab CI, native x86_64 Linux: R 4.6.1 (2026-06-24) — 1 note
+* GitLab CI, native x86_64 Linux: R Under development (unstable)
+  (2026-07-30 r90334) — 1 note
+* Windows Server 2022 x64, via win-builder: R Under development (unstable)
+  (2026-07-30 r90327 ucrt), `x86_64-w64-mingw32` — 1 note
 
-**Windows has not been checked.** No Windows machine is available here, and
-nothing else in the list approximates it. That is the one gap I know of and
-would rather state than leave for the reviewer to find.
+**Windows has been checked on R-devel only.** The win-builder R-release run was
+still queued when this was written; if it has completed by the time you read
+this and disagreed with the devel run, that disagreement is the more
+interesting result and I would rather you had this sentence than a claim of
+coverage I had not yet seen. Windows is checked by no CI here: the account
+hosting the repository is suspended, and the GitLab remote's two Windows shared
+runners are paused at the platform level.
 
-The three container rows were run locally rather than on CI, which has never
-executed: the GitHub account hosting the repository is suspended, which is also
-what the URL note above is about. They are emulated amd64 on an arm64 host, so
-they are close to a CI runner and not identical to one.
+The emulated container rows were run locally rather than on CI. They are
+emulated amd64 on an arm64 host, so they are close to a CI runner and not
+identical to one; the two native GitLab rows above were added precisely because
+they are not emulated.
 
 The package is pure R — no compiled code, no `SystemRequirements`, and no
 network access at any point — and depends only on rlang and vctrs.

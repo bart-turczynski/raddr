@@ -18,13 +18,30 @@ buys and what it does not.
 | `ubuntu-latest` / `devel` | R Under development (unstable) (2026-07-30 r90327) | covered by this run — Status: 1 NOTE (1m 40s) |
 | `ubuntu-latest` / `oldrel-1` | — | deliberately skipped: probes toward a floor that is already measured |
 | `ubuntu-latest` / `oldrel-2` | — | deliberately skipped: same reason |
-| `windows-latest` / `release` | — | **unreachable locally: an open gap, checked by nothing** |
+| `windows-latest` / `release` | — | unreachable *from this run*, and it stayed that way; **no longer checked by nothing** — see the note under the table |
 | `verify` job (lintr, spelling) | host | covered elsewhere: the pre-push `verify` hook in `.pre-commit-config.yaml` |
 
 One row that is not in the matrix belongs in the same table, because it is what makes
 two of the skips defensible: R 4.0.0, the floor `DESCRIPTION` declares, is covered
 elsewhere by `data-raw/check-r-floor.sh`, transcript `docs/r-floor-check.md`,
 Status OK.
+
+**Windows, added 2026-08-02 and deliberately not written into the run above.**
+Everything in this file below this note describes what the 2026-07-31 run
+experienced, and that run genuinely could not reach Windows; rewriting it to
+imply otherwise would make it something other than a transcript. What has since
+changed is stated here instead. raddr was checked on Windows Server 2022 through
+win-builder on 2026-08-02, on **R-devel**, `Status: 1 NOTE` — transcript
+`docs/win-builder.md` (`RADD-xxuzwmuj`). The `release` half of that submission
+was still queued when this was written, so the matrix row above, which is
+specifically `windows-latest` / `release`, is not yet answered by a run.
+
+Two claims below are now falsified and are left in place as what was believed at
+the time. "Windows is unchecked by anything" was true for a fortnight and is not
+true now. And the gap was expected to close "until either the account is restored
+or a Windows machine is available" — it closed by neither. win-builder is a third
+route the paragraph did not consider, which is the more useful correction of the
+two.
 
 ## What this is, and what it is not
 
