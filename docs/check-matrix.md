@@ -18,7 +18,7 @@ buys and what it does not.
 | `ubuntu-latest` / `devel` | R Under development (unstable) (2026-07-30 r90327) | covered by this run — Status: 1 NOTE (1m 40s) |
 | `ubuntu-latest` / `oldrel-1` | — | deliberately skipped: probes toward a floor that is already measured |
 | `ubuntu-latest` / `oldrel-2` | — | deliberately skipped: same reason |
-| `windows-latest` / `release` | — | unreachable *from this run*, and it stayed that way; **no longer checked by nothing** — see the note under the table |
+| `windows-latest` / `release` | — | unreachable *from this run*; **since answered elsewhere** — R 4.6.1 on Windows, Status: 1 NOTE, see the note under the table |
 | `verify` job (lintr, spelling) | host | covered elsewhere: the pre-push `verify` hook in `.pre-commit-config.yaml` |
 
 One row that is not in the matrix belongs in the same table, because it is what makes
@@ -31,10 +31,10 @@ Everything in this file below this note describes what the 2026-07-31 run
 experienced, and that run genuinely could not reach Windows; rewriting it to
 imply otherwise would make it something other than a transcript. What has since
 changed is stated here instead. raddr was checked on Windows Server 2022 through
-win-builder on 2026-08-02, on **R-devel**, `Status: 1 NOTE` — transcript
-`docs/win-builder.md` (`RADD-xxuzwmuj`). The `release` half of that submission
-was still queued when this was written, so the matrix row above, which is
-specifically `windows-latest` / `release`, is not yet answered by a run.
+win-builder on 2026-08-02, on **both R 4.6.1 and R-devel r90327**, `Status: 1
+NOTE` each and the two agreeing completely — transcript `docs/win-builder.md`
+(`RADD-xxuzwmuj`). R 4.6.1 on Windows *is* the matrix row above, so the row is
+answered, and **every one of the six rows now has a run behind it.**
 
 Two claims below are now falsified and are left in place as what was believed at
 the time. "Windows is unchecked by anything" was true for a fortnight and is not

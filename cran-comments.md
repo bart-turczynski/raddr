@@ -11,8 +11,8 @@ The note is from `checking CRAN incoming feasibility`, and reports three things:
   Numbers Authority, whose special-purpose address registry is the data this
   package ships. It is spelled correctly. This appears only where a spell
   checker is installed — on the environments below that have no `aspell`, the
-  check produces no output rather than passing — so it is reported by the
-  Windows environment alone.
+  check produces no output rather than passing — so it is reported by the two
+  Windows environments alone, and by both of them.
 * Two URLs return 404 — `https://github.com/bart-turczynski/raddr` and
   `https://github.com/bart-turczynski/raddr/issues`, cited from `DESCRIPTION`
   and `man/raddr-package.Rd`. The repository is not publicly reachable at the
@@ -31,16 +31,15 @@ The note is from `checking CRAN incoming feasibility`, and reports three things:
 * GitLab CI, native x86_64 Linux: R 4.6.1 (2026-06-24) — 1 note
 * GitLab CI, native x86_64 Linux: R Under development (unstable)
   (2026-07-30 r90334) — 1 note
+* Windows Server 2022 x64, via win-builder: R 4.6.1 (2026-06-24 ucrt),
+  `x86_64-w64-mingw32` — 1 note
 * Windows Server 2022 x64, via win-builder: R Under development (unstable)
   (2026-07-30 r90327 ucrt), `x86_64-w64-mingw32` — 1 note
 
-**Windows has been checked on R-devel only.** The win-builder R-release run was
-still queued when this was written; if it has completed by the time you read
-this and disagreed with the devel run, that disagreement is the more
-interesting result and I would rather you had this sentence than a claim of
-coverage I had not yet seen. Windows is checked by no CI here: the account
-hosting the repository is suspended, and the GitLab remote's two Windows shared
-runners are paused at the platform level.
+The two Windows runs agree completely, including the note text. Windows is
+checked by no CI here — the account hosting the repository is suspended, and the
+GitLab remote's two Windows shared runners are paused at the platform level — so
+those two runs are a manual submission, not a standing gate.
 
 The emulated container rows were run locally rather than on CI. They are
 emulated amd64 on an arm64 host, so they are close to a CI runner and not
