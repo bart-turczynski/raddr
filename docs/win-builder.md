@@ -14,6 +14,14 @@ a verified-artifact fingerprint: `R CMD build` embeds a `Packaged:` timestamp, s
 rebuilding this same tree produces different bytes. Compare extracted contents,
 never tarball checksums.
 
+**Note added 2026-08-02, after the fact.** The tree checked here declared
+`Version: 0.1.1`, which was true at `5478163` and is no longer true of `dev`:
+`RADD-xuqkzgdl` moved the development version to `0.1.1.9000` the same day,
+because the `v0.1.1` tag and `dev` were both claiming 0.1.1 while pointing at
+different trees. Nothing above is restated — the runs checked what they checked.
+What changed is that the number they checked it under now belongs to the tag
+alone.
+
 ## Result
 
 **`Status: 1 NOTE` on both**, with the same note on each.
