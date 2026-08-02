@@ -16,7 +16,7 @@ authoritative and `fp context <id>` remains the way to read an issue.
 RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and registry-backed classification
 ├── RADD-rzdchzcs [in-progress] Epic M — Docs and CRAN posture
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
-│   │   └── RADD-fgciezpx [todo] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
+│   │   └── RADD-fgciezpx [in-progress] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
 │   ├── RADD-olitgnsw [todo] [low] Re-run the floor scripts when the floors move; nothing currently triggers that
 │   ├── RADD-xxuzwmuj [todo] Windows is the last unreached row of six and is checked by nothing: run win-builder
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
@@ -1385,7 +1385,7 @@ Verified: 1604 pass / 0 fail / 0 skip, lint clean, R CMD check --as-cran 0/0/0.
 
 ## RADD-fgciezpx: Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
 
-**Status:** todo | **Parent:** vvdpvysmyifknyumggnbohvccjyzvogu
+**Status:** in-progress | **Parent:** vvdpvysmyifknyumggnbohvccjyzvogu
 
 ### Description
 
@@ -1447,6 +1447,61 @@ TWO POINTS THIS ISSUE DID NOT MAKE, both of which land:
 WHAT WOULD MAKE IT DEFENSIBLE, so the door is not nailed shut: a disposable VM or dedicated low-privilege machine, restricted to protected refs, carrying no personal credentials, and testing a configuration unavailable elsewhere. That is more infrastructure than a pure-R package presently justifies.
 
 WINDOWS, unchanged and unaddressed by any option here: still checked by nothing, and neither shared runners (paused) nor a Mac runner changes that. The answer is win-builder against the exact submission tarball -- R-devel first, then release, logs kept with the release evidence -- rather than permanent Windows infrastructure. One caution raised in review is weaker than it first appears: win-builder uploads are not confidential, but this package is headed for CRAN, which is public, and the repository's current privacy is a temporary artifact of the GitHub suspension rather than a decision to keep the source closed. So that is not a disclosure to weigh. Windows belongs with the release work, not here.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+STARTED 2026-08-02 on branch chore/gitlab-ci, commit 800dddd.
+
+WRITTEN: .gitlab-ci.yml (two jobs, shared native amd64) plus data-raw/verify.sh, which is the chain -- lintr, spelling, rcmdcheck --as-cran error_on=warning -- extracted to one place. The pre-push hook in .pre-commit-config.yaml is retargeted at that script, so 'the hook runs the same chain as CI' is now a fact about one file rather than a coincidence between two hand-maintained copies that was about to become three.
+
+MEASURED WHILE WRITING, not assumed:
+- rocker/r-ver:latest = R 4.6.1, Ubuntu 24.04.4, repo https://p3m.dev/cran/__linux__/noble/latest (binaries).
+- rocker/r-ver:devel = R devel 2026-07-30 r90327, Ubuntu 26.04, repo https://cloud.r-project.org (source builds only; p3m serves no R-devel binaries).
+- NEITHER IMAGE SHIPS git. Not expected to matter -- GitLab's docker executor clones with its helper image, not the build image -- but it is the first thing to check if the clone stage fails, and it is a real reason the devel job is scheduled/manual rather than per-MR: every dependency there is a source build on a free-tier minute budget.
+- glab ci lint accepts the file. Its first rejection is worth recording: a plain YAML scalar may not contain ': ', and the vctrs assert calls message("vctrs: ", v). Every command in before_script/script is a literal block scalar now so the next one added does not rediscover it.
+
+ALSO: .rlib/ added to .Rbuildignore and .gitignore. R_LIBS_USER has to live under the project directory because that is the only thing GitLab's cache can carry, which puts a package library inside the package root while R CMD build runs.
+
+NOT YET TRUE, and deliberately not claimed in the commit message: no pipeline has run. Pushing now (which exercises the retargeted hook locally for the first time), then triggering a pipeline on the branch by hand. Done-when item 1 says proven on a branch before anything claims it works.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+FIRST PIPELINE RUN, 2725127124 on chore/gitlab-ci at 800dddd. Split result, and the failure is the useful half.
+
+check:linux-release SUCCEEDED, 108s. Full chain green: lintr, spelling, R CMD check --as-cran --no-manual, vignettes re-built, **Status: 1 NOTE** -- the CRAN incoming note only, whose two 'possibly invalid URLs' are the GitHub 404s RADD-yrppvxdi already owns. Nothing new and nothing hidden.
+
+Three of the four things this issue said CI adds are now demonstrated rather than argued: clean clone, clean package library, native amd64, result tied to a commit. And the open question from the setup comment is answered -- neither rocker image ships git, and the clone worked anyway, because GitLab's docker executor clones with its HELPER image, not the build image. Recording that so it is not re-investigated.
+
+check:linux-devel FAILED at 293s, script_failure: 'Configuration failed because libcurl was not found', curl 7.1.0 dying on curl/curl.h. Chain of causation, because it is more interesting than the fix:
+
+- rcmdcheck imports curl. verify.sh calls rcmdcheck and not R CMD check because ONLY rcmdcheck offers error_on = "warning", which is what makes a WARNING fail the gate. So curl is a build dependency of the GATE, not of raddr.
+- The release job installs a p3m BINARY of curl, already linked, and never sees a requirement at all. The devel job resolves against cloud.r-project.org (p3m serves no R-devel binaries), builds from source, and needs the headers.
+- data-raw/check-matrix.sh's devel row never hit this, because it calls R CMD check DIRECTLY and so never installs rcmdcheck.
+
+That is the libuv1-dev finding a second time: a system requirement invisible wherever a binary exists and fatal wherever one does not. Fixed by adding libcurl4-openssl-dev and libssl-dev (97e694c). Notably this is a defect CI found that no local row could have found, which is the case this issue was making in the abstract.
+
+NEXT: re-run the pipeline on 97e694c. Items 2 and 3 (the check-matrix.md caveats, the AGENTS.md paragraph) stay untouched until devel is green -- one green job is not the claim.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+GREEN. Pipeline 2725132733 on 97e694c, both jobs success.
+
+  check:linux-release  115.1s  runner 5-green.saas-linux-small-amd64  Status: 1 NOTE
+  check:linux-devel    527.9s  runner 3-green.saas-linux-small-amd64  Status: 1 NOTE
+
+0 errors, 0 warnings, 1 note each -- the --as-cran incoming note only, and its two 'possibly invalid URLs' are the GitHub 404s RADD-yrppvxdi owns. R 4.6.1 / p3m binaries and R-devel r90334 / cloud.r-project.org source, both x86_64-pc-linux-gnu, identical dependency versions across the two (vctrs 0.7.3, rlang 1.3.0, fs 2.1.0, curl 7.1.0, and the full Suggests set).
+
+DONE-WHEN, item by item:
+
+1. DONE. Green on shared native amd64, proven on a branch before anything claimed it works -- and the branch is where the libcurl finding surfaced, which is the case for having done it in that order.
+
+2. DONE, and the answer is BOTH, split by caveat rather than taken wholesale. libuv1-dev is a GENUINE system requirement: the native devel job builds fs 2.1.0 from source too (job 15664737722, '* installing *source* package fs') and needs the same header package, so it was never an emulation artifact. The GNU tar 1.35 failure DOES NOT EXIST off the emulator, because a runner clones with git and never reaches tar -- the class is absent rather than worked around. Both paragraphs STAY in docs/check-matrix.md as written, because that file is a transcript of the 2026-07-31 run and editing it to reflect a later, different run would falsify it. The cross-reference was added to data-raw/check-matrix.sh as well as to the generated file, so a regeneration reproduces it instead of silently dropping it.
+
+3. DONE. AGENTS.md loses 'the local hook is not a stand-in for CI -- it is the only gate there is'. The replacement is deliberately careful about what did NOT change: .github/workflows/R-CMD-check.yaml has STILL never run, because GitLab does not read .github/, and Windows is still checked by nothing. The verify-gate section also now names data-raw/verify.sh as the single definition of the chain.
+
+4. BLOCKED, needs the owner, exactly as the 2026-08-01 comment predicted. 'glab api --method PUT projects/85027325?only_allow_merge_if_pipeline_succeeds=true' was refused by the sandbox classifier as a remote-service mutation. Not retried. Current value measured as False. Nothing else here is blocked on it.
+
+TRANSCRIPT: docs/gitlab-ci.md. Commits 800dddd (the file), 97e694c (the libcurl fix), 9a909b8 (transcript + doc updates).
 
 
 
@@ -4575,6 +4630,10 @@ Queue filled 2026-08-02, per the consequence noted in the reparent comment above
 - **RADD-olitgnsw** (under Epic M, low) — the floor re-run trigger. Filed explicitly NOT actionable today: measured, no declared floor has been invalidated (vctrs 0.7.0 vs 0.7.3 current, rlang 1.1.7 vs 1.3.0, R 4.0.0 vs 4.6.0). It exists as the trigger RADD-lfjdkynn's closing caution asks for and nothing enforces.
 
 Open work under this issue is now four: the CI slice (RADD-vvdpvysm -> RADD-fgciezpx), plus these three. None is blocked on the suspension.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Landed as 3ba3d8e on dev via !15. Gate green, merged unsquashed (per-MR flag verified false first, 43-line body intact after), origin and backup both verified at 4 heads and tags. main still deliberately 2 behind dev — protected branch, owner call.
 
 
 
