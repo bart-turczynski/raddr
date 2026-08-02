@@ -17,11 +17,6 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 ├── RADD-rzdchzcs [in-progress] Epic M — Docs and CRAN posture
 │   ├── RADD-vvdpvysm [in-progress] GitLab is the working remote now: wire it, and re-measure what the local gate stands in for
 │   │   └── RADD-fgciezpx [todo] Minimal GitLab CI on shared native amd64; the self-hosted Mac runner is rejected
-│   ├── RADD-yrppvxdi [todo] Submit 0.1.0 to CRAN once the account suspension is lifted
-│   │   ├── RADD-dyqrejxf [done] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
-│   │   ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
-│   │   ├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
-│   │   └── RADD-pjdrpurv [done] cran-comments.md never named the version it describes
 │   ├── RADD-dcquzofl [done] [high] Verify or lower the declared R (>= 4.0.0) floor
 │   ├── RADD-lfjdkynn [done] [high] vctrs (>= 0.7.0) is unproven and rlang has no floor: the backward range is checked by nothing
 │   ├── RADD-jexznlus [done] Vignette: the paper/reality model
@@ -135,6 +130,12 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 RADD-purmngor [todo] [low] Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
 
 RADD-fuarjmzn [todo] [low] compose_dialects() has no slot for a guard-then-parse dialect
+
+RADD-yrppvxdi [todo] Submit 0.1.0 to CRAN once the account suspension is lifted
+├── RADD-dyqrejxf [done] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
+├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
+├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
+└── RADD-pjdrpurv [done] cran-comments.md never named the version it describes
 
 RADD-dtdcaphz [todo] Epic O — Upstream reports: measured, drafted, and unfiled
 ├── RADD-pyinlkit [done] O11a — file the NAT64 gap on davidchall/ipaddress
@@ -3760,6 +3761,16 @@ All authored work in this epic is done: three vignettes (introduction, reason-co
 
 Staying in-progress for one child only: RADD-yrppvxdi, the actual submission, which is blocked on the GitHub account suspension rather than on anything in the tree.
 
+#### 2026-08-02 — bartek@turczynski.pl
+
+The 2026-07-29 comment above is now wrong twice over, and this corrects it rather than leaving a reader to reconcile them.
+
+It said this epic stays in-progress 'for one child only: RADD-yrppvxdi'. Since then RADD-vvdpvysm was filed under this epic and is open, so 'one child' was already stale before today; and RADD-yrppvxdi was reparented to top level today, so the child it named is no longer here at all.
+
+CURRENT RESIDUAL, measured against the tree today: RADD-vvdpvysm (in-progress) and its split-out child RADD-fgciezpx (todo). Both are code-adjacent infrastructure — a GitLab CI pipeline and the merge-gate setting scheduled with it — and neither is blocked on the CRAN submission or on the suspension. They stay here.
+
+Placement note, deliberately not acted on: this epic is titled 'Docs and CRAN posture' and now holds remote/CI work that is neither. The alternative is a new epic for forge-and-gate infrastructure. Not worth the churn for two issues; revisit if a third arrives.
+
 
 
 
@@ -4428,6 +4439,20 @@ NOT COUNTED AS REMAINING v0.1 WORK, stated so the residual above is not read as 
 - RADD-dhregqdz, filed today: main stops at Epic C and the release lives 97 commits off it. A consequence of the same suspension, not v0.1 scope.
 
 So: v0.1 as a body of work is complete. This issue closes when 0.1.0 is on CRAN, and nothing between here and there is a coding task.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+CLOSING CONDITION CHANGED 2026-08-02, at owner direction. The 2026-08-01 comment above ends 'This issue closes when 0.1.0 is on CRAN.' That is no longer the condition, and the reason is worth stating because the sentence was correct when written.
+
+RADD-yrppvxdi — the submission — has been reparented to top level. It was the only open item under this issue that is not a coding task, and it is blocked on a third party (GitHub account suspension, day 13, appealed and awaiting manual review). Tying a completed body of code work to an appeal queue meant this issue could not close on its own merits and, worse, made further quality work look like it had to wait for the suspension. It does not.
+
+**This issue now closes when the code-relevant work under it is done.** CRAN acceptance is tracked separately on RADD-yrppvxdi, which carries its four release-hygiene subissues with it.
+
+RESIDUAL AFTER THE MOVE, complete: one chain, RADD-rzdchzcs (Epic M) -> RADD-vvdpvysm (in-progress) -> RADD-fgciezpx (todo). That is .gitlab-ci.yml on a shared native amd64 runner, the only_allow_merge_if_pipeline_succeeds flip scheduled with it, and the runners_token question that is probably moot on a 19.x instance. Everything else beneath this issue — 14 epics, 65 atomic subissues — is done.
+
+WHAT IS NOT COUNTED HERE, unchanged from the 2026-08-01 statement and repeated so the residual above is not read as understating things: RADD-dtdcaphz (Epic O, five drafted upstream reports awaiting a working GitHub account) is top-level by design; RADD-purmngor and RADD-fuarjmzn are post-v0.1 design questions parked on a real consumer existing.
+
+CONSEQUENCE WORTH SEEING CLEARLY: with the submission moved out, the queue of quality work under this issue is ONE CI slice deep. If quality is to keep moving before submission, that queue needs filling — the candidates visible in the existing record are Windows (the only unreached row of six, and checked by nothing), R/transition.R at 50% coverage against 97.49% overall, and re-running the dependency-floor scripts when the floors move. None of these is filed as an issue yet.
 
 
 
@@ -5726,7 +5751,7 @@ BLOCKED ON PUSH: 'git push' returns 403, 'Your account is suspended'. The commit
 
 ## RADD-yrppvxdi: Submit 0.1.0 to CRAN once the account suspension is lifted
 
-**Status:** todo | **Parent:** rzdchzcswdehavskhjvpmqoqxodvmooy
+**Status:** todo
 
 ### Description
 
@@ -5795,6 +5820,16 @@ So **two different trees now declare version 0.1.0**, and the tag is the worse o
 Restated, item 3 is: **move the tag (or cut a fresh one) onto the submission tree before checking, and check that.** docs/release-build.md already records the divergence honestly and lists the differing paths, so nothing here is newly discovered — but the instruction in this issue pointed the other way and would have been followed.
 
 REMAINING, in order, when the account is restored: verify the two DESCRIPTION URLs resolve; re-tag; run win-builder on the re-tagged tarball; refresh cran-comments.md's environment list against the tree actually submitted; submit.
+
+#### 2026-08-02 — bartek@turczynski.pl
+
+Reparented to top level 2026-08-02, at owner direction. Previously a child of RADD-rzdchzcs (Epic M) and so, transitively, of RADD-tazdtmvw.
+
+WHY, stated so it is not read as deprioritisation: this issue is blocked on a third party — a GitHub account suspension, day 13 — and it was the ONLY open item on the v0.1 plan issue that is not a coding task. Leaving it there made a finished body of code work read as waiting on an appeal queue, and made 'move the quality forward' look like it needed the suspension lifted first. It does not. The submission now tracks independently.
+
+NOTHING ABOUT THE WORK CHANGES. The four preconditions restated on 2026-08-01 stand exactly as written, including the inverted item 3 (move the tag onto the submission tree; do NOT check the tag as it stands). Its four done subissues — RADD-dyqrejxf, RADD-oekxupgo, RADD-bxjyndha, RADD-pjdrpurv — travelled with it, which is correct: all four are release hygiene, not package code.
+
+WHAT THIS DOES CHANGE: the v0.1 plan issue no longer closes on CRAN acceptance. See the comment there.
 
 
 
