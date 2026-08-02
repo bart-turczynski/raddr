@@ -631,6 +631,15 @@ is unaffected. So the tree is copied in with \`cp\` rather than the \`tar\` pipe
 neither of these, which is the point: an emulated container is close to that runner,
 and not the same thing.
 
+Both of those were resolved on 2026-08-02 against a **native** amd64 run, and they
+resolved differently — see \`docs/gitlab-ci.md\` (\`RADD-fgciezpx\`). The first is
+real: the native devel job builds \`fs\` from source too and needs the same
+\`libuv1-dev\`, so it was a genuine system requirement rather than an emulation
+artifact. The second does not exist off the emulator at all, because a runner
+clones with git and never reaches \`tar\`. Both paragraphs above stand as written
+regardless, because they describe what THIS run experienced, and a transcript that
+is edited to reflect a later run is no longer a transcript.
+
 All three rows pass \`--as-cran --no-manual\`, which is exactly what the workflow
 passes, so the three differ in platform and R version and in nothing this script
 controls. The manual is skipped for the workflow's own reason — it needs a LaTeX
