@@ -58,6 +58,14 @@ raddr_code_strengths <- c("must", "should", "may", "unspecified")
 
 # A row-major literal, so the registry reads as a table in the source too.
 #
+# This constructor -- like `classify_code_block_row()` below, and the two in
+# transition.R -- runs when the namespace is built and is called from nowhere
+# else, so a coverage tool reporting on the test run shows it as never
+# executed. That is the number describing WHEN these lines run, not a testing
+# gap: the table they build is asserted entry by entry in test-codes.R. Calling
+# a row constructor from a test would move a percentage and assert nothing
+# (RADD-ggzaedxe).
+#
 # `strength` defaults to NA because that is the honest value for the 15
 # parse-layer codes: they describe what a parser DID with a literal, not what a
 # specification mandates about an address. Filling them in would be inventing a

@@ -4333,6 +4333,61 @@ C.
 The benchmark header gives the archived 0.7.2 source URL and keeps all three
 packages optional; none belongs in `Imports`.
 
+### 11.12 What the coverage floor is measuring **[measured 2026-08-02]**
+
+`covr` reports **97.85%** over the package, and the two files at the bottom of
+that table are not the two least-tested files. This section exists so the next
+reader does not re-derive that reading from the percentages alone
+(`RADD-ggzaedxe`).
+
+| file | coverage | uncovered functions |
+|---|---:|---|
+| `R/transition.R` | **50.00%** | `transition_prefix_row()`, `transition_embedding_row()` |
+| `R/codes.R` | **84.38%** | `raddr_codes_row()`, `classify_code_block_row()` |
+
+Those four functions are the same construct: a **row constructor for a static
+table built at namespace load time**. Each is defined immediately above the
+top-level `local({ ... })` block that is its only caller. Call sites were
+enumerated rather than assumed: every one is in `R/`, at top level, and **there
+are none in `tests/`**. They are named rather than given as line numbers on
+purpose — a line number in this document would go stale the way the reading
+below did.
+
+They do execute — during the build, when the namespace is constructed — but not
+during the test run, which is the window `covr` reports on. The data they
+produce is among the most heavily asserted material in the package:
+`test-registry.R` pins the 51 special-purpose blocks and the 276 address-space
+rows row-count by row-count, §7.4 checks the cross-column rule over all 51, and
+§11.5 drives the boundary suite through the results. `R/transition.R` reads
+as half untested because it is a **small file that is mostly one build-time
+table**; 50% there and 50% in a file of live parsing logic are not the same
+fact.
+
+The corollary is that raising these four numbers is not work. Each builds a
+named list from its arguments and has no branch, so a test calling one directly
+would assert nothing and move a percentage — the shape of test this record
+exists to forestall.
+
+**A fifth constructor was a genuine gap, and closing it is what moved the
+package from 97.63% to 97.85%.** `code_bits_for()` sits among the same
+build-time lines but is not a row shape: it carries
+`stopifnot(length(levels) <= 31L)`, the ceiling the one-bit-per-code mask
+imposes, and nothing proved that assertion fired, because its two call sites
+pass 15 and 9 levels. `test-codes.R` now asserts both halves — that 31 levels
+yield distinct, non-`NA`, positive bits topping out at `2^30`, and that a 32nd
+errors. The cap is 31 rather than 32 because `as.integer(2^31)` is `NA`, not a
+negative number, so a 32nd code would produce a mask bit that silently matches
+nothing; that coercion is measured in the test rather than claimed in a comment.
+The percentage moving was a side effect of testing the one branch here worth
+testing, which is the opposite order from the one this section warns about.
+
+A stale figure is what made the rest worth writing down. A 2026-07-30 note
+recorded `R/transition.R` at 50% with "44 zero-coverage lines, mostly vctrs/S3
+print methods", which reads as an ordinary testing gap. The print methods have
+since been covered; the file was at 5 zero-coverage lines when this was
+re-measured. It sat at the same 50% throughout, because the percentage never
+described what the note said it did.
+
 ---
 
 ## 12. Dependencies

@@ -247,3 +247,36 @@ test_that("no code is undocumented", {
 test_that("no documented code is an orphan", {
   expect_true(all(architecture_codes() %in% addr_codes_registry()$code))
 })
+
+# --- The 31-code ceiling on the bit mask (RADD-ggzaedxe) ---------------------
+#
+# Codes travel through the engines as a per-row integer mask, one bit per code,
+# so the vocabulary is capped by the width of R's signed 32-bit integer.
+# `code_bits_for()` asserts that cap, and both of its call sites run at
+# namespace load with 15 and 9 levels -- so nothing else in the suite comes
+# within twice the ceiling, and the assertion was guarded by nothing until this
+# section existed.
+#
+# The cap is 31 and not 32 because a 32nd bit would not fail loudly. It is a
+# claim about how R coerces, so it is measured here rather than asserted in a
+# comment.
+
+test_that("the 31st bit is the last one an integer mask can hold", {
+  bits <- code_bits_for(paste0("code", seq_len(31L)))
+  expect_length(bits, 31L)
+  expect_false(anyNA(bits))
+  expect_true(all(bits > 0L))
+  expect_identical(anyDuplicated(bits), 0L)
+  expect_identical(bits[[31L]], 1073741824L)
+  # A 32nd would be 2^31, which does not overflow to a negative number: it
+  # coerces to NA, and a mask bit of NA matches nothing rather than matching
+  # wrongly. That silence is what the ceiling exists to prevent.
+  expect_warning(
+    expect_true(is.na(as.integer(2^31))),
+    "NAs introduced"
+  )
+})
+
+test_that("a 32nd code trips the ceiling", {
+  expect_error(code_bits_for(paste0("code", seq_len(32L))), "31")
+})

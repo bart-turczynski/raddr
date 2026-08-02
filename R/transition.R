@@ -29,6 +29,13 @@
 raddr_transition_version <- "2026-07-27"
 
 # A row-major literal, so the registry reads as a table in the source too.
+#
+# This and `transition_embedding_row()` below run when the namespace is built
+# and are called from nowhere else, so a coverage tool reporting on the test run
+# shows both as never executed -- which is why this file reads as half untested
+# while the tables it builds are asserted row by row in test-transition.R and
+# test-embedding.R. It is a small file that is mostly one build-time table
+# (RADD-ggzaedxe).
 transition_prefix_row <- function(block, kind, rfc, note = "") {
   list(block = block, kind = kind, rfc = rfc, note = note)
 }
