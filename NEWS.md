@@ -1,9 +1,31 @@
+# raddr 0.1.1
+
+First published release. 0.1.0 was tagged during development on 2026-07-31 and
+never submitted anywhere; 0.1.1 supersedes it and is the version to install.
+Everything in the 0.1.0 notes below is present here. The difference is two
+dependency floors that the 0.1.0 tag predates, one of which fixes a silent
+correctness bug.
+
+* raddr requires vctrs 0.7.0 or later. Earlier versions modify record vectors
+  in place instead of returning a modified copy, which made the readings held
+  in a parse depend on the order they were read in: `addr_reading(p, "curl")`
+  returned `NA` and left `p` corrupted, so a later `addr_reading(p, "aton")`
+  returned `NA` too for a literal it had read as an address before the first
+  call. The answer is the version floor rather than a defensive copy, because
+  vctrs 0.7.0 fixed the bug upstream and a workaround would outlive it. The
+  property is pinned by a non-mutation test rather than by the floor alone.
+* raddr requires rlang 1.1.7 or later. This adds no constraint in practice —
+  vctrs 0.7.0 requires the same version — but it is declared rather than left
+  to be inherited, so that no `Imports:` entry claims to work with any version
+  while nothing checks it. Both floors are checked: `data-raw/check-dep-floor.sh`
+  runs the full check against exactly these versions on R 4.0.0.
+
 # raddr 0.1.0
 
-First release. `addr_parse()` takes no mode argument: it reports what an IP
-address literal means under every supported dialect at once, with the reason
-codes that explain each reading, and never collapses disagreeing sources into a
-single answer.
+Tagged during development and never published. `addr_parse()` takes no mode
+argument: it reports what an IP address literal means under every supported
+dialect at once, with the reason codes that explain each reading, and never
+collapses disagreeing sources into a single answer.
 
 ## Parsing
 
@@ -36,18 +58,6 @@ single answer.
   `format()`, `as.character()`, comparison, equality, and combination methods.
 * `addr_family()`, `addr_zone()`, `addr_expand()`, and `addr_format()` — the
   latter emitting RFC 5952 canonical text.
-* raddr requires vctrs 0.7.0 or later. Earlier versions modify record vectors
-  in place instead of returning a modified copy, which made the readings held
-  in a parse depend on the order they were read in: `addr_reading(p, "curl")`
-  returned `NA` and left `p` corrupted, so a later `addr_reading(p, "aton")`
-  returned `NA` too for a literal it had read as an address before the first
-  call. The answer is the version floor rather than a defensive copy, because
-  vctrs 0.7.0 fixed the bug upstream and a workaround would outlive it.
-* raddr requires rlang 1.1.7 or later. This adds no constraint in practice —
-  vctrs 0.7.0 requires the same version — but it is declared rather than left
-  to be inherited, so that no `Imports:` entry claims to work with any version
-  while nothing checks it. Both floors are checked: `data-raw/check-dep-floor.sh`
-  runs the full check against exactly these versions on R 4.0.0.
 
 ## Classification against the IANA registries
 

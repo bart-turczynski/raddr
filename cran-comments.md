@@ -1,4 +1,4 @@
-This is a new submission of raddr 0.1.0.
+This is a new submission of raddr 0.1.1.
 
 ## R CMD check results
 

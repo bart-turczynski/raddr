@@ -92,7 +92,7 @@ inherited from vctrs rather than asserted by raddr.
 * checking for empty or unneeded directories
 Removed empty directory ‘raddr/tests/testthat/_snaps’
 * looking to see if a ‘data/datalist’ file should be added
-* building ‘raddr_0.1.0.tar.gz’
+* building ‘raddr_0.1.1.tar.gz’
 
 ```
 
@@ -106,7 +106,7 @@ Removed empty directory ‘raddr/tests/testthat/_snaps’
 * using options ‘--no-manual --as-cran’
 * checking for file ‘raddr/DESCRIPTION’ ... OK
 * checking extension type ... Package
-* this is package ‘raddr’ version ‘0.1.0’
+* this is package ‘raddr’ version ‘0.1.1’
 * package encoding: UTF-8
 * checking package namespace information ... OK
 * checking package dependencies ... OK

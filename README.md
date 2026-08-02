@@ -4,7 +4,7 @@ Report what an IP address literal means under each of the standards and
 implementations that disagree about it, and classify parsed values against the
 IANA special-purpose address registries.
 
-> **Status: 0.1.0, not on CRAN.** The v0.1 surface is complete — the address
+> **Status: 0.1.1, not on CRAN.** The v0.1 surface is complete — the address
 > type, the six dialects, `addr_parse()`, RFC 5952 formatting, registry-backed
 > classification, containment, encoding round-trips, reverse pointers, three
 > vignettes and the reference docs — and the design is written down in

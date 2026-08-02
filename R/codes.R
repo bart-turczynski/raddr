@@ -62,8 +62,12 @@ raddr_code_strengths <- c("must", "should", "may", "unspecified")
 # parse-layer codes: they describe what a parser DID with a literal, not what a
 # specification mandates about an address. Filling them in would be inventing a
 # grade for a rule that was never being graded.
+# `since` is 0.1.1 rather than 0.1.0 because 0.1.0 was tagged during development
+# and never published. A consumer pinning against this column can only ever have
+# installed 0.1.1, so naming a version they cannot obtain would make the column
+# useless for exactly the purpose the docs give it.
 raddr_codes_row <- function(code, layer, rfc, summary,
-                            strength = NA_character_, since = "0.1.0") {
+                            strength = NA_character_, since = "0.1.1") {
   list(
     code = code, layer = layer, rfc = rfc, summary = summary,
     strength = strength, since = since
