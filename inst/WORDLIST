@@ -58,6 +58,7 @@ renderer
 renderers
 representable
 resolvers
+rlang
 RIR
 routable
 roxygen

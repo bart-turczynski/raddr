@@ -43,6 +43,11 @@ single answer.
   returned `NA` too for a literal it had read as an address before the first
   call. The answer is the version floor rather than a defensive copy, because
   vctrs 0.7.0 fixed the bug upstream and a workaround would outlive it.
+* raddr requires rlang 1.1.7 or later. This adds no constraint in practice —
+  vctrs 0.7.0 requires the same version — but it is declared rather than left
+  to be inherited, so that no `Imports:` entry claims to work with any version
+  while nothing checks it. Both floors are checked: `data-raw/check-dep-floor.sh`
+  runs the full check against exactly these versions on R 4.0.0.
 
 ## Classification against the IANA registries
 
