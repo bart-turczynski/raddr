@@ -93,15 +93,36 @@ variables:
     paths:
       - .rlib/
   before_script:
-    # The same apt list data-raw/check-matrix.sh maintains, for the same
-    # reasons: pandoc so the vignettes really re-build instead of being skipped,
-    # libhunspell-dev and libxml2-dev for spelling, qpdf for the PDF checks
-    # --as-cran performs, and libuv1-dev because fs links libuv and is how
-    # testthat and rmarkdown both reach the filesystem through pkgload. That
-    # last one only bites where fs is built from source, which is every job that
-    # does not get a binary -- so it is required here and was discovered rather
-    # than anticipated over there. On GitHub, setup-r-dependencies resolves this
-    # whole category automatically; this line is the hand-maintained stand-in.
+    # data-raw/check-matrix.sh's apt list, plus one entry it does not need, for
+    # the same reasons: pandoc so the vignettes really re-build instead of being
+    # skipped, libhunspell-dev and libxml2-dev for spelling, qpdf for the PDF
+    # checks --as-cran performs, and libuv1-dev because fs links libuv and is
+    # how testthat and rmarkdown both reach the filesystem through pkgload.
+    #
+    # libcurl4-openssl-dev and libssl-dev are the entry that is new here, and
+    # they were DISCOVERED BY THE FIRST RUN rather than carried over --
+    # pipeline 2725127124, where check:linux-devel failed with "Configuration
+    # failed because libcurl was not found" while check:linux-release passed.
+    # Worth recording precisely, because the difference between the two jobs is
+    # the whole reason this file has a devel job at all:
+    #
+    #   * rcmdcheck imports curl. verify.sh calls rcmdcheck rather than
+    #     `R CMD check` because only rcmdcheck offers error_on = "warning",
+    #     which is what makes a WARNING fail the gate. So curl is a build
+    #     dependency of the GATE, not of raddr.
+    #   * The release job installs a p3m BINARY of curl, already linked, and so
+    #     never sees the requirement. The devel job resolves against
+    #     cloud.r-project.org because p3m serves no R-devel binaries, builds
+    #     curl from source, and needs the headers.
+    #   * check-matrix.sh's devel row never hit this because it calls
+    #     `R CMD check` directly and so never installs rcmdcheck at all.
+    #
+    # That is the same shape as the libuv1-dev finding: a system requirement
+    # that is invisible wherever a binary is available and fatal wherever one is
+    # not. On GitHub, setup-r-dependencies resolves this whole category
+    # automatically; this line is the hand-maintained stand-in, so expect a
+    # future source-built dependency to add another entry, and read a failure of
+    # this shape as a missing -dev package before anything else.
     #
     # Every command below is a literal block scalar. That is not a style
     # choice: a plain YAML scalar may not contain ": ", and the vctrs assert
@@ -112,7 +133,8 @@ variables:
       apt-get update
     - |
       apt-get install -y --no-install-recommends \
-        pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf
+        pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf \
+        libcurl4-openssl-dev libssl-dev
     - |
       mkdir -p "$R_LIBS_USER"
     # Every Suggests package is installed deliberately, for the reason the
