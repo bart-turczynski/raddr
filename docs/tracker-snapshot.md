@@ -131,10 +131,6 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 ├── RADD-ggzaedxe [done] The lowest-coverage files are build-time table constructors, not a testing gap; one real assertion hides among them
 └── RADD-xuqkzgdl [done] Two trees call themselves 0.1.1, and the evidence attaches to the one the tag does not point at
 
-RADD-purmngor [todo] [low] Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
-
-RADD-fuarjmzn [todo] [low] compose_dialects() has no slot for a guard-then-parse dialect
-
 RADD-yrppvxdi [todo] Submit 0.1.0 to CRAN once the account suspension is lifted
 ├── RADD-dyqrejxf [done] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
 ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
@@ -147,6 +143,10 @@ RADD-dtdcaphz [todo] Epic O — Upstream reports: measured, drafted, and unfiled
 ├── RADD-vnjcbacv [done] O15 — file the IPv6Address.exploded scope_id bug on CPython
 ├── RADD-exojkzzj [done] O16 — file the discarded IPv6 zone on davidchall/ipaddress
 └── RADD-gutuomse [done] O18 — file the two reverse_pointer() bugs on davidchall/ipaddress
+
+RADD-purmngor [done] [low] Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
+
+RADD-fuarjmzn [done] [low] compose_dialects() has no slot for a guard-then-parse dialect
 
 RADD-jqjqmtzy [done] [low] Move a verified bundle off this machine
 
@@ -1581,7 +1581,7 @@ Counts: rurl 463 incl. RURL-hikovisr, sitemapr 282, robotstxtr 88. Follow-ups fi
 
 ## RADD-fuarjmzn: compose_dialects() has no slot for a guard-then-parse dialect
 
-**Status:** todo
+**Status:** done
 
 ### Description
 
@@ -1638,6 +1638,16 @@ More decisive: RURL-cbrfphfr's own 99-literal sweep of 2026-07-28 REVISED THE SP
 4. THE STATED TRIGGER HAS STILL NOT FIRED. "After the raddr release" is not satisfied by a tag: RURL-cbrfphfr's 2026-07-31 comment requires raddr be publicly installable at a stable version, and v0.1.0/v0.1.1 are tagged into a PRIVATE GitLab with no CRAN listing and a 404 GitHub URL. See RADD-yrppvxdi.
 
 WHAT WOULD REOPEN THIS as a real question: raddr growing an actual URL-host-layer dialect of its own. That is the one shape none of the above covers, and it would arrive as "what is the guard", not as "does the algebra need a slot" -- because point 1 already answers the second.
+
+#### 2026-08-03 — bartek@turczynski.pl
+
+CLOSING, 2026-08-03. Not deferred further — closed outright, because the premise is answered by shipping code rather than by a decision still owed.
+
+The issue asks whether compose_dialects() needs a first-class slot for guard-then-parse. The 2026-08-03 corrections above establish that the mechanism already exists in general form: composed_reading() (R/parse.R:352-356) blanks BOTH operands at the guarded rows via blank_address() (R/parse.R:346), so a guard failure cannot be reintroduced by the fallback. That is a logical vector plus one named helper, it works for any guard, and it does not touch the algebra. A `guard =` parameter would relocate two call sites and commit compose_dialects() to a shape, for no capability gained.
+
+The two remaining legs are gone as well. The distinction the issue says the algebra loses is carried in the codes field with a distinct cause (`whitespace` vs `out_of_range`), not lost. The named consumer moved away rather than closer: rurl 3.0.0 dropped libcurl, brought the IPv4 grammar in-tree, and RURL-cbrfphfr's 99-literal sweep put the host gate on rurl's side of the boundary, so it is no longer a thing rurl intends to delegate. And the stated trigger — 'after the raddr release' — is not satisfied by a private tag (RADD-yrppvxdi).
+
+An issue whose premise is false, whose consumer has withdrawn, and whose trigger cannot fire is not deferred work; it is a question already answered. Reopen condition unchanged from the corrections: raddr growing a URL-host-layer dialect of its own. That would arrive as 'what is the guard', not as 'does the algebra need a slot'.
 
 
 
@@ -3634,7 +3644,7 @@ Radix sniff: 0x/0X -> 16 strip 2; else len>=2 with leading 0 -> 8 strip 1; else 
 
 ## RADD-purmngor: Revisit: should addr_codes_registry() carry the per-code documentation fields, once ssrfr work starts
 
-**Status:** todo
+**Status:** done
 
 ### Description
 
@@ -3681,6 +3691,20 @@ ADR-001 section 7 line 337 still reads "Reason-code vocabulary and result model 
 5. ADJACENT, AND MORE USEFUL THAN THIS ISSUE: ssrfr's section 6.3 alignment check is unblocked, cheap, and is the stated blocker on its own section 5.2. It belongs on ssrfr's tracker, not here. Recording it so the next reader of this issue spends attention on that instead.
 
 WHERE A REVERSAL WOULD COME FROM: SSRF-aqrgqdhi ("specify the mapping from raddr facts to refusals and reason codes"), which is the issue that will decide whether ssrfr wants structured evidence from raddr or only the identifiers. That is the sharp trigger this issue should have had instead of "at the start of ssrfr work".
+
+#### 2026-08-03 — bartek@turczynski.pl
+
+CLOSING, 2026-08-03. Closed rather than deferred again — but on weaker grounds than RADD-fuarjmzn, and the difference is worth stating because it governs how readily this should come back.
+
+fuarjmzn closes because its premise is false. This one closes because its GATE is broken. The trigger it set — 'at the start of ssrfr work, with ssrfr's evidence model in hand' — half-fired: ssrfr work started and is substantial, and it produced no evidence model at all. ssrfr at feature/spec-v1 ba692e2 is spec-only, R/ holds a placeholder, DESCRIPTION declares no Imports:, and the record ssrfr owes its own caller (ssrfr-v1.md:564-599) is not specified field by field anywhere. So the condition this issue waits on is one that waiting cannot deliver, and an issue whose gate cannot fire sits in todo indefinitely while reading as tracked work.
+
+What is available points 'no' on the merits too: every ask ssrfr makes of raddr is functional, and the half of the registry ssrfr would actually consume — 24 rows x 6 columns, enumerable, versioned via `since` — already exists. The half that does not exist is prose that does not survive a data-frame cell.
+
+RE-GATING TO SSRF-aqrgqdhi WAS THE ALTERNATIVE, AND IT IS WHY THIS IS CLOSE-WITH-A-POINTER RATHER THAN A FLAT NO. aqrgqdhi ('specify the mapping from raddr facts to refusals and reason codes') is the sharp trigger this issue should have carried from the start. It is not depended on from here because it lives on ssrfr's tracker and the decision is ssrfr's to make; a raddr issue parked on a foreign gate is the same failure mode in a new costume.
+
+WHAT REOPENS THIS: SSRF-aqrgqdhi resolving that ssrfr wants structured evidence FIELDS from raddr rather than the code identifiers alone. Adding columns stays cheap; removing them stays expensive; nothing about closing this changes either.
+
+Carried forward from the corrections, and still the more useful item: ssrfr's section 6.3 vocabulary-alignment check (ssrfr-v1.md:552-557) is unblocked, cheap, and is the stated blocker on its own section 5.2. It belongs on ssrfr's tracker.
 
 
 
