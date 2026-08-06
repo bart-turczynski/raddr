@@ -22,6 +22,19 @@ repos:
       - id: check-case-conflict
   - repo: local
     hooks:
+      # Scoped to the five files that can put the declared floors out of step
+      # with the measured ones, and run at COMMIT time rather than push time on
+      # purpose: the moment DESCRIPTION is edited is the moment the answer is
+      # cheap to act on. data-raw/verify.sh runs the same script unconditionally
+      # at push time and in CI, so this hook is the fast local signal and not
+      # the gate. RADD-olitgnsw.
+      - id: floor-drift
+        name: declared floors match the measured ones
+        entry: Rscript data-raw/check-floor-drift.R --self-test
+        language: system
+        pass_filenames: false
+        files: '^(DESCRIPTION|data-raw/check-(r|dep)-floor\.sh|data-raw/check-floor-drift\.R|docs/(r|dep)-floor-check\.md)$'
+        verbose: true
       - id: verify
         # NO_MANUAL is deliberately not set here: the host has a LaTeX
         # toolchain and CI images do not. See data-raw/verify.sh.

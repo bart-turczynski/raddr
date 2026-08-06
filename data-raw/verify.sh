@@ -1,6 +1,6 @@
 #!/bin/sh
-# The verify chain, in one place: lintr, then spelling, then R CMD check
-# --as-cran. Fail-fast, in that order.
+# The verify chain, in one place: floor drift, then lintr, then spelling, then
+# R CMD check --as-cran. Fail-fast, in that order.
 #
 #     sh data-raw/verify.sh              # the whole chain
 #     NO_MANUAL=1 sh data-raw/verify.sh  # skip the PDF manual
@@ -55,6 +55,25 @@ if [ "${NO_MANUAL:-0}" = 1 ]; then
 else
     CHECK_ARGS='"--as-cran"'
 fi
+
+# FIRST, AND NOT BECAUSE IT IS THE MOST IMPORTANT. It is the cheapest -- it
+# reads five files and compares strings -- and it is the only step here that
+# checks the repository's own claims about itself rather than the package's
+# code. `R (>= 4.0.0)` and `vctrs (>= 0.7.0)` are measured (RADD-dcquzofl,
+# RADD-lfjdkynn) and nothing connected those measurements to the numbers they
+# measure, so raising a floor silently reverted it to an unchecked declaration:
+# the shape of RADD-vppmbsia. Running it here rather than only in the
+# pre-commit hook is what puts it on the remote's side of the line, where
+# .gitlab-ci.yml gates a merge request. RADD-olitgnsw.
+#
+# --self-test first, in the same invocation. The guard is green on this tree by
+# construction -- the numbers it compares were copied into the files it reads --
+# so eleven `ok` rows are also what a script stuck at OK would print. The
+# self-test mutates a throwaway copy of the five files and requires the guard to
+# reject each one. It costs nothing and it is the difference between evidence
+# and a decoration.
+echo "==> data-raw/check-floor-drift.R --self-test"
+Rscript data-raw/check-floor-drift.R --self-test
 
 echo "==> lintr::lint_package()"
 Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }'
