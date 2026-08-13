@@ -49,9 +49,13 @@ Qualifications, because the gap is narrower than "single platform" suggests and 
 
 ### Remotes, backups and mirrors
 
-`origin` is a **private** GitLab project (`gitlab.com/bart-turczynski/raddr`), reachable over SSH since 2026-08-01 and carrying every branch plus the annotated `v0.1.0` tag. It is the working remote until further notice, and ultimately a pitch-perfect private mirror of GitHub once that account returns; `github` still returns 403 (suspended since 2026-07-20). What this section used to say — that pushing is unavailable and the repository lives on one disk — is retired. An off-machine copy now exists that does not depend on remembering to move a file.
+`origin` is a **public** GitLab project (`gitlab.com/bart-turczynski/raddr`), reachable over SSH since 2026-08-01 and carrying every branch plus the annotated `v0.1.0` tag. It is the working remote and now also raddr's public identity; `github` still returns 403 (suspended since 2026-07-20). What this section used to say — that pushing is unavailable and the repository lives on one disk — is retired. An off-machine copy now exists that does not depend on remembering to move a file.
 
-Being private is deliberate and has one consequence worth keeping in view: it does **not** unblock CRAN. An anonymous fetch of the GitLab project returns 403 exactly as GitHub returns 404, so `DESCRIPTION`'s `URL` and `BugReports` stay pointed at GitHub and the submission blocker in `RADD-yrppvxdi` is untouched by any of this.
+**It was private until 2026-08-13, and that is what blocked CRAN.** While private, an anonymous fetch returned 403 exactly as GitHub returns 404, so there was no address `DESCRIPTION` could name that a CRAN checker could reach. The owner flipped it to `visibility=public` with `issues_access_level=enabled` on 2026-08-13, and `URL:`/`BugReports:` were repointed off the dead GitHub account in the same change (`RADD-yrppvxdi`). Measured anonymously after the flip: the project root returns **200**, and `/-/issues` returns **404**.
+
+That `/-/issues` 404 is **expected, and must not be "fixed"**. GitLab serves 404 on the `/-/issues` path of *any* project to a signed-out client — anti-scraping applied project-independently, control-tested against `gitlab-org/gitlab`, whose tracker is unambiguously public and answers identically. `R CMD check --as-cran` therefore reports one URL NOTE, and rurl and punycoder both ship the same NOTE deliberately. Do not drop the field, and do not swap it for a path that returns 200 but is not where issues are filed.
+
+`DESCRIPTION` deliberately carries **no `https://CRAN.R-project.org/package=raddr` URL**, unlike rurl's and punycoder's. Those two are on CRAN; raddr is not yet (measured: that address 404s). Add it once raddr is accepted — adding it before would introduce exactly the kind of dead link this repoint removed, and a second NOTE that obscures the expected one.
 
 Two local layers remain, following the convention used by sibling repos in `~/Projects/_backups/`:
 

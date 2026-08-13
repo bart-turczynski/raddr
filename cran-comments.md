@@ -13,12 +13,16 @@ The note is from `checking CRAN incoming feasibility`, and reports three things:
   checker is installed — on the environments below that have no `aspell`, the
   check produces no output rather than passing — so it is reported by the two
   Windows environments alone, and by both of them.
-* Two URLs return 404 — `https://github.com/bart-turczynski/raddr` and
-  `https://github.com/bart-turczynski/raddr/issues`, cited from `DESCRIPTION`
-  and `man/raddr-package.Rd`. The repository is not publicly reachable at the
-  time of this check because the GitHub account hosting it is suspended, not
-  because the addresses are wrong. If that is not resolved before submission,
-  both fields will be dropped rather than left pointing at a 404.
+* One URL returns 404 — `https://gitlab.com/bart-turczynski/raddr/-/issues`,
+  the `BugReports:` field, cited from `DESCRIPTION` and `man/raddr-package.Rd`.
+  The issue tracker is enabled and the page loads normally in a browser. GitLab
+  serves `404` rather than `403` for the `/-/issues` path of *any* project to a
+  client that is not signed in — it is anti-scraping behavior applied
+  project-independently, confirmed against `gitlab.com/gitlab-org/gitlab`, whose
+  tracker is unambiguously public and answers the same way. The repository root
+  `https://gitlab.com/bart-turczynski/raddr` returns `200` to the same
+  anonymous client, so the project is reachable and only this one path is
+  cloaked. The address is correct and is the one users need; it is not dropped.
 
 ## Test environments
 

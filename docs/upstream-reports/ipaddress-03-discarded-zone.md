@@ -103,7 +103,7 @@ first `%` would close the malformed-input rows above.
 
 ### Context
 
-Found while building [raddr](https://github.com/bart-turczynski/raddr), an
+Found while building [raddr](https://gitlab.com/bart-turczynski/raddr), an
 offline IP parsing/classification package. Third report from the same
 cross-implementation comparison, alongside the `0x80000000` equality issue and
 the NAT64 gap. Related: CPython's `ipaddress` has a different zone defect —

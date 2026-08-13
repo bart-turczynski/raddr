@@ -113,7 +113,7 @@ actual endpoint. Two consequences:
 
 ### Context
 
-Found while building [raddr](https://github.com/bart-turczynski/raddr), an
+Found while building [raddr](https://gitlab.com/bart-turczynski/raddr), an
 offline IP parsing/classification package with registry-backed classification.
 The IANA field values quoted above were read from raddr's vendored copy of the
 registry rather than restated from memory, and the Python comparison is included

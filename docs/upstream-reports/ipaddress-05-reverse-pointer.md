@@ -171,7 +171,7 @@ but it probably belongs in NEWS as a behavior change.
 
 ### Context
 
-Found while building [raddr](https://github.com/bart-turczynski/raddr), an
+Found while building [raddr](https://gitlab.com/bart-turczynski/raddr), an
 offline IP parsing and classification package, whose own reverse-pointer
 implementation was cross-checked against this one and against CPython's
 `ipaddress`. Fourth and fifth reports from the same comparison, alongside the

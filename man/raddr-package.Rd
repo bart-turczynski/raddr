@@ -11,8 +11,8 @@ Standards and implementations disagree about what an IP address literal means: t
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/bart-turczynski/raddr}
-  \item Report bugs at \url{https://github.com/bart-turczynski/raddr/issues}
+  \item \url{https://gitlab.com/bart-turczynski/raddr}
+  \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/issues}
 }
 
 }
