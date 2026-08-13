@@ -48,25 +48,56 @@ default:
   # question nobody is still asking.
   interruptible: true
 
+# PAUSED 2026-08-13 -- RADD-jzwticug. Restore the block below this one.
+#
+# The namespace has exhausted its free-tier shared-runner minutes, so every
+# pipeline fails with failure_reason: ci_quota_exceeded rather than for any
+# reason about the code (measured: pipeline 2758031618, both jobs).
+#
+# That interacts badly with the settings RADD-vvdpvysm added. The project
+# carries only_allow_merge_if_pipeline_succeeds=true with
+# allow_merge_on_skipped_pipeline=false, and check:linux-release is
+# allow_failure: false. Because the rules below run unconditionally on
+# merge_request_event, EVERY merge request created a pipeline, every pipeline
+# failed on quota, and every merge request became unmergeable. The guard stopped
+# being a verification layer and became a hard stop -- it could only ever fail,
+# never pass -- on the package that is first in the submission order.
+#
+# So the pause keeps `web`/`api` alone: a pipeline can still be started by hand
+# the moment minutes exist, which is how the un-pause gets verified. This is the
+# same posture rurl already runs under (RURL-psqmlgjf); raddr was the one repo
+# in the program that had not been given it.
+#
+# THIS DOES NOT WEAKEN THE LOCAL GATE. data-raw/verify.sh is the same chain CI
+# runs, and the pre-push hook still calls it on every push. What is genuinely
+# lost is the half a laptop cannot assert about itself -- a clean clone, a clean
+# package library, native amd64, and a result tied to a commit. Do not let the
+# pause become the permanent posture by default.
 workflow:
   rules:
-    # Merge requests are the job that matters: this is the gate an MR must pass
-    # before RADD-vvdpvysm's only_allow_merge_if_pipeline_succeeds means
-    # anything.
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # Manually started from the UI or the API. This is how a branch gets proven
-    # before it has an MR -- `glab ci run -b <branch>` -- which is how this file
-    # itself was first exercised.
     - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    # A branch push with an MR already open would otherwise run the same commit
-    # twice, once as a branch pipeline and once as an MR pipeline.
-    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
-      when: never
-    # Ordinary pushes are checked on the two long-lived branches only. Every
-    # other branch push has already met the identical chain in the pre-push
-    # hook, so spending runner minutes to re-run it is not evidence.
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+    - when: never
+
+# RESTORE ON UN-PAUSE (RADD-jzwticug) -- the rules above replace exactly this
+# block, which is otherwise unchanged:
+#
+#    # Merge requests are the job that matters: this is the gate an MR must pass
+#    # before RADD-vvdpvysm's only_allow_merge_if_pipeline_succeeds means
+#    # anything.
+#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#    # Manually started from the UI or the API. This is how a branch gets proven
+#    # before it has an MR -- `glab ci run -b <branch>` -- which is how this file
+#    # itself was first exercised.
+#    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
+#    - if: $CI_PIPELINE_SOURCE == "schedule"
+#    # A branch push with an MR already open would otherwise run the same commit
+#    # twice, once as a branch pipeline and once as an MR pipeline.
+#    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+#      when: never
+#    # Ordinary pushes are checked on the two long-lived branches only. Every
+#    # other branch push has already met the identical chain in the pre-push
+#    # hook, so spending runner minutes to re-run it is not evidence.
+#    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
 
 variables:
   # A project-local library, so the cache below has something to carry and so
