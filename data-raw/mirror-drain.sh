@@ -37,15 +37,16 @@
 # so pushing to it from here would bypass the gate that flow depends on. It is
 # listed under VERIFY_TARGETS instead, so a divergence still gets reported.
 #
-# UNREACHABLE TARGETS ARE REPORTED, NOT FATAL. `github` has 403'd since
-# 2026-07-20. A mirror refresh that aborted on the first dead remote would skip
-# the live ones behind it, so each target is handled independently and the exit
-# status reflects the whole run.
+# UNREACHABLE TARGETS ARE REPORTED, NOT FATAL. This mattered when `github` was
+# still configured and 403'ing; that remote was removed on 2026-09-05
+# (RADD-ithxwzpr), so no target is currently expected to be unreachable. The
+# behaviour stays because the reasoning does: a mirror refresh that aborted on
+# the first dead remote would skip the live ones behind it, so each target is
+# handled independently and the exit status reflects the whole run.
 set -eu
 
 # Remotes that receive a pruning force-push: they are copies, and copies do not
-# get an opinion about what the local repository says. Add `github` here once
-# the account suspension lifts and it can accept a push again.
+# get an opinion about what the local repository says.
 #
 # Both lists are overridable from the environment so the script can be pointed
 # at throwaway remotes. That is not a convenience: the strict/working asymmetry

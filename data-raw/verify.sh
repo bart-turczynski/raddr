@@ -5,28 +5,32 @@
 #     sh data-raw/verify.sh              # the whole chain
 #     NO_MANUAL=1 sh data-raw/verify.sh  # skip the PDF manual
 #
-# WHY THIS FILE EXISTS. The chain had two definitions and was acquiring a third.
-# .pre-commit-config.yaml carried it inline as one long argv element, and
-# .github/workflows/R-CMD-check.yaml restated it as a lint job plus a check job.
-# Adding .gitlab-ci.yml as a third copy is how a claim like "the same chain CI
-# runs" quietly stops being true -- nothing would have caught a drift between
-# three hand-maintained copies except a reader comparing them. Both callers now
-# invoke this script, so a change to the chain is one edit and every caller
-# moves with it. RADD-fgciezpx asked for exactly this shape: each CI provider
-# installs an environment and calls a repository script, which is also what
-# makes a later migration back to GitHub small.
+# WHY THIS FILE EXISTS. The chain had two definitions and was acquiring a
+# third. .pre-commit-config.yaml carried it inline as one long argv element,
+# and .github/workflows/R-CMD-check.yaml -- deleted 2026-09-05, RADD-ithxwzpr
+# -- restated it as a lint job plus a check job. Adding .gitlab-ci.yml as a
+# third copy is how a claim like "the same chain CI runs" quietly stops being
+# true -- nothing would have caught a drift between three hand-maintained
+# copies except a reader comparing them. Both callers now invoke this script,
+# so a change to the chain is one edit and every caller moves with it.
+# RADD-fgciezpx asked for exactly this shape: each CI provider installs an
+# environment and calls a repository script, which is what keeps a move to any
+# other provider small. That property is why deleting the GitHub workflow cost
+# nothing: what a provider needs from this repository is one script, not a
+# committed config for a host the project is not using.
 #
 # WHY THE STEPS RUN SEPARATELY RATHER THAN AS ONE Rscript CALL. The hook's
 # inline form chained them with `;` inside a single expression, so a lint
 # failure and a check failure arrive looking alike. Three invocations under
 # `set -e` fail in the same order with the same status but announce which step
-# failed. The GitHub workflow reached the same conclusion by other means: it
-# splits `verify` into its own job so "a lint or spelling failure is legible
-# immediately rather than being found five times in parallel across the matrix".
+# failed. The since-deleted GitHub workflow reached the same conclusion by other
+# means: it split `verify` into its own job so "a lint or spelling failure is
+# legible immediately rather than being found five times in parallel across the
+# matrix".
 #
 # WHY NO_MANUAL IS A KNOB AND NOT A DEFAULT. `--no-manual` skips the PDF manual,
 # which needs a LaTeX toolchain. CI images do not carry one and gain nothing
-# from it, so both workflows pass it; the pre-push hook does NOT, because the
+# from it, so .gitlab-ci.yml passes it; the pre-push hook does NOT, because the
 # host has the toolchain and the manual is one more thing --as-cran will check
 # at submission. docs/ci-workflow-lint.md examined that asymmetry against the
 # r-lib/actions sources and found it correct as written, so it is preserved here

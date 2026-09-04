@@ -9,9 +9,11 @@
 # than as a one-off checksum in a file.
 #
 # The version only has to read what it reads at the moment of submission, and
-# submission is impossible while the GitHub account is suspended (see
-# AGENTS.md). Every version and tag question is therefore settled at ship time,
-# not today. A checksum committed now would pin an artifact that will never be
+# submission has not happened yet (RADD-yrppvxdi). It was blocked, until
+# 2026-08-13, by DESCRIPTION naming a suspended GitHub account; that blocker is
+# gone and the URLs now name the public GitLab project, so what remains is an
+# unperformed submission rather than an impossible one. Every version and tag
+# question is therefore settled at ship time, not today. A checksum committed now would pin an artifact that will never be
 # the submitted one, so nothing here freezes a checksum as "the verified
 # artifact". The sha256 below records what one run produced, which is what a
 # transcript is for.
@@ -147,9 +149,8 @@ It records that **this tree**, on **this host**, builds and checks. That is all 
 claims.
 
 It does not pin the artifact that will be submitted to CRAN. The version and the tag
-are settled at the moment of submission, not by this file, and submission is
-impossible while the GitHub account is suspended, so no submission date exists to
-pin to. A checksum frozen in a committed file today would name a tarball that will
+are settled at the moment of submission, not by this file, and no submission has been
+made yet, so no submission date exists to pin to. A checksum frozen in a committed file today would name a tarball that will
 never be the one submitted. The sha256 recorded under **R CMD build** below is
 therefore a record of what one run produced, not a verified-artifact fingerprint.
 
@@ -264,14 +265,16 @@ ${FINDINGS}
 
 The NOTE from \`checking CRAN incoming feasibility\` is expected on this tree and is
 not a defect to fix. It reports two things. The package is a **new submission**,
-which is true and which CRAN wants flagged. And the two GitHub URLs in
-\`DESCRIPTION\` — the \`URL:\` and \`BugReports:\` fields — resolve to 404, because
-the account that hosts the repository has been suspended since 2026-07-20. The URLs
-are correct; the host is returning 404 for a reason outside the package. That
-suspension is the same fact that makes submission impossible today, so the NOTE and
-the reason this transcript pins nothing are one and the same. If the findings block
-above shows anything other than that NOTE, the block is the authoritative record and
-this paragraph is not.
+which is true and which CRAN wants flagged. And the \`BugReports:\` field —
+\`https://gitlab.com/bart-turczynski/raddr/-/issues\` — resolves to 404 for the
+anonymous fetcher \`--as-cran\` uses. That 404 is **not** a broken link and must not
+be 'fixed'. GitLab serves 404 on the \`/-/issues\` path of *any* project to a
+signed-out client; it is anti-scraping applied project-independently, control-tested
+against \`gitlab-org/gitlab\`, whose tracker is unambiguously public and answers
+identically. The \`URL:\` field resolves **200**. Do not drop the field, and do not
+swap it for a path that returns 200 but is not where issues are filed. If the
+findings block above shows anything other than that NOTE, the block is the
+authoritative record and this paragraph is not.
 
 ## R CMD check --as-cran
 
