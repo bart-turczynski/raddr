@@ -1,7 +1,7 @@
 Package: raddr
 Type: Package
 Title: Show What an IP Address Literal Means Under Every Standard
-Version: 0.1.2
+Version: 0.1.2.9000
 Language: en-US
 Authors@R: c(
     person("Bart", "Turczynski", email = "bartek@turczynski.pl", role = c("aut", "cre"),
