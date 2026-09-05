@@ -3945,6 +3945,28 @@ confident, wrong numbers:
   verbose output that separates "read numerically" from "resolved as a name"
   either, because in curl they are one `getaddrinfo` call.
 
+- **`--proxy` is the same trap wearing different clothes, and it was hit after
+  this section was written [measured again 2026-09-05, curl 8.20.0].** Under a
+  proxy curl does not resolve — it hands the host string to the proxy — so
+  `%{url.host}` reports CURLU's output and nothing else, exactly as `--doh-url`
+  does. A sweep run that way concluded that CURLU is a strict subset of
+  `addr_curl()` and that the documented `192.0.048.1` example had no witness;
+  both were the instrument, and `RADD-hnczgkcf` records the retraction. The two
+  probes side by side, same four literals, same binary:
+
+  | literal | `--proxy`, i.e. CURLU alone | `curl -v`, resolver in path | `addr_curl()` |
+  |---|---|---|---|
+  | `192.0.048.1` | `192.0.048.1` (kept a name) | `Trying 192.0.48.1:80` | `192.0.48.1` |
+  | `4294967296` | `4294967296` (kept a name) | `Trying 0.0.0.0:80` | `0.0.0.0` |
+  | `0Xff` | `0Xff` (kept a name) | `Trying 0.0.0.255:80` | `0.0.0.255` |
+  | `0177.0.0.1` | `127.0.0.1` | `Trying 127.0.0.1:80` | `127.0.0.1` |
+
+  The last row is why the mistake is convincing: on the one literal CURLU does
+  normalize, the crippled probe agrees, so a small sample can read as a working
+  oracle. `addr_curl()` matches the resolver column on all four — it models the
+  composite, CURLU **then** `getaddrinfo`, and the leniency lives in the second
+  step.
+
 So the probe lets DNS work and **checks the resolver is honest instead**: a
 random `.invalid` label (RFC 2606) must not resolve, or the run aborts. A
 resolver that hijacks NXDOMAIN would otherwise turn every rejection into a
