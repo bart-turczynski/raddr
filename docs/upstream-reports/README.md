@@ -1,7 +1,19 @@
-# Outbound bug-report drafts — ready to submit, blocked on the GitHub suspension
+# Outbound bug-report drafts — measured, drafted, deliberately unfiled
 
 Written 2026-07-30. All five are **complete drafts**, measured against live
-libraries, not sketches. Nothing has been submitted.
+libraries, not sketches. Nothing has been submitted, and nothing is queued to
+be.
+
+**This work is finished.** Epic O (`RADD-dtdcaphz`) restated the deliverable as
+the four things raddr controls — the defect reproduced against the live library
+at a named version and platform, the claim narrowed to what the measurement
+supports, a duplicate check done against the upstream tracker, and a
+submission-ready report in git with its reproducers pasted verbatim — because
+raddr does not control `davidchall/ipaddress` or `python/cpython` and never did.
+All four hold for all five drafts. The five issues were closed on that basis,
+and the epic followed on 2026-08-12. Unfiled is the intended end state rather
+than a residual task; if posting these ever becomes both possible and wanted,
+that is a new issue about publication, not unfinished business from this one.
 
 These were drafted in `_scratch/outbound-drafts/`, which is gitignored, and moved
 here on 2026-07-30 so they survive. They are the evidence behind
@@ -22,19 +34,36 @@ what re-measurement changed versus the raddr issue text.
 | `cpython-04-exploded-scope-id.md` | python/cpython — **comment on #88178, do not open a new issue** | RADD-vnjcbacv | yes |
 | `ipaddress-05-reverse-pointer.md` | davidchall/ipaddress | RADD-gutuomse | yes |
 
-## When the suspension lifts
+## What posting these would take, if it were ever wanted
 
-1. **CPython: post as a comment on [#88178](https://github.com/python/cpython/issues/88178),
-   not a new issue.** Duplicate check was done 2026-07-30: that issue has been
-   open since 2021 (bpo-44012), with PR
+Not a queue and not a task list. This heading read "When the suspension lifts"
+until 2026-09-05 and carried three imperatives written on the assumption that a
+filing was still owed. It is not: the third of them — backfill the filed URLs
+into the raddr issues and close them — is void, because those issues were closed
+on the measurement rather than on a filing, and there is nothing to backfill.
+The account that would have done the posting has been suspended since
+2026-07-20, and on 2026-09-05 GitHub was removed from this tree altogether
+(`RADD-ithxwzpr`) — the workflow, the remote and the `.Rbuildignore` line are
+gone, and `DESCRIPTION` points at GitLab. Nothing here waits on that account.
+
+What survives is ordering knowledge that cost a duplicate check to acquire and
+would have to be re-established otherwise. Recorded so it is not re-derived:
+
+1. **The CPython draft belongs as a comment on
+   [#88178](https://github.com/python/cpython/issues/88178), not as a new
+   issue.** Duplicate check was done 2026-07-30: that issue has been open since
+   2021 (bpo-44012), with PR
    [#25824](https://github.com/python/cpython/pull/25824) approved but dormant
    since 2022 (marked stale 2026-04-09). The comment's lead finding is that the
-   PR's output format would silently break `.reverse_pointer` — worth raising
-   before it merges, so this is the most time-sensitive of the five.
-2. **The four ipaddress reports are independent** and can go in any order. They
-   cross-reference each other; update the sibling links to real issue numbers
-   once the first is filed.
-3. Backfill the filed URLs into the raddr issues and close them.
+   PR's output format would silently break `.reverse_pointer` — which is what
+   made it the most time-sensitive of the five while a filing was still
+   contemplated.
+2. **The four ipaddress reports are independent** and would go in any order.
+   They cross-reference each other, so the sibling links carry no issue numbers
+   and would need real ones filled in after the first was posted.
+
+Both readings are as of 2026-07-30 and have not been re-checked since; a
+duplicate check that old would be redone, not trusted.
 
 ## Measurement environment
 
