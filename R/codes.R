@@ -70,12 +70,14 @@ raddr_code_strengths <- c("must", "should", "may", "unspecified")
 # parse-layer codes: they describe what a parser DID with a literal, not what a
 # specification mandates about an address. Filling them in would be inventing a
 # grade for a rule that was never being graded.
-# `since` is 0.1.1 rather than 0.1.0 because 0.1.0 was tagged during development
-# and never published. A consumer pinning against this column can only ever have
-# installed 0.1.1, so naming a version they cannot obtain would make the column
-# useless for exactly the purpose the docs give it.
+# `since` is 0.1.2 because that is the first version published anywhere. 0.1.0
+# and 0.1.1 were both tagged during development and neither was ever submitted.
+# A consumer pinning against this column can only ever have installed 0.1.2, so
+# naming a version they cannot obtain would make the column useless for exactly
+# the purpose the docs give it. The value moved once before, off 0.1.0, for this
+# same reason; it moves for the last time on acceptance.
 raddr_codes_row <- function(code, layer, rfc, summary,
-                            strength = NA_character_, since = "0.1.1") {
+                            strength = NA_character_, since = "0.1.2") {
   list(
     code = code, layer = layer, rfc = rfc, summary = summary,
     strength = strength, since = since

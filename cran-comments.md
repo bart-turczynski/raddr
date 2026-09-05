@@ -1,18 +1,16 @@
-This is a new submission of raddr 0.1.1.
+This is a new submission of raddr 0.1.2.
+
+**NOT READY TO SUBMIT.** The Windows and CI rows below are outstanding. See
+"Outstanding before submission" at the end of this file, and do not paste this
+into the submission form until that section is empty.
 
 ## R CMD check results
 
 0 errors | 0 warnings | 1 note
 
-The note is from `checking CRAN incoming feasibility`, and reports three things:
+The note is from `checking CRAN incoming feasibility`, and reports two things:
 
 * New submission.
-* One possibly misspelled word in `DESCRIPTION`: `IANA`, the Internet Assigned
-  Numbers Authority, whose special-purpose address registry is the data this
-  package ships. It is spelled correctly. This appears only where a spell
-  checker is installed — on the environments below that have no `aspell`, the
-  check produces no output rather than passing — so it is reported by the two
-  Windows environments alone, and by both of them.
 * One URL returns 404 — `https://gitlab.com/bart-turczynski/raddr/-/issues`,
   the `BugReports:` field, cited from `DESCRIPTION` and `man/raddr-package.Rd`.
   The issue tracker is enabled and the page loads normally in a browser. GitLab
@@ -22,36 +20,56 @@ The note is from `checking CRAN incoming feasibility`, and reports three things:
   tracker is unambiguously public and answers the same way. The repository root
   `https://gitlab.com/bart-turczynski/raddr` returns `200` to the same
   anonymous client, so the project is reachable and only this one path is
-  cloaked. The address is correct and is the one users need; it is not dropped.
+  cloaked. Both statuses were re-measured on 2026-09-05. The address is correct
+  and is the one users need; it is not dropped.
+
+`DESCRIPTION` deliberately carries no `https://CRAN.R-project.org/package=raddr`
+URL. That address 404s until the package is accepted — re-measured 2026-09-05 —
+so adding it now would inject a second, avoidable invalid-URL finding on top of
+the one explained above. It goes in on acceptance.
+
+Two earlier notes reported against 0.1.1 are gone rather than unexplained. The
+`Version contains large components` line went with the `.9000` development
+suffix: 0.1.2 is a release version. The `IANA` possibly-misspelled-word line was
+always a false positive — IANA is the Internet Assigned Numbers Authority, whose
+special-purpose registry is the data this package ships — and it appears only
+where a spell checker is installed, so it is reported by the Windows
+environments and by no other. `inst/WORDLIST` carries it, and the package's own
+`spelling::spell_check_package()` run is part of the pre-push gate.
+
+## Version history
+
+0.1.0 and 0.1.1 were both tagged during development, on 2026-07-31 and
+2026-08-02, and neither was submitted to CRAN or published anywhere else. They
+remain in the repository as honest records of what was checked when. 0.1.2 is
+the first release offered for publication, and the reason-code registry's
+`since` column names it for that reason.
 
 ## Test environments
 
-* local: macOS 26.4.1 (aarch64-apple-darwin23), R 4.6.0 (2026-04-24)
-* Ubuntu (container, emulated x86_64): R 4.6.1 (2026-06-24) — 1 note
-* Ubuntu (container, emulated x86_64): R Under development (unstable)
-  (2026-07-30 r90327) — 1 note
-* x86_64 Linux (container): R 4.0.0, the floor `DESCRIPTION` declares — OK,
-  0 errors, 0 warnings, 0 notes
-* GitLab CI, native x86_64 Linux: R 4.6.1 (2026-06-24) — 1 note
-* GitLab CI, native x86_64 Linux: R Under development (unstable)
-  (2026-07-30 r90334) — 1 note
-* Windows Server 2022 x64, via win-builder: R 4.6.1 (2026-06-24 ucrt),
-  `x86_64-w64-mingw32` — 1 note
-* Windows Server 2022 x64, via win-builder: R Under development (unstable)
-  (2026-07-30 r90327 ucrt), `x86_64-w64-mingw32` — 1 note
+* local: macOS 26.4.1 (aarch64-apple-darwin23), R 4.6.0 (2026-04-24) — 1 note
 
-The two Windows runs agree completely, including the note text. Windows is
-checked by no CI here — the account hosting the repository is suspended, and the
-GitLab remote's two Windows shared runners are paused at the platform level — so
-those two runs are a manual submission, not a standing gate.
+## Outstanding before submission
 
-The emulated container rows were run locally rather than on CI. They are
-emulated amd64 on an arm64 host, so they are close to a CI runner and not
-identical to one; the two native GitLab rows above were added precisely because
-they are not emulated.
+The rows below were measured against the 0.1.1 tree and have **not** been re-run
+on 0.1.2. They must be re-run against the exact tarball submitted, and this file
+updated from their output, before anything is sent to CRAN.
 
-The package is pure R — no compiled code, no `SystemRequirements`, and no
-network access at any point — and depends only on rlang and vctrs.
+* Windows Server 2022 x64, via win-builder — R release and R-devel. The prior
+  runs are transcribed in `docs/win-builder.md` against `raddr_0.1.1.tar.gz`.
+* GitLab CI, native x86_64 Linux — R release and R-devel. The `v0.1.2` tag
+  triggers this pipeline; its result is the record tied to the submitted commit.
+* Ubuntu release and devel in containers (`docs/check-matrix.md`), and R 4.0.0
+  at the declared floor (`docs/r-floor-check.md`, `docs/dep-floor-check.md`).
+
+What changed between 0.1.1 and 0.1.2 is `DESCRIPTION` (the version, and the two
+URL fields repointed from a suspended GitHub account to GitLab),
+`man/raddr-package.Rd` regenerated for those URLs, `NEWS.md`, `inst/WORDLIST`,
+comments added to two files under `R/`, and new tests. There is no change to
+executable code: stripping comment and blank lines from
+`git diff v0.1.1..dev -- R/` leaves an empty diff. That makes a regression on
+another platform unlikely, but "unlikely" is not a check result, which is why
+the rows above stay listed rather than carried over.
 
 ## Downstream dependencies
 

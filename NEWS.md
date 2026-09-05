@@ -1,12 +1,22 @@
-# raddr 0.1.1.9000
+# raddr 0.1.2
+
+First published release. 0.1.0 and 0.1.1 were tagged during development, on
+2026-07-31 and 2026-08-02, and neither was submitted anywhere; 0.1.2 supersedes
+both and is the version to install. Everything in the notes below is present
+here.
+
+* `URL:` and `BugReports:` name the GitLab repository. They previously named a
+  GitHub account that no longer exists, so both fields resolved to 404.
+* No user-visible behavior change from 0.1.1. The exported functions, the six
+  dialects and the reason-code table are identical; the `since` column reads
+  `0.1.2` because that is the first release a consumer can obtain.
 
 # raddr 0.1.1
 
-First published release. 0.1.0 was tagged during development on 2026-07-31 and
-never submitted anywhere; 0.1.1 supersedes it and is the version to install.
-Everything in the 0.1.0 notes below is present here. The difference is two
-dependency floors that the 0.1.0 tag predates, one of which fixes a silent
-correctness bug.
+Tagged during development on 2026-08-02 and never submitted anywhere.
+Everything in the 0.1.0 notes below is present here. The difference from 0.1.0
+is two dependency floors that the 0.1.0 tag predates, one of which fixes a
+silent correctness bug.
 
 * raddr requires vctrs 0.7.0 or later. Earlier versions modify record vectors
   in place instead of returning a modified copy, which made the readings held
