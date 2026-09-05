@@ -1,8 +1,8 @@
 This is a new submission of raddr 0.1.2.
 
-**NOT READY TO SUBMIT.** The Windows and CI rows below are outstanding. See
-"Outstanding before submission" at the end of this file, and do not paste this
-into the submission form until that section is empty.
+**NOT READY TO SUBMIT.** The Windows row is outstanding. See "Outstanding
+before submission" at the end of this file, and do not paste this into the
+submission form until that section is empty.
 
 ## R CMD check results
 
@@ -47,7 +47,17 @@ the first release offered for publication, and the reason-code registry's
 
 ## Test environments
 
+All rows below were run against the `v0.1.2` tree.
+
 * local: macOS 26.4.1 (aarch64-apple-darwin23), R 4.6.0 (2026-04-24) — 1 note
+* GitLab CI, native x86_64 Linux (`x86_64-pc-linux-gnu`): R 4.6.1 (2026-06-24)
+  — 1 note
+* GitLab CI, native x86_64 Linux (`x86_64-pc-linux-gnu`): R Under development
+  (unstable) (2026-09-04 r90492) — 1 note
+
+The two CI rows ran from a clean clone into a clean package library at the
+tagged commit `e1ed138`, pipeline 2822895536. Both report the same single note
+as the local run, and the check header on both names `raddr 0.1.2`.
 
 ## Outstanding before submission
 
@@ -57,10 +67,13 @@ updated from their output, before anything is sent to CRAN.
 
 * Windows Server 2022 x64, via win-builder — R release and R-devel. The prior
   runs are transcribed in `docs/win-builder.md` against `raddr_0.1.1.tar.gz`.
-* GitLab CI, native x86_64 Linux — R release and R-devel. The `v0.1.2` tag
-  triggers this pipeline; its result is the record tied to the submitted commit.
+  **This is the only row still owed.** It is an upload to a third party and is
+  therefore a deliberate step rather than something a gate performs.
 * Ubuntu release and devel in containers (`docs/check-matrix.md`), and R 4.0.0
   at the declared floor (`docs/r-floor-check.md`, `docs/dep-floor-check.md`).
+  These were measured on earlier trees. They are not re-listed above, but the
+  two native CI rows now cover Linux release and devel on 0.1.2 directly, and
+  they cover it without an emulator, which the container rows could not.
 
 What changed between 0.1.1 and 0.1.2 is `DESCRIPTION` (the version, and the two
 URL fields repointed from a suspended GitHub account to GitLab),
