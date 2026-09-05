@@ -25,7 +25,6 @@
 ^\.gitignore$
 ^\.pre-commit-config\.yaml$
 ^\.fp$
-^FP_CLAUDE\.md$
 ^FP_AGENTS\.md$
 ^_scratch$
 ^docs$
