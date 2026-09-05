@@ -131,9 +131,7 @@ RADD-tazdtmvw [in-progress] raddr v0.1 — offline IP address parsing and regist
 ├── RADD-ggzaedxe [done] The lowest-coverage files are build-time table constructors, not a testing gap; one real assertion hides among them
 └── RADD-xuqkzgdl [done] Two trees call themselves 0.1.1, and the evidence attaches to the one the tag does not point at
 
-RADD-yanfzkoq [in-progress] Consolidate AGENTS.md; pin the repo to fp's standard target
-
-RADD-yrppvxdi [todo] Submit raddr 0.1.1 to CRAN; the DESCRIPTION URLs are the live blocker
+RADD-yrppvxdi [in-progress] Submit raddr 0.1.2 to CRAN; win-builder on the tagged tarball is what remains
 ├── RADD-dyqrejxf [done] [high] v0.1.0 and HEAD both declare Version: 0.1.0 while differing by 26 commits
 ├── RADD-oekxupgo [done] British spellings in a package declaring Language: en-US
 ├── RADD-bxjyndha [done] Nothing guarded the en-US claim; wire spelling into the verify hook
@@ -193,6 +191,8 @@ RADD-ithxwzpr [done] Yank GitHub from the tree: GitLab is the only remote
 RADD-ofvmkjsj [done] Re-scope CI to version bumps: DESCRIPTION changes gate, v* tags record
 
 RADD-aqohnhlx [done] docs/upstream-reports/README.md still frames the five reports as blocked and pending a filing
+
+RADD-yanfzkoq [done] Consolidate AGENTS.md; pin the repo to fp's standard target
 
 ```
 
@@ -6713,7 +6713,7 @@ Consequence for a re-run: win-builder is a manual, outward-facing step and there
 
 ## RADD-yanfzkoq: Consolidate AGENTS.md; pin the repo to fp's standard target
 
-**Status:** in-progress
+**Status:** done
 
 ### Description
 
@@ -6735,6 +6735,33 @@ Consequence for a re-run: win-builder is a manual, outward-facing step and there
 ### Upstream
 
 The tini skill has no rule for generator-managed `@`-imports, which is what made the fp shape a guess. Filed as `SKILL-zlhdtwqu` in the agent-skills tracker.
+
+
+### Comments
+
+#### 2026-09-05 — bartek@turczynski.pl
+
+All fixes applied; tree not yet committed.
+
+- AGENTS.md 3931 -> 148 content words + 4 pointers; three demoted docs under docs/.
+- CLAUDE.md = @AGENTS.md. Repo pinned to fp's `standard` target.
+- FP_CLAUDE.md deleted with its .Rbuildignore line; its two unique rules restated in AGENTS.md.
+- Windows narrowed from 'checked by nothing' to 'checked by no automated gate' in three places, pointing at docs/win-builder.md.
+- Census re-derived: 63 ids cited outside the snapshot, all 63 resolve, 155 issues. The recorded 60 did not reproduce, and the file distribution in that sentence was wrong too (three files under R/, not just R/parse.R; nine under data-raw/, not seven).
+- CONTRIBUTING.md: src/ and features/ never existed here; verify command was a subset of data-raw/verify.sh; per-clone pre-commit install was missing. All three fixed.
+- Caught late: AGENTS.md still said CONTRIBUTING.md's command 'is not the gate' after that file was fixed to call verify.sh. Removed.
+
+Verified: floor-drift --self-test green, all pre-commit hooks pass, zero dangling tracker ids. Full verify.sh (R CMD check --as-cran) not run — no R sources changed.
+
+#### 2026-09-05 — bartek@turczynski.pl
+
+Merged as ee6b9be via MR !32 into dev, fast-forward, SHA preserved (single commit, not squashed). Branch deleted local and remote; mirror drained and all targets match local.
+
+Pre-push gate: 0 errors, 0 warnings, 1 NOTE — the expected --as-cran incoming note (new submission, .9000 version components, and the /-/issues 404 that is GitLab-wide anti-scraping and must not be 'fixed').
+
+No pipeline ran, correctly: since RADD-ofvmkjsj CI fires on version bumps only and DESCRIPTION is untouched.
+
+Follow-up filed upstream as SKILL-zlhdtwqu (agent-skills): the tini skill has no rule for generator-managed @-imports, which is what made the fp target a guess rather than a lookup.
 
 
 
@@ -6773,9 +6800,9 @@ BLOCKED ON PUSH: 'git push' returns 403, 'Your account is suspended'. The commit
 
 
 
-## RADD-yrppvxdi: Submit raddr 0.1.1 to CRAN; the DESCRIPTION URLs are the live blocker
+## RADD-yrppvxdi: Submit raddr 0.1.2 to CRAN; win-builder on the tagged tarball is what remains
 
-**Status:** todo
+**Status:** in-progress
 
 ### Description
 
@@ -7033,6 +7060,23 @@ The title's blocker is gone, but the submission is not done and this issue carri
 4. The owner has ruled nothing is submitted until the backlogs drain, so this stays `todo` regardless.
 
 The `blocked-on-suspension` label is now stale — nothing here is blocked on GitHub any more.
+
+#### 2026-09-05 — bartek@turczynski.pl
+
+Cutting 0.1.2 as the submission candidate. Route decided 2026-09-05 with two independent voters (Codex gpt-5.6-sol high, and a separate Claude agent); both ruled the same way I did, 3-0 on every question.
+
+RULING 1 - cut 0.1.2 from dev; do NOT submit the v0.1.1 tag, and do NOT move the tag.
+Measured: v0.1.1 = eb5d5c4, and 1cf7fb8 (the GitLab identity repoint) is NOT an ancestor of it. The tag's DESCRIPTION still reads URL/BugReports at github.com/bart-turczynski/raddr, both 404. Submitting the tag would re-ship the exact defect this issue spent three weeks discharging. Moving the tag rewrites published, protected history for no gain.
+
+RULING 2 - a fresh win-builder run is required on the 0.1.2 tarball. The committed Windows rows in docs/win-builder.md were measured at 5478163 against a 0.1.1 tree.
+
+RULING 3 - CRAN.R-project.org/package=raddr stays OUT of URL: until acceptance. It 404s today. Unchanged from this issue's own 2026-08-13 ruling.
+
+RULING 4 (separate vote, also 3-0) - 'since' in R/codes.R moves to 0.1.2, and NEWS.md's 'First published release' claim moves from the 0.1.1 section to a new 0.1.2 section. This is the repo's own eb5d5c4 reasoning applied again: the column exists so consumers can pin against a version they can obtain, and 0.1.1 was never published either. NEWS.md is a changelog, not a docs/ transcript, so the no-retcon rule does not reach it.
+
+CORRECTION to a premise the voters were given: I told them R/ changed since the tag. It does, but the delta in 7015880 is COMMENT-ONLY - verified by stripping comment and blank lines from git diff v0.1.1..dev -- R/, which leaves nothing. Shipped behavior at v0.1.1 and at dev is identical. The win-builder ruling survives on the stronger ground that cran-comments.md must describe the tarball actually submitted, and DESCRIPTION, man/ and tests/ differ regardless.
+
+Owner has confirmed the drain-before-submit rule gates the SUBMISSION only; version bumps are unrestricted. So this cut proceeds; the submission itself does not.
 
 
 
