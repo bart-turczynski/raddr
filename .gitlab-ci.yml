@@ -116,6 +116,25 @@ default:
 # Prefer the fix. Widening the rules so ordinary MRs get a pipeline is the other
 # option and it is a real one, but it spends CI minutes on every MR, which is
 # the thing the quota incident was about.
+#
+# AND THEN THE ESCAPE HATCH DIED, which is why "prefer the fix" above is now
+# "there is only the fix". Later the same day, the third hand-run pipeline
+# (MR !38, this commit) came back failed with no runner, no trace and zero
+# duration: `failure_reason: ci_quota_exceeded` on both check jobs. The free
+# tier's shared-runner minutes are gone -- three hand-run pipelines that day,
+# two check jobs each, drained what was left.
+#
+# So while the quota is out, `glab ci run` CANNOT unblock a merge: it creates a
+# pipeline that is admitted by the rules and then fails for want of a runner,
+# and a failed pipeline blocks the merge exactly as a missing one does. With the
+# setting on and the quota out, NOTHING on this project is mergeable. Restoring
+# the setting is no longer the tidier of two options; it is the only one that
+# works until the minutes reset.
+#
+# Read this the right way round: it is an argument about MERGEABILITY, not about
+# coverage. The checks did not stop happening -- data-raw/verify.sh is the same
+# chain and the pre-push hook still runs it on every push, which is what the
+# first paragraph of this block already said was doing the real refusing.
 workflow:
   rules:
     # THE GATE. Before the merge, on the change that says a release is intended.
