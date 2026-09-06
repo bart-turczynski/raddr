@@ -219,3 +219,72 @@ to the package and no re-cutting of `v0.1.2`. Adding `^\.git$` to
 tarball content and would force the tag to be re-cut; it belongs in the next
 version, alongside the `docs/architecture.md` link repoint already deferred
 there for the same reason.
+
+
+---
+
+# 0.1.2, re-run against a clean export — Windows, via win-builder — transcript
+
+Submitted 2026-09-06, after the runs in the section above returned
+`Status: 2 NOTEs` against a worktree-built tarball. **Nothing above is restated
+or amended**; those runs checked what they checked. This section records what a
+clean artifact returns.
+
+The tarball was built by `devtools::check_win_*()` from a `git archive` export
+of `v0.1.2^{commit}` into an empty directory — a tree containing `.gitignore`,
+`.gitattributes` and `.gitlab-ci.yml` (all `.Rbuildignore`d) and **no `.git`**.
+
+**Both queues returned `Status: 1 NOTE`.** The hidden-files NOTE is gone.
+
+## Result
+
+| | R-devel | R-release |
+| --- | --- | --- |
+| result URL | `https://win-builder.r-project.org/1FrmvA2DvQWe/` | `https://win-builder.r-project.org/lMls79w3xp1X/` |
+| R | R Under development (unstable) (2026-09-04 r90492 ucrt) | R version 4.6.1 (2026-06-24 ucrt) |
+| log directory | `d:/RCompile/CRANguest/R-devel/raddr.Rcheck` | `d:/RCompile/CRANguest/R-release/raddr.Rcheck` |
+| check began | 2026-09-06 16:40:14 UTC | 2026-09-06 16:41:54 UTC |
+| install / check | 5s / 106s | 5s / 103s |
+| tests | `[39s] OK` — `spelling.R`, then `testthat.R` at 39s | `[38s] OK` — `spelling.R`, then `testthat.R` at 38s |
+| vignettes | re-built OK | re-built OK |
+| manual | PDF `[17s] OK`, HTML OK | PDF `[16s] OK`, HTML OK |
+| result | `Status: 1 NOTE` | `Status: 1 NOTE` |
+
+Both on `x86_64-w64-mingw32`, Windows Server 2022 x64 (build 20348), R compiled
+by gcc 14.3.0 / GNU Fortran 14.3.0, session charset UTF-8. The two runs agree,
+note text included.
+
+### The one remaining NOTE — CRAN incoming feasibility (expected)
+
+```
+New submission
+
+Possibly misspelled words in DESCRIPTION:
+  IANA (16:56)
+
+Found the following (possibly) invalid URLs:
+  URL: https://gitlab.com/bart-turczynski/raddr/-/issues
+    From: DESCRIPTION
+          man/raddr-package.Rd
+    Status: 404
+    Message: Not Found
+```
+
+Byte-identical to NOTE 1 of the worktree runs, and answered in
+`cran-comments.md`.
+
+## What this closes
+
+**The Windows row.** It was the last one owed, and it is now measured against an
+artifact built the same way the submitted one will be.
+
+It also settles the `.git` question empirically rather than by argument. The
+only difference between this pair of runs and the pair above is how the tarball
+was built — same tag, same commit, same tree contents. One pair returns
+`2 NOTEs` and the other `1 NOTE`, which is the diagnosis confirmed by
+controlled comparison rather than inferred from the note text.
+
+What is still owed at submission time is procedural, not a check: the tarball
+that goes to CRAN must be built from a clean export too. `RADD-uegdokgx` carries
+the durable fix — `^\.git$` in `.Rbuildignore` — deferred to the version after
+0.1.2 because it edits tarball content and would force `v0.1.2` to be re-cut.

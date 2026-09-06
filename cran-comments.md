@@ -1,8 +1,12 @@
 This is a new submission of raddr 0.1.2.
 
-**NOT READY TO SUBMIT.** The Windows row is outstanding. See "Outstanding
-before submission" at the end of this file, and do not paste this into the
-submission form until that section is empty.
+**Build the tarball from a clean export of the tag, not from a git worktree.**
+`R CMD build` excludes `.git` *directories*; in a worktree `.git` is a regular
+*file*, so it is not excluded and raises a `checking for hidden files and
+directories` NOTE. That happened on the first 0.1.2 Windows attempt
+(`docs/win-builder.md`, "0.1.2"). `git archive` of `v0.1.2^{commit}` into an
+empty directory is what the rows below were measured against. RADD-uegdokgx
+carries the durable fix for the version after this one.
 
 ## R CMD check results
 
@@ -54,58 +58,24 @@ All rows below were run against the `v0.1.2` tree.
   — 1 note
 * GitLab CI, native x86_64 Linux (`x86_64-pc-linux-gnu`): R Under development
   (unstable) (2026-09-04 r90492) — 1 note
+* win-builder, Windows Server 2022 x64 (build 20348),
+  `x86_64-w64-mingw32`: R 4.6.1 (2026-06-24 ucrt) — 1 note
+* win-builder, Windows Server 2022 x64 (build 20348),
+  `x86_64-w64-mingw32`: R Under development (unstable) (2026-09-04 r90492 ucrt)
+  — 1 note
 
 The two CI rows ran from a clean clone into a clean package library at the
 tagged commit `e1ed138`, pipeline 2822895536. Both report the same single note
 as the local run, and the check header on both names `raddr 0.1.2`.
 
-## Outstanding before submission
-
-The rows below were measured against the 0.1.1 tree and have **not** been re-run
-on 0.1.2. They must be re-run against the exact tarball submitted, and this file
-updated from their output, before anything is sent to CRAN.
-
-* Windows Server 2022 x64, via win-builder — R release and R-devel. **This is
-  the only row still owed.** It is an upload to a third party and is therefore a
-  deliberate step rather than something a gate performs.
-
-  0.1.2 was uploaded to both queues on 2026-09-06 and both returned
-  `Status: 2 NOTEs`; the runs are transcribed in `docs/win-builder.md` under
-  "0.1.2". **The row stays open, and the reason is this section's own standard:
-  they must be re-run against the exact tarball submitted, and those two were
-  not.** The package itself is fine — tests, vignette re-building and both
-  manual renderings passed on both flavors, and the two runs agree. But the
-  tarball was built by `devtools::check_win_*()` pointed at a detached git
-  **worktree**, where `.git` is a 73-byte regular *file* rather than a
-  directory; `R CMD build` excludes `.git` directories, and `.Rbuildignore`
-  carries no `^\.git$`, so it rode into the artifact and raised a second NOTE
-  for a hidden file that is not package content.
-
-  Re-run them against a clean export of the tag — `git archive` of
-  `v0.1.2^{commit}` into an empty directory, which contains no `.git` at all —
-  and the second NOTE goes away, leaving the incoming-feasibility NOTE below.
-  That was verified locally on 2026-09-06: the export builds a 343115-byte
-  `raddr_0.1.2.tar.gz` carrying no `.git`, no `docs/`, no `data-raw/`, no
-  `cran-comments.md`, no `AGENTS.md`, and no `Remotes:`.
-
-  Adding `^\.git$` to `.Rbuildignore` would make this durable rather than
-  procedural, but it edits tarball content and would force `v0.1.2` to be
-  re-cut. Deferred to the next version alongside the `docs/architecture.md`
-  link repoint, for the same reason (RADD-uegdokgx).
-* Ubuntu release and devel in containers (`docs/check-matrix.md`), and R 4.0.0
-  at the declared floor (`docs/r-floor-check.md`, `docs/dep-floor-check.md`).
-  These were measured on earlier trees. They are not re-listed above, but the
-  two native CI rows now cover Linux release and devel on 0.1.2 directly, and
-  they cover it without an emulator, which the container rows could not.
-
-What changed between 0.1.1 and 0.1.2 is `DESCRIPTION` (the version, and the two
-URL fields repointed from a suspended GitHub account to GitLab),
-`man/raddr-package.Rd` regenerated for those URLs, `NEWS.md`, `inst/WORDLIST`,
-comments added to two files under `R/`, and new tests. There is no change to
-executable code: stripping comment and blank lines from
-`git diff v0.1.1..dev -- R/` leaves an empty diff. That makes a regression on
-another platform unlikely, but "unlikely" is not a check result, which is why
-the rows above stay listed rather than carried over.
+The two win-builder rows were run on 2026-09-06 against a `git archive` export
+of `v0.1.2^{commit}` — `https://win-builder.r-project.org/lMls79w3xp1X/`
+(release) and `https://win-builder.r-project.org/1FrmvA2DvQWe/` (devel), both
+transcribed in `docs/win-builder.md`. Tests, vignette re-building and both
+manual renderings passed on each, and both report the same single note as every
+other row. An earlier pair of runs the same day returned `Status: 2 NOTEs`
+because the tarball had been built from a worktree; that is the banner at the
+top of this file, and those runs are transcribed too rather than discarded.
 
 ## Downstream dependencies
 
