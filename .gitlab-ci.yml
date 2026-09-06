@@ -95,6 +95,27 @@ default:
 # exists (measured on MR !27). The consequence is that a red version-bump
 # pipeline does not stop anyone merging. This is evidence, not enforcement; the
 # pre-push hook is what actually refuses.
+#
+# IT DRIFTED BACK ON, and this is what that looks like from the inside so the
+# next person spends a minute on it rather than an hour. Measured 2026-09-06:
+# only_allow_merge_if_pipeline_succeeds=true, allow_merge_on_skipped_pipeline
+# =false. Two docs-only merge requests that day (!36, !37) touched no
+# DESCRIPTION, so the rules above created no pipeline for either, so GitLab
+# refused both with "This merge request requires a passing pipeline before
+# merging" -- an error that names a FAILING pipeline while the actual condition
+# is that NO pipeline exists. glab reports `pipeline: None` and
+# `detailed_merge_status: ci_must_pass`; that pair is the signature.
+#
+# Two ways out, and they are not equivalent. The escape hatch below unblocks one
+# MR: `glab ci run -b <branch>` creates an api-source pipeline, which the rules
+# do admit, and the merge then proceeds. It has to be repeated for every
+# non-DESCRIPTION MR. The fix is to restore the setting:
+#
+#   glab api projects/:id -X PUT -f only_allow_merge_if_pipeline_succeeds=false
+#
+# Prefer the fix. Widening the rules so ordinary MRs get a pipeline is the other
+# option and it is a real one, but it spends CI minutes on every MR, which is
+# the thing the quota incident was about.
 workflow:
   rules:
     # THE GATE. Before the merge, on the change that says a release is intended.
