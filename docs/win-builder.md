@@ -116,3 +116,106 @@ Nothing about a Windows *CI pipeline* changes. GitLab's two Windows shared
 runners still report `active=false` / `paused=true`, re-measured 2026-08-02, so
 that route does not exist on this plan. This was one check, not a pipeline, and
 re-running it is a manual act that nothing enforces.
+
+
+---
+
+# 0.1.2 — Windows, via win-builder — transcript
+
+Submitted 2026-09-06 against the `v0.1.2` tag. **Nothing below restates or
+amends the 0.1.1 transcript above**; that run checked what it checked.
+
+Both queues returned **`Status: 2 NOTEs`**. The tests passed on both flavors —
+`[38s] OK`, `spelling.R` then `testthat.R` at 38s — so nothing in the package's
+behavior is implicated. One of the two notes is expected and defended in
+`cran-comments.md`. The other is an artifact of **how the tarball was built**,
+not of what the package contains, and it means these two runs did not check the
+artifact that should be submitted.
+
+## Result
+
+| | R-devel | R-release |
+| --- | --- | --- |
+| result URL | `https://win-builder.r-project.org/JsM16pcprR0G/` | `https://win-builder.r-project.org/PJaGSqZF1512/` |
+| R | R Under development (unstable) (2026-09-04 r90492 ucrt) | R version 4.6.1 (2026-06-24 ucrt) |
+| log directory | `d:/RCompile/CRANguest/R-devel/raddr.Rcheck` | `d:/RCompile/CRANguest/R-release/raddr.Rcheck` |
+| check began | 2026-09-06 14:39:16 UTC | 2026-09-06 14:26:51 UTC |
+| install / check | 5s / 103s | 5s / 106s |
+| tests | `[38s] OK` — `spelling.R`, then `testthat.R` at 38s | `[38s] OK` — `spelling.R`, then `testthat.R` at 38s |
+| vignettes | re-built OK | re-built OK |
+| manual | PDF `[17s] OK`, HTML OK | PDF `[17s] OK`, HTML OK |
+| result | `Status: 2 NOTEs` | `Status: 2 NOTEs` |
+
+Both on `x86_64-w64-mingw32`, Windows Server 2022 x64 (build 20348), R compiled
+by gcc 14.3.0 / GNU Fortran 14.3.0, session charset UTF-8. The two runs agree
+completely, note text included.
+
+### NOTE 1 — CRAN incoming feasibility (expected)
+
+```
+New submission
+
+Possibly misspelled words in DESCRIPTION:
+  IANA (16:56)
+
+Found the following (possibly) invalid URLs:
+  URL: https://gitlab.com/bart-turczynski/raddr/-/issues
+    From: DESCRIPTION
+          man/raddr-package.Rd
+    Status: 404
+    Message: Not Found
+```
+
+All three components are already answered in `cran-comments.md`. `IANA` is the
+Internet Assigned Numbers Authority and is in `inst/WORDLIST`, which CRAN's
+incoming `aspell` run does not consult. The `/-/issues` 404 is GitLab-wide
+anti-scraping behavior for logged-out clients, measured 2026-09-06 with same-run
+controls: raddr's own repo root returned 200 while `gitlab-org/gitlab`,
+`gitlab-runner` and `inkscape` all returned 404 identically on their `/-/issues`
+paths.
+
+### NOTE 2 — hidden files and directories (a build artifact, not package content)
+
+```
+* checking for hidden files and directories ... NOTE
+Found the following hidden files and directories:
+  .git
+These were most likely included in error.
+```
+
+**This is the worktree trap, and it recurred.** The tarball was built by
+`devtools::check_win_release()` / `check_win_devel()` pointed at a detached git
+**worktree**. In a worktree, `.git` is not a directory — it is a 73-byte regular
+*file* holding a `gitdir:` pointer. `R CMD build` excludes `.git`
+*directories*, so the file slips straight through, and raddr's
+`.Rbuildignore` does not catch it either: it lists `^\.gitlab-ci\.yml$`,
+`^\.gitattributes$` and `^\.gitignore$`, but no `^\.git$`.
+
+The same NOTE appeared in the local `--as-cran` run on 2026-09-04 for the same
+reason and was settled then with a control: building the artifact from
+`git archive` of the tag — an export with no `.git` at all — and checking that
+produced `Status: 1 NOTE`, the incoming-feasibility one alone. That control was
+re-derived on 2026-09-06 against `v0.1.2^{commit}`: the export contains
+`.gitignore`, `.gitattributes` and `.gitlab-ci.yml` (all `.Rbuildignore`d) and
+no `.git`, and `R CMD build` on it yields a 343115-byte
+`raddr_0.1.2.tar.gz` carrying no `.git`, no `docs/`, no `data-raw/`, no
+`cran-comments.md`, no `AGENTS.md`, and no `Remotes:` field.
+
+Per `docs/release-build.md` that byte count records what one run produced and is
+not a fingerprint — `R CMD build` embeds a `Packaged:` timestamp, so the same
+tree rebuilds to different bytes. The 2026-09-04 control measured 343114 bytes
+for the same content. Compare extracted contents, never tarball checksums.
+
+## What this closes, and what it does not
+
+Closed: the package's behavior under Windows on both R flavors. Tests, vignette
+re-building, and both manual renderings pass, and the two flavors agree.
+
+**Not closed: a Windows run against the artifact that will actually be
+submitted.** These two checked a worktree-built tarball. The fix is a process
+one — build from a clean export, never from a worktree — and it costs no change
+to the package and no re-cutting of `v0.1.2`. Adding `^\.git$` to
+`.Rbuildignore` would make it durable rather than procedural, but that edits
+tarball content and would force the tag to be re-cut; it belongs in the next
+version, alongside the `docs/architecture.md` link repoint already deferred
+there for the same reason.
