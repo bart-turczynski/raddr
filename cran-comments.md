@@ -17,15 +17,19 @@ The note is from `checking CRAN incoming feasibility`, and reports two things:
 * New submission.
 * One URL returns 404 — `https://gitlab.com/bart-turczynski/raddr/-/issues`,
   the `BugReports:` field, cited from `DESCRIPTION` and `man/raddr-package.Rd`.
-  The issue tracker is enabled and the page loads normally in a browser. GitLab
-  serves `404` rather than `403` for the `/-/issues` path of *any* project to a
-  client that is not signed in — it is anti-scraping behavior applied
-  project-independently, confirmed against `gitlab.com/gitlab-org/gitlab`, whose
-  tracker is unambiguously public and answers the same way. The repository root
-  `https://gitlab.com/bart-turczynski/raddr` returns `200` to the same
-  anonymous client, so the project is reachable and only this one path is
-  cloaked. Both statuses were re-measured on 2026-09-05. The address is correct
-  and is the one users need; it is not dropped.
+  The issue tracker is enabled and the page loads normally in a browser, which
+  redirects it to `https://gitlab.com/bart-turczynski/raddr/-/work_items`.
+  GitLab has migrated issues to work items and serves `404` on the legacy
+  `/-/issues` path to any client that is not signed in, on every project —
+  confirmed against `gitlab.com/gitlab-org/gitlab`, whose tracker is
+  unambiguously public and answers the same way. What is stale is the path, not
+  the project, and this is not a block on scripted clients: measured 2026-09-10
+  from one anonymous client in a single run, `/-/work_items` returns `200` for
+  both projects, as does the repository root
+  `https://gitlab.com/bart-turczynski/raddr`. The address is correct and is the
+  one users need; it is not dropped. `BugReports:` will name the `work_items`
+  path from the next version, so that the change goes through a release cycle
+  rather than a submission.
 
 `DESCRIPTION` deliberately carries no `https://CRAN.R-project.org/package=raddr`
 URL. That address 404s until the package is accepted — re-measured 2026-09-05 —
