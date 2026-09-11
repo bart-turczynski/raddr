@@ -169,9 +169,9 @@ echo
 echo '```'
 # --no-manual because the image carries no LaTeX, and _R_CHECK_CRAN_INCOMING_
 # off because the incoming checks test DESCRIPTION metadata and URLs rather
-# than R semantics -- BugReports: 404s for anonymous clients because GitLab
-# serves 404 on /-/issues site-wide, not because the link is broken, which
-# the host chain already records. Neither omission is R-version-
+# than R semantics -- they draw a syntactic NOTE on BugReports: because R
+# expects a gitlab.com path ending in /issues, which the work-items migration
+# ended; the host chain already records it. Neither omission is R-version-
 # sensitive; this transcript is evidence about R 4.0, not a CRAN gate.
 _R_CHECK_CRAN_INCOMING_=false R CMD check --as-cran --no-manual raddr_*.tar.gz 2>&1
 echo '```'

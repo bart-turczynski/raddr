@@ -266,13 +266,14 @@ ${FINDINGS}
 The NOTE from \`checking CRAN incoming feasibility\` is expected on this tree and is
 not a defect to fix. It reports two things. The package is a **new submission**,
 which is true and which CRAN wants flagged. And the \`BugReports:\` field —
-\`https://gitlab.com/bart-turczynski/raddr/-/issues\` — resolves to 404 for the
-anonymous fetcher \`--as-cran\` uses. That 404 is **not** a broken link and must not
-be 'fixed'. GitLab serves 404 on the \`/-/issues\` path of *any* project to a
-signed-out client; it is anti-scraping applied project-independently, control-tested
-against \`gitlab-org/gitlab\`, whose tracker is unambiguously public and answers
-identically. The \`URL:\` field resolves **200**. Do not drop the field, and do not
-swap it for a path that returns 200 but is not where issues are filed. If the
+\`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws a **syntactic**
+NOTE: R flags any gitlab.com \`BugReports:\` path not ending in \`/issues\` and
+suggests appending it (\`tools:::.check_package_CRAN_incoming\`). That rule predates
+GitLab's issues-to-work-items migration, and the URL it suggests,
+\`/-/work_items/issues\`, returns **403**. Do not adopt the suggestion, and do not
+drop the field. The declared URL itself resolves **200** to the anonymous fetcher
+\`--as-cran\` uses; so does \`URL:\`. Fifteen CRAN packages ship a \`work_items\`
+\`BugReports:\` URL, the ten most recent the bare form used here. If the
 findings block above shows anything other than that NOTE, the block is the
 authoritative record and this paragraph is not.
 
