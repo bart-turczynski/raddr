@@ -39,3 +39,9 @@ tests/testthat/_snaps/
 
 # Fiberplane local issue tracking
 .fp/
+
+# Release build scratch (data-raw/build-release.sh). Listed deliberately:
+# the two files in it happen to match *.tar.gz and *.log, so the directory
+# was kept out of git status by coincidence rather than intent
+# (RADD-mmsfavww).
+tmp/

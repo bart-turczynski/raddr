@@ -40,3 +40,7 @@
 # Not part of the installable package; without this, --as-cran reports it
 # as a non-standard top-level directory.
 ^scripts$
+# Release build scratch. Without this, R CMD build copies it into the
+# tarball and the check reports a top-level-files NOTE -- the one that
+# data-raw/verify.sh's own header says cannot happen (RADD-mmsfavww).
+^tmp$
