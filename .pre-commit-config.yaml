@@ -35,6 +35,24 @@ repos:
         pass_filenames: false
         files: '^(DESCRIPTION|data-raw/check-(r|dep)-floor\.sh|data-raw/check-floor-drift\.R|docs/(r|dep)-floor-check\.md)$'
         verbose: true
+      # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the
+      # release DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 ->
+      # X.Y.Z), and every URL those two files declare must also appear in
+      # DESCRIPTION's URL field. Ported from seor, where the rule is
+      # design/adr/0001 and design/adr/0002.
+      #
+      # raddr carries NEITHER file today -- whether it should is an open owner
+      # decision (SEOR-lreejxat item 4). The gate reads absence as nothing to
+      # check rather than as a violation, so it is correct either way, and it
+      # is here now so that whichever way that decision goes, the files cannot
+      # arrive unchecked.
+      - id: check-citation
+        name: citation metadata vs DESCRIPTION
+        entry: python3 scripts/check-citation.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       - id: verify
         # NO_MANUAL is deliberately not set here: the host has a LaTeX
         # toolchain and CI images do not. See data-raw/verify.sh.

@@ -243,3 +243,29 @@ check:linux-devel:
   # deliberate and it is cheap here: with only_allow_merge_if_pipeline_succeeds
   # off, red is information rather than a block, and upcoming-R breakage before a
   # CRAN submission is information worth having loudly.
+
+# CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
+# DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
+# every URL those two files declare must also appear in DESCRIPTION's URL field.
+# Ported from seor, where the rule is design/adr/0001 and design/adr/0002.
+#
+# raddr carries NEITHER file today (SEOR-lreejxat item 4 is an open owner
+# decision). The gate reads absence as nothing to check rather than as a
+# violation, so this job passes either way and is in place before the files can
+# arrive.
+#
+# The workflow rules above mean this pipeline fires on a DESCRIPTION-changing
+# MR, a v* tag, or a hand-started run -- which is exactly the moment the rule
+# cares about, since both files move at the DESCRIPTION bump rather than at the
+# tag. So this job does not need rules of its own.
+#
+# Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
+# which matters on a concurrency-1 runner where the two check jobs are long.
+citation-version:
+  stage: test
+  image: python:3.13-alpine
+  cache: []
+  before_script: []
+  script:
+    - python3 scripts/check-citation.py --self-test
+    - python3 scripts/check-citation.py
