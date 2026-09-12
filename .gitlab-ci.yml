@@ -135,6 +135,30 @@ default:
 # coverage. The checks did not stop happening -- data-raw/verify.sh is the same
 # chain and the pre-push hook still runs it on every push, which is what the
 # first paragraph of this block already said was doing the real refusing.
+#
+# AND THEN IT CAME BACK, on 2026-09-12, for a reason the paragraphs above had no
+# variable for. A PROJECT runner was attached to this project -- `seor-local-docker`,
+# id 56078730, untagged, `run_untagged=true`. The namespace's compute quota governs
+# GitLab's SHARED runners and nothing else, so a project runner picks up jobs the
+# shared fleet is refusing. The 2026-09-06 measurement was correct and its
+# conclusion generalised one step too far: it read "no runner will take this job"
+# off a run where the only eligible runners were shared ones.
+#
+# Measured the same day, with the setting STILL ON and the quota STILL OUT (406 of
+# 400 free minutes used): `glab ci run -b chore/port-citation-gate` created
+# pipeline 2843012546, all three jobs ran -- check:linux-release, check:linux-devel
+# and citation-version -- and it went green in 495s. MR !43 then merged normally.
+# Jobs now sit at `pending` waiting for the runner instead of failing instantly
+# with `ci_quota_exceeded` and zero duration, and that difference is the whole
+# tell: pending means a runner has accepted them.
+#
+# So DO NOT restore the setting. `only_allow_merge_if_pipeline_succeeds=true` is
+# what the first paragraph of this block wanted in the first place, and with a
+# project runner attached it costs nothing and blocks nothing. The escape hatch is
+# alive: `glab ci run -b <branch>` for any MR that touches no DESCRIPTION. What is
+# genuinely load-bearing now is that the runner stays attached and online --
+# `glab api projects/:id/runners?type=project_type` is how you check, and note that
+# the unfiltered listing pages 20 shared runners first and will show you none.
 workflow:
   rules:
     # THE GATE. Before the merge, on the change that says a release is intended.
