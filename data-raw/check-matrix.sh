@@ -660,11 +660,12 @@ point of this run.
 \`checking CRAN incoming feasibility\` reports a NOTE on every row that reaches the
 network, and it is expected rather than a defect. It says two things. The package is a
 **new submission**, which is true and which CRAN wants flagged. And \`BugReports:\` —
-\`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws a **syntactic** NOTE:
-R flags any gitlab.com \`BugReports:\` path not ending in \`/issues\` and suggests
-appending it. That rule predates GitLab's issues-to-work-items migration, and the URL
-it suggests, \`/-/work_items/issues\`, returns 403. Do not adopt it and do not drop
-the field; the declared URL resolves 200, as does \`URL:\`.
+\`https://gitlab.com/bart-turczynski/raddr/-/issues\` — is reported as a URL returning
+404. GitLab serves 404 on \`/-/issues\` to signed-out non-browser clients on every
+project (a browser is redirected to \`/-/work_items\`), and CRAN accepts it. Do not
+repoint it at \`/-/work_items\`: R's incoming check wants a gitlab.com \`BugReports:\`
+path ending in \`/-/issues\` and NOTEs anything else, which is what got pslr 1.2.1
+archived at the CRAN pretest. \`URL:\` resolves 200.
 
 A row with no network access would not produce the NOTE at all, and its absence would
 mean the incoming checks did not run rather than that they passed. The findings blocks

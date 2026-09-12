@@ -1,5 +1,8 @@
 # raddr 0.1.2.9000
 
+* `BugReports:` points at `/-/issues`, the form required by the CRAN incoming
+  check (a browser is redirected to `/-/work_items`).
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on

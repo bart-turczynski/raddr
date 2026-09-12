@@ -25,7 +25,7 @@ Imports:
     rlang (>= 1.1.7),
     vctrs (>= 0.7.0)
 URL: https://gitlab.com/bart-turczynski/raddr
-BugReports: https://gitlab.com/bart-turczynski/raddr/-/work_items
+BugReports: https://gitlab.com/bart-turczynski/raddr/-/issues
 X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
     inet-aton, whatwg-url, cidr, iana, special-purpose-registry, nat64,
     teredo, 6to4, r, rstats, r-stats, r-package

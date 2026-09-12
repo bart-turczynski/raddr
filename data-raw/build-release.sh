@@ -266,14 +266,13 @@ ${FINDINGS}
 The NOTE from \`checking CRAN incoming feasibility\` is expected on this tree and is
 not a defect to fix. It reports two things. The package is a **new submission**,
 which is true and which CRAN wants flagged. And the \`BugReports:\` field —
-\`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws a **syntactic**
-NOTE: R flags any gitlab.com \`BugReports:\` path not ending in \`/issues\` and
-suggests appending it (\`tools:::.check_package_CRAN_incoming\`). That rule predates
-GitLab's issues-to-work-items migration, and the URL it suggests,
-\`/-/work_items/issues\`, returns **403**. Do not adopt the suggestion, and do not
-drop the field. The declared URL itself resolves **200** to the anonymous fetcher
-\`--as-cran\` uses; so does \`URL:\`. Fifteen CRAN packages ship a \`work_items\`
-\`BugReports:\` URL, the ten most recent the bare form used here. If the
+\`https://gitlab.com/bart-turczynski/raddr/-/issues\` — is reported as a URL
+returning **404**. GitLab serves 404 on \`/-/issues\` to signed-out non-browser
+clients on every project (a browser is redirected to \`/-/work_items\`), and CRAN
+accepts it: rurl 3.0.1 is on CRAN with the same form. Do not repoint it at
+\`/-/work_items\`: \`tools:::.check_package_CRAN_incoming\` wants a gitlab.com
+\`BugReports:\` path ending in \`/-/issues\` and NOTEs anything else, which is what
+got pslr 1.2.1 archived at the CRAN pretest. \`URL:\` resolves **200**. If the
 findings block above shows anything other than that NOTE, the block is the
 authoritative record and this paragraph is not.
 

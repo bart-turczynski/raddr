@@ -12,7 +12,7 @@ Standards and implementations disagree about what an IP address literal means: t
 Useful links:
 \itemize{
   \item \url{https://gitlab.com/bart-turczynski/raddr}
-  \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/work_items}
+  \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/issues}
 }
 
 }
