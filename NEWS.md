@@ -8,6 +8,15 @@
   form that resolves. Recorded as generation 4 in
   `docs/remotes-and-backups.md`.
 
+## Internal
+
+* CI now runs once per merge, on `main`, instead of on a `DESCRIPTION`-changing
+  merge request before the merge and a `v*` tag after it. Fleet-wide policy
+  (`SEOR-bmgkzhvy`), applied here last because raddr alone required
+  `only_allow_merge_if_pipeline_succeeds=false` first (`RADD-dyqdamzt`). See
+  the `workflow:` block in `.gitlab-ci.yml` for what this costs, including
+  that ordinary merges now run more CI than before, not less.
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on

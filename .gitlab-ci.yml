@@ -1,5 +1,6 @@
-# The only CI this package has. It runs on version bumps, not on every merge
-# request; the workflow: block below is where that is argued.
+# The only CI this package has. It runs once per merge, on main, and on a
+# release tag. Not on a merge request, not on an ordinary branch push; the
+# workflow: block below is where that is argued.
 #
 # .github/workflows/R-CMD-check.yaml declared six matrix rows and never executed
 # once. It was deleted on 2026-09-05 (RADD-ithxwzpr) after the GitHub account
@@ -53,127 +54,102 @@ default:
   # question nobody is still asking.
   interruptible: true
 
-# CI RUNS ON VERSION BUMPS, NOT ON EVERY MERGE REQUEST (RADD-ofvmkjsj).
+# ONE PIPELINE, ON MAIN (SEOR-bmgkzhvy). Not on a merge request, not on an
+# ordinary branch push.
 #
-# This replaces two earlier postures and is not a compromise between them. Until
-# 2026-08-13 the rules ran unconditionally on merge_request_event, so every MR
-# spent runner minutes re-running a chain the pre-push hook had already run on
-# the same commit. From 2026-08-13 the rules were narrowed to `web`/`api` alone
-# because the namespace had exhausted its free-tier minutes (RADD-jzwticug), and
-# that pause had no principle in it beyond "stop spending" -- which is exactly
-# the kind of posture that becomes permanent by inattention.
+# This replaces the version-bump posture that stood here from 2026-08-02
+# (RADD-ofvmkjsj) until today: a merge request that changed DESCRIPTION got a
+# pipeline BEFORE the merge, a v* tag got one AFTER it, and `glab ci run -b
+# <branch>` (or the API equivalent) was a standing escape hatch open on any
+# branch. That design's own history -- the earlier posture running
+# unconditionally on every merge_request_event, the 2026-08-13 quota
+# narrowing, two reversals of only_allow_merge_if_pipeline_succeeds, and the
+# escape hatch dying to quota exhaustion and reviving once a project runner
+# was attached -- is not repeated here; it lived in this block until today
+# and is recoverable from git history (RADD-jzwticug, RADD-fgciezpx) if it is
+# ever needed again. It is dropped now because the setting it was all
+# reasoning about just changed underneath it.
 #
-# The question the earlier rules never asked is WHEN the four things a laptop
-# cannot assert about itself -- a clean clone, a clean package library, native
-# amd64, and a result tied to a commit -- are actually worth a runner minute.
-# The answer is: when the thing being built is the thing a user installs. That is
-# a version bump, and it is not every merge request. A refactor with the version
-# unchanged ships to nobody; DESCRIPTION moving is the tree saying it intends to.
+# WHY NOW. SEOR-bmgkzhvy measured a fleet-wide pathology: a merged slice was
+# firing THREE pipelines on a concurrency-1 shared runner -- one for the
+# branch, one for the merge request, one on main -- and two of the three are
+# guaranteed waste. The branch pipeline dies at get_sources once the
+# slice-flow deletes the branch it ran for; the MR pipeline for an
+# already-merged MR has nothing left to gate. Twice this stalled the shared
+# runner for 30+ minutes re-verifying trees that no longer existed, on
+# multiple repos at once, immune to a dedicated runner. raddr was the one
+# repo where the fix below was structurally blocked: this project alone
+# carried only_allow_merge_if_pipeline_succeeds=true (see "IT DRIFTED BACK
+# ON" in git history) with allow_merge_on_skipped_pipeline=false, and the old
+# rules gave a pipeline only to a DESCRIPTION-changing MR, a v* tag, or a
+# web/api run -- so a docs-only MR got NO pipeline and GitLab then refused to
+# merge it (`detailed_merge_status: ci_must_pass`, `head_pipeline: null`).
+# MR !46 hit exactly that deadlock this morning (RADD-dyqdamzt).
 #
-# So the gate fires on a merge request that CHANGES DESCRIPTION. That is broader
-# than "Version: changed" and deliberately so, because GitLab cannot express the
-# narrower rule and because the broader one is the better rule anyway: a new
-# Imports: entry or a raised floor is precisely a change whose closure a clean
-# package library should resolve from scratch. It fires BEFORE the merge, which
-# a tag rule cannot do.
+# RESOLVED 2026-09-22 (RADD-dyqdamzt): the owner set
+# only_allow_merge_if_pipeline_succeeds=false on raddr, matching the other
+# seven projects in the fleet. Verify before relying on it rather than
+# trusting this comment:
 #
-# And a v* tag fires the same pipeline again, for a different reason: the tag is
-# the commit that gets submitted, and the fourth property above is "a result tied
-# to a commit". The MR run proves the change; the tag run is the record.
+#   glab api projects/:id | python3 -c \
+#     'import sys,json; print(json.load(sys.stdin)["only_allow_merge_if_pipeline_succeeds"])'
 #
-# WHAT THIS COSTS, stated plainly so it is not discovered later. Ordinary merge
-# requests now create NO pipeline and are checked by the pre-push hook alone.
-# That is a real reduction in coverage and it is affordable for one reason only:
-# data-raw/verify.sh is the same chain, so what an ordinary MR loses is the clean
-# clone and the clean library, not the checks. If verify.sh ever stops being the
-# single definition of the chain, this rule set stops being defensible.
+# With that false, suppressing the MR pipeline below no longer locks
+# anything out -- nothing on this project has required a passing pipeline to
+# merge since. The deadlock above is gone because the setting changed, not
+# because this rule set works around it; if that value ever reads true
+# again, suppressing the MR pipeline recreates MR !46 for every MR that
+# never touches DESCRIPTION, i.e. nearly all of them.
 #
-# IT IS ALSO NOT A MERGE GATE. Measured 2026-09-05: the project carries
-# only_allow_merge_if_pipeline_succeeds=false, flipped off during the quota
-# incident. It must STAY off -- with these rules an ordinary MR has no pipeline
-# at all, and GitLab blocks a merge when that setting is on and no pipeline
-# exists (measured on MR !27). The consequence is that a red version-bump
-# pipeline does not stop anyone merging. This is evidence, not enforcement; the
-# pre-push hook is what actually refuses.
+# WHAT THIS GIVES UP THAT THE OLD RULES HAD:
+#   - The pre-merge, DESCRIPTION-gated clean-room check. A version-bump MR no
+#     longer gets its own pipeline before it lands; the only pipeline is the
+#     one that runs after, on main, once the bump is already there.
+#   - The web/api escape hatch on a BRANCH. `glab ci run -b <branch>` (the
+#     documented unblock above) now creates nothing for any branch other than
+#     main -- $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH falls through to the
+#     final `when: never`. It is no longer NEEDED (nothing requires a
+#     pipeline to merge any more), but it is a real capability loss: there is
+#     no way left to hand-trigger a clean-room check on a branch before it
+#     merges. Restoring it, if ever wanted, is the one-line amendment
+#     `- if: $CI_PIPELINE_SOURCE == "web"` inserted before the final
+#     `when: never` below.
+#   - The unconditional `schedule` carve-out. Checked before dropping it,
+#     not assumed: `glab api projects/:id/pipeline_schedules` returns `[]` --
+#     no schedule exists today, so dropping it is a no-op. A schedule added
+#     later MUST target main to survive; one targeting a branch would now
+#     create nothing.
 #
-# IT DRIFTED BACK ON, and this is what that looks like from the inside so the
-# next person spends a minute on it rather than an hour. Measured 2026-09-06:
-# only_allow_merge_if_pipeline_succeeds=true, allow_merge_on_skipped_pipeline
-# =false. Two docs-only merge requests that day (!36, !37) touched no
-# DESCRIPTION, so the rules above created no pipeline for either, so GitLab
-# refused both with "This merge request requires a passing pipeline before
-# merging" -- an error that names a FAILING pipeline while the actual condition
-# is that NO pipeline exists. glab reports `pipeline: None` and
-# `detailed_merge_status: ci_must_pass`; that pair is the signature.
-#
-# Two ways out, and they are not equivalent. The escape hatch below unblocks one
-# MR: `glab ci run -b <branch>` creates an api-source pipeline, which the rules
-# do admit, and the merge then proceeds. It has to be repeated for every
-# non-DESCRIPTION MR. The fix is to restore the setting:
-#
-#   glab api projects/:id -X PUT -f only_allow_merge_if_pipeline_succeeds=false
-#
-# Prefer the fix. Widening the rules so ordinary MRs get a pipeline is the other
-# option and it is a real one, but it spends CI minutes on every MR, which is
-# the thing the quota incident was about.
-#
-# AND THEN THE ESCAPE HATCH DIED, which is why "prefer the fix" above is now
-# "there is only the fix". Later the same day, the third hand-run pipeline
-# (MR !38, this commit) came back failed with no runner, no trace and zero
-# duration: `failure_reason: ci_quota_exceeded` on both check jobs. The free
-# tier's shared-runner minutes are gone -- three hand-run pipelines that day,
-# two check jobs each, drained what was left.
-#
-# So while the quota is out, `glab ci run` CANNOT unblock a merge: it creates a
-# pipeline that is admitted by the rules and then fails for want of a runner,
-# and a failed pipeline blocks the merge exactly as a missing one does. With the
-# setting on and the quota out, NOTHING on this project is mergeable. Restoring
-# the setting is no longer the tidier of two options; it is the only one that
-# works until the minutes reset.
-#
-# Read this the right way round: it is an argument about MERGEABILITY, not about
-# coverage. The checks did not stop happening -- data-raw/verify.sh is the same
-# chain and the pre-push hook still runs it on every push, which is what the
-# first paragraph of this block already said was doing the real refusing.
-#
-# AND THEN IT CAME BACK, on 2026-09-12, for a reason the paragraphs above had no
-# variable for. A PROJECT runner was attached to this project -- `seor-local-docker`,
-# id 56078730, untagged, `run_untagged=true`. The namespace's compute quota governs
-# GitLab's SHARED runners and nothing else, so a project runner picks up jobs the
-# shared fleet is refusing. The 2026-09-06 measurement was correct and its
-# conclusion generalised one step too far: it read "no runner will take this job"
-# off a run where the only eligible runners were shared ones.
-#
-# Measured the same day, with the setting STILL ON and the quota STILL OUT (406 of
-# 400 free minutes used): `glab ci run -b chore/port-citation-gate` created
-# pipeline 2843012546, all three jobs ran -- check:linux-release, check:linux-devel
-# and citation-version -- and it went green in 495s. MR !43 then merged normally.
-# Jobs now sit at `pending` waiting for the runner instead of failing instantly
-# with `ci_quota_exceeded` and zero duration, and that difference is the whole
-# tell: pending means a runner has accepted them.
-#
-# So DO NOT restore the setting. `only_allow_merge_if_pipeline_succeeds=true` is
-# what the first paragraph of this block wanted in the first place, and with a
-# project runner attached it costs nothing and blocks nothing. The escape hatch is
-# alive: `glab ci run -b <branch>` for any MR that touches no DESCRIPTION. What is
-# genuinely load-bearing now is that the runner stays attached and online --
-# `glab api projects/:id/runners?type=project_type` is how you check, and note that
-# the unfiltered listing pages 20 shared runners first and will show you none.
+# WHAT THIS ADDS THAT THE OLD RULES DID NOT: a plain push to main now gets a
+# pipeline UNCONDITIONALLY, whether or not DESCRIPTION changed. Read that the
+# right way round -- most merges to main do not bump DESCRIPTION, and under
+# the old rules those got no pipeline at all, before or after the merge.
+# Under this rule set every one of them now runs check:linux-release,
+# check:linux-devel and citation-version. THAT IS MORE CI THAN THE OLD DESIGN
+# RAN FOR ORDINARY, NON-RELEASE WORK, not less, even though SEOR-bmgkzhvy's
+# fleet-wide point is reducing pipeline count. The fleet-wide reduction is
+# real -- one pipeline per merged slice instead of three -- but for raddr
+# specifically, "the one pipeline" now fires on every merge, where the old
+# design's DESCRIPTION-gated pipeline fired on almost none. If that trade is
+# unwanted, the fix is a `changes: [DESCRIPTION]` filter on the main-push
+# rule below, at the cost of losing the clean-clone / clean-library check on
+# ordinary merges again -- raised here, not resolved by this change.
 workflow:
   rules:
-    # THE GATE. Before the merge, on the change that says a release is intended.
+    # No pipeline before the merge. The merge request that would have gated
+    # a version bump is checked by the pre-push hook instead (data-raw/
+    # verify.sh, the same chain this pipeline runs) -- see "WHAT THIS GIVES
+    # UP" above.
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - DESCRIPTION
-    # THE RECORD. After the merge, tied to the commit that carries the version.
-    # Tag creation is restricted to Maintainers (v*, protected since 2026-08-02),
-    # so this cannot be triggered by an ordinary push.
-    - if: $CI_COMMIT_TAG =~ /^v/
-    # Started by hand from the UI or the API -- `glab ci run -b <branch>`. This is
-    # how a branch gets proven before it has an MR, and it is the escape hatch for
-    # any change that wants a clean-room check without touching DESCRIPTION.
-    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    # THE RECORD. Tied to the commit that carries the version. Tag creation
+    # is restricted to Maintainers (v*, protected since 2026-08-02), so this
+    # cannot be triggered by an ordinary push even though the rule below does
+    # not itself restrict to v*.
+    - if: $CI_COMMIT_TAG
+    # THE ONLY OTHER CASE: an ordinary push to main, after the merge,
+    # unconditionally -- see "WHAT THIS ADDS" above for what that costs.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - when: never
 
 variables:
@@ -196,13 +172,15 @@ variables:
     # best-effort and frequently cold: this is a speed optimisation, never a
     # correctness input. `policy` stays the default pull-push.
     #
-    # THE VERSION-BUMP RULES MAKE THIS MOSTLY COLD, and that is not a bug to
-    # tune away. The gate fires precisely WHEN DESCRIPTION CHANGES, and the key
-    # is DESCRIPTION's content, so a gated merge-request run is a cache miss by
-    # construction -- it is asking for a clean library, which is the point. The
-    # one run that reliably hits is the v* tag pipeline, whose DESCRIPTION is
-    # the same file the merge-request run just built against. Manual and
-    # scheduled runs hit or miss as before.
+    # SEOR-bmgkzhvy (this rule fires on every push to main, not only when
+    # DESCRIPTION changes) FLIPS THIS FROM MOSTLY COLD TO MOSTLY WARM. Under
+    # the old DESCRIPTION-gated MR rule the key changed on every run by
+    # construction -- a gated run was asking for a clean library, which was
+    # the point. Now most merges to main leave DESCRIPTION untouched, so most
+    # runs reuse the cached library from the previous run, and it is only a
+    # DESCRIPTION-changing merge or the v* tag pipeline right behind it that
+    # forces a rebuild. Still a speed optimisation, never a correctness
+    # input: the vctrs >= 0.7.0 assert below runs regardless of cache state.
     key:
       files:
         - DESCRIPTION
@@ -284,29 +262,27 @@ check:linux-release:
 check:linux-devel:
   extends: .r-job
   image: rocker/r-ver:devel
-  # NO `rules:` OVERRIDE ANY MORE, and removing it is the one place the
-  # version-bump posture makes this file STRONGER rather than cheaper.
+  # NO `rules:` OVERRIDE. It used to carry `when: manual` with
+  # `allow_failure: true`, justified as catching upcoming breakage "worth
+  # having before a release and not worth paying for on every MR" -- sound
+  # reasoning with a self-defeating conclusion, since a manual job on a
+  # free-tier budget is a job nobody starts. That override was dropped when
+  # the workflow rules narrowed to version bumps (RADD-ofvmkjsj), so the job
+  # ran only a handful of times a year, on a version bump or a v* tag.
   #
-  # This job used to carry `when: manual` with `allow_failure: true`, justified
-  # in exactly these words: it "catches upcoming breakage, which is worth having
-  # before a release and is not worth paying for on every MR". That reasoning was
-  # sound and its conclusion was self-defeating -- a manual job on a free-tier
-  # budget is a job nobody starts, so the thing worth having before a release was
-  # not in fact had before a release. AGENTS.md had to warn readers not to read a
-  # green pipeline as two-platform evidence.
+  # SEOR-bmgkzhvy widens that again, in the opposite direction from the
+  # manual-job problem: the job now inherits the top-level workflow rules,
+  # which fire on EVERY push to main, so this is now the long source-build
+  # job running on every merge rather than a handful of times a year. That is
+  # part of what "WHAT THIS ADDS" in the workflow: block above is flagging --
+  # more CI on ordinary merges, not less, is the cost of not gating on
+  # DESCRIPTION any more.
   #
-  # The workflow rules now fire only on a version bump or a v* tag, which IS
-  # "before a release". So the condition the old rule was approximating by hand
-  # is the pipeline's own trigger, and the job simply inherits it. This image
-  # still resolves against cloud.r-project.org -- p3m serves no R-devel binaries,
-  # so every dependency is a source build and this is the long job -- but it is
-  # now a long job that runs a handful of times a year instead of a short one
-  # that never ran at all.
-  #
-  # allow_failure is NOT set, so R-devel breakage turns the pipeline red. That is
-  # deliberate and it is cheap here: with only_allow_merge_if_pipeline_succeeds
-  # off, red is information rather than a block, and upcoming-R breakage before a
-  # CRAN submission is information worth having loudly.
+  # allow_failure is NOT set, so R-devel breakage turns the pipeline red. That
+  # is deliberate and it is cheap here: with only_allow_merge_if_pipeline_
+  # succeeds off, red is information rather than a block, and upcoming-R
+  # breakage is information worth having loudly, now on every merge instead
+  # of only near a release.
 
 # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
 # DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
@@ -318,10 +294,12 @@ check:linux-devel:
 # violation, so this job passes either way and is in place before the files can
 # arrive.
 #
-# The workflow rules above mean this pipeline fires on a DESCRIPTION-changing
-# MR, a v* tag, or a hand-started run -- which is exactly the moment the rule
-# cares about, since both files move at the DESCRIPTION bump rather than at the
-# tag. So this job does not need rules of its own.
+# The workflow rules above (SEOR-bmgkzhvy) mean this pipeline now fires on
+# every push to main and on a v* tag, not only on a DESCRIPTION-changing MR --
+# so this job runs more often than the moment it actually cares about (both
+# files move at the DESCRIPTION bump, not at every merge), but that is a cost
+# paid once per merge either way, and it is seconds. It still does not need
+# rules of its own.
 #
 # Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
 # which matters on a concurrency-1 runner where the two check jobs are long.
