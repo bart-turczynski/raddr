@@ -311,3 +311,50 @@ citation-version:
   script:
     - python3 scripts/check-citation.py --self-test
     - python3 scripts/check-citation.py
+
+# The pkgdown site (RADD-yksdevhs). Must be named `pages` and publish
+# `public/` -- that pairing is what GitLab Pages deploys, and it is why
+# _pkgdown.yml sets `destination: public` (docs/ holds the project notes).
+#
+# Default branch only, not the v* tag pipeline: the site tracks main, and a
+# tag rebuild would publish the same commit twice.
+#
+# Needs only check:linux-release. Waiting on the devel job would tie the docs
+# to upcoming-R breakage, which that job reports loudly on its own.
+#
+# pak rather than install.packages() so pkgdown's system libraries (ragg,
+# xml2, openssl) are resolved and installed rather than hand-listed the way
+# .r-job has to.
+#
+# The agent instruction files are deleted from this throwaway checkout before
+# the build: pkgdown renders every top-level .md and has no setting to skip
+# one, so they would otherwise be published as pages.
+pages:
+  stage: deploy
+  needs:
+    - job: check:linux-release
+      artifacts: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  cache: []
+  before_script:
+    - |
+      apt-get update
+    - |
+      apt-get install -y --no-install-recommends pandoc git ca-certificates
+    - |
+      Rscript -e 'if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")'
+    - |
+      Rscript -e 'pak::pkg_install("pkgdown")'
+    - |
+      Rscript -e 'pak::local_install_deps(dependencies = TRUE, upgrade = FALSE)'
+    - |
+      Rscript -e 'pak::local_install(upgrade = FALSE)'
+  script:
+    - |
+      rm -f AGENTS.md CLAUDE.md FP_AGENTS.md
+    - |
+      Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
+  artifacts:
+    paths:
+      - public

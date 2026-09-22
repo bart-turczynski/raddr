@@ -1,0 +1,100 @@
+url: https://raddr-0129a6.gitlab.io/
+
+# Not the pkgdown default. docs/ holds the project's own notes and transcripts
+# (see AGENTS.md), which a build into docs/ would overwrite. public/ is also
+# the directory GitLab Pages publishes, so the pages job needs no rename.
+destination: public
+
+template:
+  bootstrap: 5
+
+authors:
+  "Bart Turczynski":
+    href: https://turczynski.pl
+
+home:
+  title: "raddr — Show What an IP Address Literal Means Under Every Standard"
+  description: >
+    Read an IP address literal under every standard and implementation that
+    disagrees about it (strict grammar, WHATWG URL, inet_pton, inet_aton), and
+    classify the parsed values against the bundled IANA special-purpose
+    registries. Pure R, offline. Output is facts and reason codes, never an
+    allow/deny verdict.
+
+navbar:
+  structure:
+    left: [reference, articles, news]
+    right: [search, gitlab]
+  components:
+    gitlab:
+      icon: fab fa-gitlab
+      href: https://gitlab.com/bart-turczynski/raddr
+      aria-label: GitLab
+
+footer:
+  structure:
+    left: developed_by
+    right: [built_with, related]
+  components:
+    related: >
+      Related:
+      <a href="https://bart-turczynski.gitlab.io/rurl/">rurl</a> ·
+      <a href="https://robotstxtr-de6c15.gitlab.io/">robotstxtr</a>
+
+articles:
+  - title: "Articles"
+    contents:
+      - introduction
+      - reason-codes
+      - edge-cases
+
+reference:
+  - title: "Parsing"
+    desc: >
+      Read a literal under every dialect at once, or under one, and pull a
+      single dialect's reading, outcome or reason codes back out.
+    contents:
+      - addr_parse
+      - dialects
+      - parse-accessors
+
+  - title: "Classification"
+    desc: >
+      Classify addresses against the IANA registries and read single fields of
+      the result.
+    contents:
+      - addr_classify
+      - addr_category
+      - addr_global_reachability
+      - addr_within_any
+      - addr_nat64_embeddings
+
+  - title: "Addresses"
+    desc: "The address vector, its fields, and its text and numeric encodings."
+    contents:
+      - raddr_address
+      - addr_family
+      - addr_zone
+      - addr_format
+      - addr_reverse_pointer
+      - addr_to_bytes
+      - addr_to_integer
+
+  - title: "Bundled registries"
+    desc: >
+      The IANA snapshots raddr classifies against, the category map layered on
+      them, and their provenance.
+    contents:
+      - addr_registry
+      - addr_registry_version
+      - addr_registry_snapshot
+      - addr_address_space
+      - addr_address_space_version
+      - addr_transition_registry
+      - addr_category_map
+      - addr_category_version
+      - addr_codes_registry
+
+  - title: "Class predicates"
+    contents:
+      - starts_with("is_raddr_")

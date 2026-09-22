@@ -44,3 +44,6 @@
 # tarball and the check reports a top-level-files NOTE -- the one that
 # data-raw/verify.sh's own header says cannot happen (RADD-mmsfavww).
 ^tmp$
+# pkgdown config and its build output (destination: public in _pkgdown.yml).
+^_pkgdown\.yml$
+^public$

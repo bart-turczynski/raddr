@@ -45,3 +45,6 @@ tests/testthat/_snaps/
 # was kept out of git status by coincidence rather than intent
 # (RADD-mmsfavww).
 tmp/
+
+# pkgdown build output (see _pkgdown.yml)
+public/
