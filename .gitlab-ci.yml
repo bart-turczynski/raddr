@@ -105,15 +105,16 @@ default:
 #   - The pre-merge, DESCRIPTION-gated clean-room check. A version-bump MR no
 #     longer gets its own pipeline before it lands; the only pipeline is the
 #     one that runs after, on main, once the bump is already there.
-#   - The web/api escape hatch on a BRANCH. `glab ci run -b <branch>` (the
-#     documented unblock above) now creates nothing for any branch other than
+#   - The api escape hatch on a BRANCH. `glab ci run -b <branch>` (the
+#     documented unblock above) creates nothing for any branch other than
 #     main -- $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH falls through to the
-#     final `when: never`. It is no longer NEEDED (nothing requires a
-#     pipeline to merge any more), but it is a real capability loss: there is
-#     no way left to hand-trigger a clean-room check on a branch before it
-#     merges. Restoring it, if ever wanted, is the one-line amendment
-#     `- if: $CI_PIPELINE_SOURCE == "web"` inserted before the final
-#     `when: never` below.
+#     final `when: never`. The WEB half of that hatch was restored on
+#     2026-09-23 by exactly the one-line amendment this comment used to
+#     propose, so a clean-room check CAN be hand-triggered on a branch before
+#     it merges -- but from Build > Pipelines > Run pipeline, not from the
+#     CLI, because `glab ci run` starts an api-source pipeline. That
+#     asymmetry is deliberate: the button is a human deciding to spend a
+#     runner slot, an api call is a script that could do it in a loop.
 #   - The unconditional `schedule` carve-out. Checked before dropping it,
 #     not assumed: `glab api projects/:id/pipeline_schedules` returns `[]` --
 #     no schedule exists today, so dropping it is a no-op. A schedule added
@@ -150,6 +151,7 @@ workflow:
     # THE ONLY OTHER CASE: an ordinary push to main, after the merge,
     # unconditionally -- see "WHAT THIS ADDS" above for what that costs.
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
     - when: never
 
 variables:

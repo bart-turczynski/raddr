@@ -17,6 +17,13 @@
   the `workflow:` block in `.gitlab-ci.yml` for what this costs, including
   that ordinary merges now run more CI than before, not less.
 
+* A pipeline started by hand from Build > Pipelines > Run pipeline is admitted
+  on any ref, so `check:linux-release` and `check:linux-devel` can be run
+  against a feature branch before it merges. This is the one-line amendment
+  the `workflow:` block already proposed for itself; `glab ci run` still
+  creates nothing on a branch, because it starts an `api`-source pipeline
+  rather than a `web` one (`SEOR-bmgkzhvy`).
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on
