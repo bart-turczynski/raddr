@@ -2,6 +2,11 @@
 
 * `BugReports:` points at `/-/issues`, the form required by the CRAN incoming
   check (a browser is redirected to `/-/work_items`).
+* The tracker address is now split by audience rather than chosen once for the
+  whole tree: `DESCRIPTION` keeps `/-/issues`, the only form the CRAN incoming
+  check accepts, while anything a reader clicks names `/-/work_items`, the only
+  form that resolves. Recorded as generation 4 in
+  `docs/remotes-and-backups.md`.
 
 # raddr 0.1.2
 
