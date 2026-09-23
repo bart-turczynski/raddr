@@ -349,9 +349,37 @@ citation-version:
 # xml2, openssl) are resolved and installed rather than hand-listed the way
 # .r-job has to.
 #
-# The agent instruction files are deleted from this throwaway checkout before
-# the build: pkgdown renders every top-level .md and has no setting to skip
-# one, so they would otherwise be published as pages.
+# SEOR-wqxhftpv: pkgdown renders every top-level .md (pkgdown:::package_mds()
+# hardcodes its own skip list -- README/NEWS/LICENSE, cran-comments.md as
+# no_render -- so _pkgdown.yml has no setting that can exclude anything else).
+# This used to be a deny-list, `rm -f AGENTS.md CLAUDE.md FP_AGENTS.md`, which
+# only hides names it was told about: a new file in an existing family
+# (FP_CLAUDE.md, as pslr has) or a new family entirely (GEMINI.md) would sail
+# straight through and get published. Inverted to a keep-list below: every
+# top-level .md is moved out UNLESS it is named here, which hides an unlisted
+# agent file automatically instead of waiting for someone to add its name.
+#
+# Moved rather than deleted, matching pslr's `pages` job (search this repo's
+# .gitlab-ci.yml peer for "agent-md"): deleting after pkgdown has already
+# indexed the source tree leaves search.json pointing at pages that 404, where
+# moving the source file first means pkgdown never sees it and never indexes
+# it.
+#
+# The keep-list is the currently-published set, checked against the live site
+# on 2026-09-23 (CHANGELOG.html, CONTRIBUTING.html and SECURITY.html all
+# return 200 at https://raddr-0129a6.gitlab.io/) -- de-publishing any of them
+# is an editorial call this ticket does not make, so all three are
+# grandfathered rather than dropped. README.md, NEWS.md and cran-comments.md
+# are listed too even though pkgdown special-cases them on its own (index.html,
+# the changelog, and a no_render inventory entry respectively): moving one of
+# those out from under pkgdown would break the site rather than merely hide a
+# page, so they stay off the candidate list entirely instead of relying on
+# pkgdown's own skip list a second time.
+#
+# Fails loudly, not silently, if a keep-listed file is missing -- a vanished
+# README must stop the build, not quietly stop being published. That is also
+# why this is a stopifnot() up front rather than a per-file mv that could
+# partially succeed.
 pages:
   stage: deploy
   needs:
@@ -375,7 +403,9 @@ pages:
       Rscript -e 'pak::local_install(upgrade = FALSE)'
   script:
     - |
-      rm -f AGENTS.md CLAUDE.md FP_AGENTS.md
+      mkdir -p /tmp/agent-md
+    - |
+      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(drop)) invisible(file.rename(drop, file.path("/tmp/agent-md", drop))); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
     - |
       Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
   artifacts:

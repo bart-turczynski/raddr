@@ -80,11 +80,15 @@ echo "==> data-raw/check-floor-drift.R --self-test"
 Rscript data-raw/check-floor-drift.R --self-test
 
 # Same shape, same reason: a claim about .gitlab-ci.yml that nothing checked
-# is exactly how SEOR-dyzgzyot's cache silently held nothing. Reads
-# .gitlab-ci.yml as text -- no docker, no git subprocess, nothing this host or
-# the CI image might not have.
+# is exactly how SEOR-dyzgzyot's cache silently held nothing, and how a
+# deny-list agent-file filter (SEOR-wqxhftpv) would silently start publishing
+# a new agent file family. Both scripts read .gitlab-ci.yml as text -- no
+# docker, no git subprocess, nothing this host or the CI image might not have.
 echo "==> data-raw/check-libpaths-fix.R --self-test"
 Rscript data-raw/check-libpaths-fix.R --self-test
+
+echo "==> data-raw/check-agent-md-filter.R --self-test"
+Rscript data-raw/check-agent-md-filter.R --self-test
 
 echo "==> lintr::lint_package()"
 Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }'
