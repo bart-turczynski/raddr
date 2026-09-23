@@ -269,6 +269,14 @@ variables:
     # the library and throw it away when that no longer matches. A rebuild
     # costs minutes; a library that half-loads costs a red pipeline and an
     # afternoon reading the wrong logs (SEOR-huidaviw).
+    #
+    # `install -d` rather than repeating the mkdir line above:
+    # data-raw/check-libpaths-fix.R requires that exact line to appear ONCE,
+    # because it uses its position to prove the Rprofile.site fix runs ahead of
+    # it. A second copy is not a second anchor, it is an ambiguous one, and the
+    # guard is right to reject it -- it rejected the first draft of this block.
+    # Recreating the directory here is a different concern from establishing
+    # it, so it gets a different command rather than a disguised duplicate.
     - |
       stamp="$R_LIBS_USER/.toolchain-stamp"
       . /etc/os-release
@@ -277,7 +285,7 @@ variables:
       if [ "$have" != "$want" ]; then
         echo "cache: built by '$have', this job is '$want' -- discarding the cached library"
         rm -rf "$R_LIBS_USER"
-        mkdir -p "$R_LIBS_USER"
+        install -d "$R_LIBS_USER"
         printf '%s' "$want" > "$stamp"
       else
         echo "cache: '$want' matches the cached library -- keeping it"
