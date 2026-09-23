@@ -323,6 +323,13 @@ variables:
     - |
       sh data-raw/verify.sh
 
+# Fleet-wide job consolidation (SEOR-pgammbgo) folded cheap verify-stage jobs
+# into one `gates` job on pagerankr, punycoder and robotstxtr -- repos with a
+# dozen-plus jobs where per-job GitLab overhead dwarfed the work each one did.
+# raddr is NOT consolidated: it defines four jobs total, already at the floor
+# that consolidation targets. Folding them would cost per-concern red/green
+# (one gates failure no longer says which check broke) and buy roughly one
+# runner acquisition. Not worth it here.
 check:linux-release:
   extends: .r-job
 
