@@ -24,6 +24,13 @@
   creates nothing on a branch, because it starts an `api`-source pipeline
   rather than a `web` one (`SEOR-bmgkzhvy`).
 
+* `check:linux-devel` now requires `SCHEDULE_KIND=deep-check` on any
+  schedule-sourced pipeline; every other admitted source (tag, the
+  main-branch push, web) is unaffected. Guards against a second, unrelated
+  schedule silently firing this ~70-410s source build the way it could have
+  before, since the job carried no `rules:` of its own (`SEOR-ihmntqzm`). No
+  schedule exists on this project yet.
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on

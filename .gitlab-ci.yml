@@ -336,27 +336,55 @@ check:linux-release:
 check:linux-devel:
   extends: .r-job
   image: rocker/r-ver:devel
-  # NO `rules:` OVERRIDE. It used to carry `when: manual` with
-  # `allow_failure: true`, justified as catching upcoming breakage "worth
-  # having before a release and not worth paying for on every MR" -- sound
-  # reasoning with a self-defeating conclusion, since a manual job on a
-  # free-tier budget is a job nobody starts. That override was dropped when
-  # the workflow rules narrowed to version bumps (RADD-ofvmkjsj), so the job
-  # ran only a handful of times a year, on a version bump or a v* tag.
+  # HISTORY OF THE ADMISSION RULES (not of the source build itself). It used
+  # to carry `when: manual` with `allow_failure: true`, justified as catching
+  # upcoming breakage "worth having before a release and not worth paying for
+  # on every MR" -- sound reasoning with a self-defeating conclusion, since a
+  # manual job on a free-tier budget is a job nobody starts. That override was
+  # dropped when the workflow rules narrowed to version bumps (RADD-ofvmkjsj),
+  # so the job ran only a handful of times a year, on a version bump or a v*
+  # tag.
   #
   # SEOR-bmgkzhvy widens that again, in the opposite direction from the
-  # manual-job problem: the job now inherits the top-level workflow rules,
-  # which fire on EVERY push to main, so this is now the long source-build
-  # job running on every merge rather than a handful of times a year. That is
-  # part of what "WHAT THIS ADDS" in the workflow: block above is flagging --
-  # more CI on ordinary merges, not less, is the cost of not gating on
-  # DESCRIPTION any more.
+  # manual-job problem: the job inherited the top-level workflow rules, which
+  # fire on EVERY push to main, so this became the long source-build job
+  # running on every merge rather than a handful of times a year. That is part
+  # of what "WHAT THIS ADDS" in the workflow: block above is flagging -- more
+  # CI on ordinary merges, not less, is the cost of not gating on DESCRIPTION
+  # any more.
   #
   # allow_failure is NOT set, so R-devel breakage turns the pipeline red. That
   # is deliberate and it is cheap here: with only_allow_merge_if_pipeline_
   # succeeds off, red is information rather than a block, and upcoming-R
   # breakage is information worth having loudly, now on every merge instead
   # of only near a release.
+  #
+  # SEOR-ihmntqzm: the paragraphs above describe every pipeline source the
+  # workflow: block currently admits (tag, the main-branch push, web) and this
+  # job ran on all of them unconditionally, because until now it carried no
+  # `rules:` of its own -- an admitted pipeline reached every job by default.
+  # That included a pipeline source nobody had populated yet: a schedule whose
+  # ref is main satisfies the workflow block's own
+  # `$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH` rule, because that rule tests the
+  # branch, not $CI_PIPELINE_SOURCE -- so this job was always reachable by any
+  # future schedule, not just the one this ticket's owner plans to add
+  # (verified today: `glab api projects/:id/pipeline_schedules` returns `[]`,
+  # so nothing has exercised this path yet). $SCHEDULE_KIND is the selector
+  # that closes that gap: a schedule pipeline must carry
+  # SCHEDULE_KIND=deep-check (set on the schedule itself -- this file does not
+  # create one) to reach this job. A second schedule added later for an
+  # unrelated purpose falls to the explicit `when: never` below instead of
+  # silently inheriting this job the way it would have before this rule
+  # existed. Every OTHER admitted source -- tag, the main-branch push, web --
+  # is unchanged: none of them match `$CI_PIPELINE_SOURCE == "schedule"`, so
+  # they all fall through to the final `when: on_success`, which is exactly
+  # the "no rules" behavior this job had a moment ago. Nothing that used to
+  # run this job stops running it.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "deep-check"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: on_success
 
 # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
 # DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
