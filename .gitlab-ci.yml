@@ -231,8 +231,29 @@ variables:
       apt-get install -y --no-install-recommends \
         pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf \
         libcurl4-openssl-dev libssl-dev
+    # SEOR-dyzgzyot: the cache above was never holding anything. rocker's own
+    # Renviron.site sets `R_LIBS=${R_LIBS-'/usr/local/lib/R/site-library:...'}`,
+    # and R_LIBS -- not R_LIBS_USER -- wins first place in .libPaths(), so every
+    # install.packages() call in this job installed into the image and died
+    # with the container. `.libPaths()` on this image, measured with docker,
+    # before this line: `c("/usr/local/lib/R/site-library", ...)`, $R_LIBS_USER
+    # nowhere in the first two entries and dropped off the list entirely if its
+    # directory does not yet exist. Appending to Rprofile.site rather than
+    # setting R_LIBS puts $R_LIBS_USER first without fighting rocker's own
+    # variable, which a later image update could redefine out from under a
+    # hand-set R_LIBS.
+    - |
+      echo '.libPaths(c(Sys.getenv("R_LIBS_USER"), .libPaths()))' >> "${R_HOME}/etc/Rprofile.site"
     - |
       mkdir -p "$R_LIBS_USER"
+    # Prove the line above actually bites, in this job, on this image -- not by
+    # re-reading the comment. $R_LIBS_USER is silently dropped from
+    # .libPaths() if its directory does not exist, which is why this runs
+    # after the mkdir rather than before it. Site-library must stay visible
+    # (just not first), because system packages the job does not reinstall
+    # still have to resolve.
+    - |
+      Rscript -e 'lp <- .libPaths(); stopifnot(normalizePath(lp[[1]]) == normalizePath(Sys.getenv("R_LIBS_USER")), any(grepl("site-library", lp))); message("libPaths ok: ", paste(lp, collapse = " -> "))'
     # Every Suggests package is installed deliberately, for the reason the
     # GitHub workflow gives: a check that skips is not a check that passed.
     # tests/testthat/test-hedgehog.R skips whole when hedgehog is absent, and
