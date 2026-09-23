@@ -183,7 +183,22 @@ variables:
     # DESCRIPTION-changing merge or the v* tag pipeline right behind it that
     # forces a rebuild. Still a speed optimisation, never a correctness
     # input: the vctrs >= 0.7.0 assert below runs regardless of cache state.
+    #
+    # The prefix is not decoration. Without it `check:linux-release`
+    # (rocker/r-ver:latest) and `check:linux-devel` (rocker/r-ver:devel) shared
+    # one entry, so whichever ran first handed the other a library of binaries
+    # built against a different R and a different base image. That is not
+    # hypothetical: pipeline 2875359066 died with
+    #
+    #     unable to load shared object '.../.rlib/xml2/libs/xml2.so':
+    #     libxml2.so.2: cannot open shared object file
+    #
+    # because the release image carries libxml2.so.2 and the devel image
+    # (Ubuntu 26.04) carries libxml2.so.16. Installing libxml2-dev does not
+    # help -- the job already does, and it supplies the NEW soname, not the one
+    # the cached object was linked against (SEOR-huidaviw).
     key:
+      prefix: "$CI_JOB_NAME_SLUG"
       files:
         - DESCRIPTION
     paths:
@@ -246,6 +261,27 @@ variables:
       echo '.libPaths(c(Sys.getenv("R_LIBS_USER"), .libPaths()))' >> "${R_HOME}/etc/Rprofile.site"
     - |
       mkdir -p "$R_LIBS_USER"
+    # The prefix above stops two DIFFERENT jobs sharing one entry. It cannot
+    # stop ONE job's entry going stale, because `rocker/r-ver:devel` and
+    # `:latest` are moving tags: the same job name legitimately gets a new R
+    # and a new base image without DESCRIPTION or the job name changing, and
+    # the cached binaries silently stop being loadable. So record what built
+    # the library and throw it away when that no longer matches. A rebuild
+    # costs minutes; a library that half-loads costs a red pipeline and an
+    # afternoon reading the wrong logs (SEOR-huidaviw).
+    - |
+      stamp="$R_LIBS_USER/.toolchain-stamp"
+      . /etc/os-release
+      want="$(Rscript -e 'cat(R.version$major, R.version$minor, R.version$platform, sep = "-")')-${ID}-${VERSION_ID}"
+      have="$(cat "$stamp" 2>/dev/null || echo none)"
+      if [ "$have" != "$want" ]; then
+        echo "cache: built by '$have', this job is '$want' -- discarding the cached library"
+        rm -rf "$R_LIBS_USER"
+        mkdir -p "$R_LIBS_USER"
+        printf '%s' "$want" > "$stamp"
+      else
+        echo "cache: '$want' matches the cached library -- keeping it"
+      fi
     # Prove the line above actually bites, in this job, on this image -- not by
     # re-reading the comment. $R_LIBS_USER is silently dropped from
     # .libPaths() if its directory does not exist, which is why this runs
