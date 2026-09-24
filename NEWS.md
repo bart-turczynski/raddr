@@ -10,6 +10,12 @@
 
 ## Internal
 
+* CI comments and `docs/verification-gates.md` no longer describe a
+  "concurrency-1 shared runner". CI runs on a self-hosted Docker runner on one
+  arm64 Mac, with its job slots set in a local config file, and has not run on
+  `amd64` since 2026-09-06; the docs now say so (`SEOR-gpafxhua`,
+  `SEOR-auklpuoa`).
+
 * CI now runs once per merge, on `main`, instead of on a `DESCRIPTION`-changing
   merge request before the merge and a `v*` tag after it. Fleet-wide policy
   (`SEOR-bmgkzhvy`), applied here last because raddr alone required

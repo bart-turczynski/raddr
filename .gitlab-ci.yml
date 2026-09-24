@@ -19,13 +19,19 @@
 #   2. A CLEAN PACKAGE LIBRARY. The host library accumulated over 0.1.0's whole
 #      development. An accidental dependency on something installed but not
 #      declared would be invisible to it and fatal on a user's machine.
-#   3. NATIVE amd64. docs/check-matrix.md carries two harness caveats because
-#      its Ubuntu rows run emulated on an arm64 Mac -- a source-built `fs`
-#      needing libuv1-dev, and GNU tar 1.35 unable to extract into a
-#      subdirectory under emulation. Native execution settled both on
-#      2026-08-02: libuv1-dev is a genuine system requirement and is installed
-#      below, while the tar failure does not exist off the emulator, because a
-#      runner clones with git and never reaches tar.
+#   3. NATIVE amd64 -- NOT PROVIDED SINCE 2026-09-10. docs/check-matrix.md
+#      carries two harness caveats because its Ubuntu rows run emulated on an
+#      arm64 Mac -- a source-built `fs` needing libuv1-dev, and GNU tar 1.35
+#      unable to extract into a subdirectory under emulation. Native amd64
+#      execution on GitLab.com's SaaS runners settled both on 2026-08-02:
+#      libuv1-dev is a genuine system requirement and is installed below,
+#      while the tar failure does not exist off the emulator, because a runner
+#      clones with git and never reaches tar. Those two results stand. The
+#      amd64 coverage does not: the namespace's SaaS compute quota ran out,
+#      the last amd64 pipeline ran on 2026-09-06, and since 2026-09-10 every
+#      job here runs on `seor-local-docker`, a self-hosted Docker runner on an
+#      arm64 Mac -- Linux aarch64 containers. So CI asserts 1, 2 and 4 today,
+#      not 3. Whether to restore it is SEOR-auklpuoa.
 #   4. A RESULT TIED TO A COMMIT. The hook proves a tree passed on the way out;
 #      it leaves no artifact saying which one.
 #
@@ -33,8 +39,10 @@
 # not Windows, which is still checked by nothing (RADD-xxuzwmuj holds that, and
 # the answer there is win-builder, not a runner -- GitLab's two Windows shared
 # runners report online=true but status=paused); not macOS beyond the pre-push
-# hook, and a self-hosted Mac runner is REJECTED, not pending (see RADD-fgciezpx
-# for why a route to an already-covered platform is worth nothing); not minimum
+# hook, and a self-hosted Mac runner for macOS is REJECTED, not pending (see
+# RADD-fgciezpx for why a route to an already-covered platform is worth
+# nothing) -- the self-hosted runner CI does use today runs Linux containers
+# on a Mac, which adds no macOS coverage; not minimum
 # dependency versions, which check-dep-floor.sh measures at exactly vctrs 0.7.0
 # on R 4.0.0; and no additional semantic diversity, since the libc dialects are
 # already measured under glibc and musl by data-raw/oracle-libc-linux.sh
@@ -50,8 +58,8 @@
 
 default:
   image: rocker/r-ver:latest
-  # Free-tier compute minutes are finite and superseded pipelines answer a
-  # question nobody is still asking.
+  # Runner slots are finite -- one Mac serves the whole fleet -- and
+  # superseded pipelines answer a question nobody is still asking.
   interruptible: true
 
 # ONE PIPELINE, ON MAIN (SEOR-bmgkzhvy). Not on a merge request, not on an
@@ -71,13 +79,17 @@ default:
 # reasoning about just changed underneath it.
 #
 # WHY NOW. SEOR-bmgkzhvy measured a fleet-wide pathology: a merged slice was
-# firing THREE pipelines on a concurrency-1 shared runner -- one for the
-# branch, one for the merge request, one on main -- and two of the three are
-# guaranteed waste. The branch pipeline dies at get_sources once the
-# slice-flow deletes the branch it ran for; the MR pipeline for an
-# already-merged MR has nothing left to gate. Twice this stalled the shared
-# runner for 30+ minutes re-verifying trees that no longer existed, on
-# multiple repos at once, immune to a dedicated runner. raddr was the one
+# firing THREE pipelines -- one for the branch, one for the merge request, one
+# on main -- and two of the three are guaranteed waste. The branch pipeline
+# dies at get_sources once the slice-flow deletes the branch it ran for; the
+# MR pipeline for an already-merged MR has nothing left to gate. Twice this
+# stalled the runner for 30+ minutes re-verifying trees that no longer
+# existed, on multiple repos at once; more runner slots would only have run
+# the waste sooner. That runner is not a GitLab.com shared runner and was
+# never capped at 1: it is `seor-local-docker`, a self-hosted Docker runner on
+# one Mac, registered to six of the fleet's eight repos (raddr among them).
+# Its job slots are `concurrent` in ~/.gitlab-runner/config.toml, which was 2
+# then and is 4 since 2026-09-23 (seor design/adr/0003). raddr was the one
 # repo where the fix below was structurally blocked: this project alone
 # carried only_allow_merge_if_pipeline_succeeds=true (see "IT DRIFTED BACK
 # ON" in git history) with allow_merge_on_skipped_pipeline=false, and the old
@@ -404,7 +416,8 @@ check:linux-devel:
 # rules of its own.
 #
 # Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
-# which matters on a concurrency-1 runner where the two check jobs are long.
+# which matters because the fleet shares a few runner slots on one Mac
+# (`concurrent` = 4 since 2026-09-23) and the two check jobs are long.
 citation-version:
   stage: test
   image: python:3.13-alpine
