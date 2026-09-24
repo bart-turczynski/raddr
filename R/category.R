@@ -74,7 +74,7 @@ raddr_category_blocks <- list(
   broadcast = "255.255.255.255/32",
 
   # ULA is `private` because cross-family normalization is the level's job, and
-  # the consumer settles it: ssrfr ADR-001 section 2.1 makes the unblocked
+  # the consumer settles it: ssrfr ADR 0001 section 2.1 makes the unblocked
   # fc00::/7 its motivating defect. That fc00::/8 (L=0) has no defining
   # specification -- only fd00::/8 is real, RFC 4193 section 3.1 -- is a
   # classify code at strength = unspecified, not a category. `private` does

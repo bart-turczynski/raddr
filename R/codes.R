@@ -8,11 +8,12 @@
 # one is breaking. That is what the `since` column is for.
 #
 # They are NOT a vocabulary `ssrfr` echoes verbatim, and an earlier version of
-# this comment claimed they were. `ssrfr` ADR-001 section 7 assigns the
-# "reason-code vocabulary and result model" to `ssrfr`, and its spec section 5.2
-# fixes those as kebab-case, normative for `ssrfr` and constrained by its own
-# published consumers -- the case divergence is deliberate, not drift. Both
-# documents cannot be right, and the counterparty's own ADR wins.
+# this comment claimed they were. `ssrfr` ADR 0001 section 7 assigns the
+# "reason-code vocabulary and result model" to `ssrfr`, and its spec
+# (`ssrfr-v1.md` section 6.5) fixes those as kebab-case, normative for `ssrfr`
+# and constrained by its own published consumers -- the case divergence is
+# deliberate, not drift. Both documents cannot be right, and the
+# counterparty's own ADR wins.
 #
 # So the relationship is many-to-one and conditional, not an alias: raddr states
 # facts, `ssrfr` interprets them into a refusal reason. A raddr code may travel

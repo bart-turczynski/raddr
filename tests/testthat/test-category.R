@@ -148,7 +148,7 @@ test_that("the contested calls of section 5.3.2 are pinned", {
   expect_equal(level("192.31.196.0/24"), "anycast")
   expect_equal(level("2001:3::/32"), "anycast")
 
-  # ULA is private, settled by the consumer (ssrfr ADR-001 section 2.1).
+  # ULA is private, settled by the consumer (ssrfr ADR 0001 section 2.1).
   expect_equal(level("fc00::/7"), "private")
 
   # `special` is an assignment, not a fallthrough.

@@ -959,8 +959,8 @@ valid-value set derived from it rather than restated. Adding a code is an API
 addition and removing one is breaking, which is what `since` records.
 
 **Correction: `ssrfr` does not report raddr's codes, and this section used to
-claim it did.** `ssrfr` ADR-001 §7 assigns the reason-code vocabulary and result
-model to `ssrfr`; its spec §5.2 fixes those codes as kebab-case, normative for
+claim it did.** `ssrfr` ADR 0001 §7 assigns the reason-code vocabulary and result
+model to `ssrfr`; its spec (`ssrfr-v1.md` §6.5) fixes those codes as kebab-case, normative for
 `ssrfr` and constrained by its own published consumers, with the case divergence
 called *deliberate*. Both documents cannot be right, and the counterparty's own
 ADR wins. The relationship is many-to-one and conditional: raddr states facts,
@@ -1245,7 +1245,7 @@ reachability," which admits AS112, AMT, PCP/TURN/SRP, 6a44 and the deprecated
 says "AS112-v4" and "AMT" better than a level can.
 
 **`private` covers ULA.** Cross-family normalization is the level's whole job,
-and the consumer settles it — `ssrfr` ADR-001 §2.1 makes the unblocked
+and the consumer settles it — `ssrfr` ADR 0001 §2.1 makes the unblocked
 `fc00::/7` its motivating defect and prescribes exactly this one word. The
 genuinely surprising fact that `fc00::/8` (L=0) has **no defining
 specification** — only `fd00::/8` is real, RFC 4193 §3.1 — lives in the classify
