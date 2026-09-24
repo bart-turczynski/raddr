@@ -31,7 +31,12 @@
 #      the last amd64 pipeline ran on 2026-09-06, and since 2026-09-10 every
 #      job here runs on `seor-local-docker`, a self-hosted Docker runner on an
 #      arm64 Mac -- Linux aarch64 containers. So CI asserts 1, 2 and 4 today,
-#      not 3. Whether to restore it is SEOR-auklpuoa.
+#      not 3, and that is now DECIDED rather than pending (SEOR-auklpuoa,
+#      2026-09-24): CI ITSELF NO LONGER COVERS amd64 and will not be made to.
+#      Instead, before every CRAN release, the tarball goes to R-hub's R
+#      Consortium runners with rhub::rc_submit() on its Linux x86_64
+#      platforms, and the result is recorded in that release's
+#      cran-comments.md. docs/verification-gates.md carries the exact step.
 #   4. A RESULT TIED TO A COMMIT. The hook proves a tree passed on the way out;
 #      it leaves no artifact saying which one.
 #
