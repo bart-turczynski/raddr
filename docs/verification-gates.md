@@ -52,6 +52,10 @@ The check moves to release time instead. **Before every CRAN release**, as a rel
 
 Tracker notes from the GitHub suspension say R-hub v2 is blocked. That was about `rhub::rhub_check()`, which runs in the package's own GitHub repository. `rc_submit()` does not use one.
 
+## No dependency vulnerability audit, on purpose
+
+Some fleet packages run a dependency vulnerability audit: `tests/testthat/test-security.R` against OSS Index via oysteR, `test-osv.R` against OSV via rosv, and scheduled `security-audit` and `osv-audit` CI jobs. raddr has none of these, and that is a decision, not an omission (owner, 2026-09-24, `SEOR-fftbjnpl`). Its hard dependencies are rlang and vctrs and nothing else, so an audit would scan a two-package closure. The cost is adding oysteR or rosv to `Suggests:` of a package already on CRAN, and that is not worth paying for so small a closure. Revisit if `Imports:` grows.
+
 ## What the local gate does not cover
 
 The hook checks whatever host invokes it, which for the whole of 0.1.0's development was **one platform and one R version**: macOS arm64 (Darwin 25.4.0) on R 4.6.0. CRAN checks Windows, Linux and r-devel. That is still true of *the hook*, but the sentence that used to follow it here — that the gap cannot be closed locally — was wrong, and `data-raw/check-matrix.sh` is what disproved it. What survives of the claim is Windows, which no local run reaches; `docs/win-builder.md` records the one manual win-builder submission that has ever checked it.
