@@ -33,6 +33,15 @@
 # pkgdown breaks the site rather than merely hiding a page, so this guard
 # insists they stay off the move list regardless of what pkgdown would have
 # done anyway.
+#
+# A STATIC PIN PASSED WHILE THE SITE LEAKED. The first keep-list moved files
+# with file.rename() and discarded the result. On the runner that rename is
+# cross-device (a mounted checkout, the container's own /tmp), so it failed
+# with a warning on every file, and AGENTS.html, CLAUDE.html and FP_AGENTS.html
+# were published from 2026-09-23 while every check below reported ok. Text
+# cannot prove a move happened, so two checks now pin the runtime safety net
+# instead: no file.rename() in the job, and a postcondition that stops the
+# build while any unlisted .md is still at the top level.
 
 known_agent_prefixes <- c("^AGENTS", "^CLAUDE", "^FP_", "^GEMINI")
 
@@ -88,6 +97,12 @@ checks <- function(lines) {
     fixed = TRUE
   )
   moves_to_tmp <- any(grepl("/tmp/agent-md", code_lines, fixed = TRUE))
+  renames <- any(grepl("file.rename(", code_lines, fixed = TRUE))
+  postcondition <- any(grepl(
+    "refusing to publish it",
+    code_lines,
+    fixed = TRUE
+  ))
   deletes_only <- any(grepl("^\\s*rm -f", code_lines, perl = TRUE))
 
   keep <- tryCatch(extract_keep_list(lines), error = function(e) NULL)
@@ -107,6 +122,14 @@ checks <- function(lines) {
     list(
       "nothing in the pages job still deletes rather than moves",
       !deletes_only
+    ),
+    list(
+      "no file.rename() (it fails cross-device on the runner, only warning)",
+      !renames
+    ),
+    list(
+      "build refuses to run while an unlisted .md remains at the top level",
+      postcondition
     ),
     list("a `keep <- c(...)` keep-list is present and parses", !is.null(keep)),
     list(
@@ -169,6 +192,32 @@ self_test <- function(root) {
       FALSE,
       function(x) {
         x[[hit]] <- "      rm -f AGENTS.md CLAUDE.md FP_AGENTS.md"
+        x
+      }
+    ),
+    list(
+      "move reverted to an unchecked file.rename()",
+      FALSE,
+      function(x) {
+        x[[hit]] <- sub(
+          "copied <- file.copy(drop, \"/tmp/agent-md\", overwrite = TRUE);",
+          "invisible(file.rename(drop, file.path(\"/tmp/agent-md\", drop)));",
+          x[[hit]],
+          fixed = TRUE
+        )
+        x
+      }
+    ),
+    list(
+      "postcondition before build_site removed",
+      FALSE,
+      function(x) {
+        x[[hit]] <- sub(
+          "refusing to publish it",
+          "moving on",
+          x[[hit]],
+          fixed = TRUE
+        )
         x
       }
     )

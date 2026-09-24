@@ -472,6 +472,18 @@ citation-version:
 # README must stop the build, not quietly stop being published. That is also
 # why this is a stopifnot() up front rather than a per-file mv that could
 # partially succeed.
+#
+# Copy-then-unlink, NOT file.rename(), and a postcondition before build_site.
+# The first cut used file.rename() and discarded its result. On the runner the
+# checkout is a mounted volume and /tmp is the container's own filesystem, so
+# every rename failed with "Invalid cross-device link" -- file.rename() only
+# WARNS on that -- the script still printed "moved: AGENTS.md, CLAUDE.md,
+# FP_AGENTS.md", and pkgdown published all three. Live from 2026-09-23 until
+# this fix: https://raddr-0129a6.gitlab.io/AGENTS.html returned 200, while a
+# static pin (data-raw/check-agent-md-filter.R) reported the filter correct.
+# So the move is now checked, and whatever the mechanism does, the job
+# refuses to build while any unlisted .md is still at the top level. That
+# final check is the one the keep-list's safety actually rests on.
 pages:
   stage: deploy
   needs:
@@ -497,7 +509,7 @@ pages:
     - |
       mkdir -p /tmp/agent-md
     - |
-      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(drop)) invisible(file.rename(drop, file.path("/tmp/agent-md", drop))); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
+      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); copied <- file.copy(drop, "/tmp/agent-md", overwrite = TRUE); if (!all(copied)) stop("could not copy into /tmp/agent-md: ", paste(drop[!copied], collapse = ", "), call. = FALSE); unlink(drop); left <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(left)) stop("unlisted .md still in the site source, refusing to publish it: ", paste(left, collapse = ", "), call. = FALSE); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
     - |
       Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
   artifacts:

@@ -10,6 +10,13 @@
 
 ## Internal
 
+* The `pkgdown` site stopped publishing `AGENTS.html`, `CLAUDE.html` and
+  `FP_AGENTS.html`, which it had served since 2026-09-23 despite the keep-list
+  filter. The filter moved files with `file.rename()`, which fails across
+  devices on the CI runner and only warns; it now copies and removes, and the
+  `pages` job refuses to build while any unlisted `.md` remains
+  (`SEOR-wqxhftpv`).
+
 * CI comments and `docs/verification-gates.md` no longer describe a
   "concurrency-1 shared runner". CI runs on a self-hosted Docker runner on one
   arm64 Mac, with its job slots set in a local config file, and has not run on
