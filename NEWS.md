@@ -47,6 +47,20 @@
   before, since the job carried no `rules:` of its own (`SEOR-ihmntqzm`). No
   schedule exists on this project yet.
 
+* CI no longer covers `amd64` and will not again. Instead, every CRAN release
+  is first checked on R-hub's x86_64 Linux platforms with `rhub::rc_submit()`,
+  and the result goes in that release's `cran-comments.md`. The step is in
+  `docs/verification-gates.md` (`SEOR-auklpuoa`).
+
+* raddr carries no dependency vulnerability audit, on purpose: its only hard
+  dependencies are rlang and vctrs, which is too small a closure to justify
+  adding `oysteR` or `rosv` to `Suggests:` of a released package. Recorded in
+  `docs/verification-gates.md` (`SEOR-fftbjnpl`).
+
+* `scripts/check-bugreports.py` now enforces the tracker split on the pre-push
+  hook and in CI: `BugReports:` and the package help page keep `/-/issues`,
+  and no human-facing file links it (`SEOR-ocbtrrnl`).
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on
