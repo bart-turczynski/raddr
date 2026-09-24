@@ -1,5 +1,8 @@
 # raddr 0.1.2.9000
 
+* `addr_global_reachability()`'s help no longer says exactly one block answers
+  `NA`: four do, including all of 6to4 (`2002::/16`) and Teredo (`2001::/32`),
+  and it now points 6to4 callers at the embedding row.
 * `BugReports:` points at `/-/issues`, the form required by the CRAN incoming
   check (a browser is redirected to `/-/work_items`).
 * The tracker address is now split by audience rather than chosen once for the

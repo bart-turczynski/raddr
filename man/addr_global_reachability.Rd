@@ -47,10 +47,17 @@ whole reason it is exported.
 
 
 \code{NA} means the registries leave the question open, and it must not be read
-as \code{FALSE}. Today exactly one block is in that tier: \verb{192.88.99.0/24}, which
-IANA withdrew and gave no policy at all, together with its 6to4 image
-\verb{2002:c058:6301::}. Asserting a MUST-drop there would be reading IANA's
-\code{N/A} as a \code{FALSE} one level down.
+as \code{FALSE}. Four special-purpose blocks are in that tier (see
+\code{\link[=addr_registry]{addr_registry()}}): the withdrawn \verb{192.88.99.0/24} and \verb{2001:10::/28}, which
+IANA gave no policy at all, and the live 6to4 (\verb{2002::/16}) and Teredo
+(\verb{2001::/32}) blocks, which IANA itself records as \code{N/A}. So every 6to4 and
+every Teredo address answers \code{NA} here, whatever it wraps. Asserting a
+MUST-drop there would be reading IANA's \code{N/A} as a \code{FALSE} one level down.
+
+For 6to4 the question IANA declines is answered by the embedded IPv4 address:
+pass the embedding row, \code{addr_global_reachability(addr_embeddings(x)[[1]])}.
+The Teredo \code{N/A} has an unrelated cause -- relay advertisement is
+per-deployment -- and no bits in the address answer it.
 
 Handle it explicitly. R propagates \code{NA} rather than resolving it: \code{any()}
 returns \code{NA} instead of \code{FALSE}, \code{which()} drops the element entirely, and

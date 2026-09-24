@@ -873,10 +873,17 @@ addr_embeddings <- function(x) {
 #' @section `NA` is a third answer, not a missing one:
 #'
 #' `NA` means the registries leave the question open, and it must not be read
-#' as `FALSE`. Today exactly one block is in that tier: `192.88.99.0/24`, which
-#' IANA withdrew and gave no policy at all, together with its 6to4 image
-#' `2002:c058:6301::`. Asserting a MUST-drop there would be reading IANA's
-#' `N/A` as a `FALSE` one level down.
+#' as `FALSE`. Four special-purpose blocks are in that tier (see
+#' [addr_registry()]): the withdrawn `192.88.99.0/24` and `2001:10::/28`, which
+#' IANA gave no policy at all, and the live 6to4 (`2002::/16`) and Teredo
+#' (`2001::/32`) blocks, which IANA itself records as `N/A`. So every 6to4 and
+#' every Teredo address answers `NA` here, whatever it wraps. Asserting a
+#' MUST-drop there would be reading IANA's `N/A` as a `FALSE` one level down.
+#'
+#' For 6to4 the question IANA declines is answered by the embedded IPv4 address:
+#' pass the embedding row, `addr_global_reachability(addr_embeddings(x)[[1]])`.
+#' The Teredo `N/A` has an unrelated cause -- relay advertisement is
+#' per-deployment -- and no bits in the address answer it.
 #'
 #' Handle it explicitly. R propagates `NA` rather than resolving it: `any()`
 #' returns `NA` instead of `FALSE`, `which()` drops the element entirely, and
