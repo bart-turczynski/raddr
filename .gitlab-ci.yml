@@ -431,6 +431,11 @@ citation-version:
   script:
     - python3 scripts/check-citation.py --self-test
     - python3 scripts/check-citation.py
+    # Rides in this job rather than its own: same image, same offline,
+    # stdlib-only shape, and a separate job would take a runner slot for
+    # seconds of work. BugReports split, SEOR-ocbtrrnl.
+    - python3 scripts/check-bugreports.py --self-test
+    - python3 scripts/check-bugreports.py
 
 # The pkgdown site (RADD-yksdevhs). Must be named `pages` and publish
 # `public/` -- that pairing is what GitLab Pages deploys, and it is why
