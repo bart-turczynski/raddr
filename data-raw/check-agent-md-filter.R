@@ -26,7 +26,8 @@
 #
 # The pinned set below is the live site measured on 2026-09-23:
 # {CHANGELOG,CONTRIBUTING,SECURITY}.html under
-# https://bart-turczynski.gitlab.io/raddr/ all return 200, so all three are grandfathered rather than de-published
+# https://bart-turczynski.gitlab.io/raddr/ all return 200, so all three are
+# grandfathered rather than de-published
 # (de-publishing any of them is a separate editorial call this ticket does not
 # make). README.md, NEWS.md and cran-comments.md are pinned too, even though
 # pkgdown special-cases them on its own -- moving one of those out from under
