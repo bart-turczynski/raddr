@@ -53,8 +53,8 @@
   `docs/verification-gates.md` (`SEOR-auklpuoa`).
 
 * raddr carries no dependency vulnerability audit, on purpose: its full hard
-  dependency closure is five r-lib packages (cli, glue, lifecycle, rlang,
-  vctrs), none of which reaches the network or links a system library, which
+  dependency closure is five r-lib packages (`cli`, `glue`, `lifecycle`,
+  `rlang`, `vctrs`), none of which reaches the network or links a system library, which
   is too little to justify adding `oysteR` or `rosv` to `Suggests:` of a
   released package. Recorded in `docs/verification-gates.md`
   (`RADD-hmvlwcyi`, `SEOR-fftbjnpl`).
