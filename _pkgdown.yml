@@ -1,4 +1,4 @@
-url: https://raddr-0129a6.gitlab.io/
+url: https://bart-turczynski.gitlab.io/raddr/
 
 # Not the pkgdown default. docs/ holds the project's own notes and transcripts
 # (see AGENTS.md), which a build into docs/ would overwrite. public/ is also
@@ -39,7 +39,7 @@ footer:
     related: >
       Related:
       <a href="https://bart-turczynski.gitlab.io/rurl/">rurl</a> ·
-      <a href="https://robotstxtr-de6c15.gitlab.io/">robotstxtr</a>
+      <a href="https://bart-turczynski.gitlab.io/robotstxtr/">robotstxtr</a>
 
 articles:
   - title: "Articles"

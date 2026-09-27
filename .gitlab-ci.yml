@@ -469,8 +469,8 @@ citation-version:
 #
 # The keep-list is the currently-published set, checked against the live site
 # on 2026-09-23 (CHANGELOG.html, CONTRIBUTING.html and SECURITY.html all
-# return 200 at https://raddr-0129a6.gitlab.io/) -- de-publishing any of them
-# is an editorial call this ticket does not make, so all three are
+# return 200 at https://bart-turczynski.gitlab.io/raddr/) -- de-publishing any
+# of them is an editorial call this ticket does not make, so all three are
 # grandfathered rather than dropped. README.md, NEWS.md and cran-comments.md
 # are listed too even though pkgdown special-cases them on its own (index.html,
 # the changelog, and a no_render inventory entry respectively): moving one of
@@ -489,8 +489,8 @@ citation-version:
 # every rename failed with "Invalid cross-device link" -- file.rename() only
 # WARNS on that -- the script still printed "moved: AGENTS.md, CLAUDE.md,
 # FP_AGENTS.md", and pkgdown published all three. Live from 2026-09-23 until
-# this fix: https://raddr-0129a6.gitlab.io/AGENTS.html returned 200, while a
-# static pin (data-raw/check-agent-md-filter.R) reported the filter correct.
+# this fix: https://bart-turczynski.gitlab.io/raddr/AGENTS.html returned 200,
+# while a static pin (data-raw/check-agent-md-filter.R) reported the filter correct.
 # So the move is now checked, and whatever the mechanism does, the job
 # refuses to build while any unlisted .md is still at the top level. That
 # final check is the one the keep-list's safety actually rests on.

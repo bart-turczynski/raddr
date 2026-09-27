@@ -10,6 +10,9 @@
   check accepts, while anything a reader clicks names `/-/work_items`, the only
   form that resolves. Recorded as generation 4 in
   `docs/remotes-and-backups.md`.
+* The documentation site moved to `https://bart-turczynski.gitlab.io/raddr/`,
+  the fleet's standard GitLab Pages address; the old per-project
+  `gitlab.io` domain stops resolving (`SEOR-hcmtspmv`).
 
 ## Internal
 
