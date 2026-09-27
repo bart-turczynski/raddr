@@ -13,8 +13,8 @@
 
 ## Internal
 
-* The agent instructions no longer import fp's generated `FP_AGENTS.md`, which
-  is deleted, and point at the house `agent-workflow` and `fp` skills for the
+* The agent instructions no longer import `FP_AGENTS.md`, the file the `fp`
+  tracker generates, which is deleted, and point at the house `agent-workflow` and `fp` skills for the
   git workflow (`SEOR-ipwcbcov`).
 
 * The `pkgdown` site stopped publishing `AGENTS.html`, `CLAUDE.html` and
