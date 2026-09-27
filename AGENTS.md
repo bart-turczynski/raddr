@@ -6,7 +6,7 @@ R package. Reports what an IP address literal means under each standard and impl
 
 Verify with `sh data-raw/verify.sh`: floor drift, lintr, spelling, `rcmdcheck --as-cran`. The pre-push hook and `.gitlab-ci.yml` both call that one file. Each clone runs `pre-commit install && pre-commit install --hook-type pre-push` once.
 
-Before implementing, load the issue with `fp context <id>`; before creating one, check `fp tree` for duplicates.
+Before implementing, load the issue with `fp context <id>`; before creating one, check `fp tree` for duplicates. Git follows the house `agent-workflow` skill, and fp status changes stay decoupled from git (the `fp` skill's `references/decoupling.md`).
 
 Planning notes stay in `_scratch/`, uncommitted alongside `.fp/`. Transcripts under `docs/` record what was true when the run happened; never edit one to match a later state. Remaining `github.com` strings are third-party provenance or transcripts, and stay.
 
@@ -26,5 +26,3 @@ cost an afternoon (SEOR-tcytizic).
 
 If that check passes and the gate is still red on a tree you have not touched,
 say so and keep the evidence rather than assuming your change caused it.
-
-@FP_AGENTS.md
