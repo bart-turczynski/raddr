@@ -52,10 +52,12 @@
   and the result goes in that release's `cran-comments.md`. The step is in
   `docs/verification-gates.md` (`SEOR-auklpuoa`).
 
-* raddr carries no dependency vulnerability audit, on purpose: its only hard
-  dependencies are rlang and vctrs, which is too small a closure to justify
-  adding `oysteR` or `rosv` to `Suggests:` of a released package. Recorded in
-  `docs/verification-gates.md` (`SEOR-fftbjnpl`).
+* raddr carries no dependency vulnerability audit, on purpose: its full hard
+  dependency closure is five r-lib packages (cli, glue, lifecycle, rlang,
+  vctrs), none of which reaches the network or links a system library, which
+  is too little to justify adding `oysteR` or `rosv` to `Suggests:` of a
+  released package. Recorded in `docs/verification-gates.md`
+  (`RADD-hmvlwcyi`, `SEOR-fftbjnpl`).
 
 * `scripts/check-bugreports.py` now enforces the tracker split on the pre-push
   hook and in CI: `BugReports:` and the package help page keep `/-/issues`,
