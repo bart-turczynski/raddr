@@ -60,12 +60,12 @@ test_that("block_edges() agrees with the block text read as bits", {
   expect_identical(bad, no_blocks)
 })
 
-test_that("a block contains both its edges and neither of its neighbours", {
+test_that("a block contains both its edges and neither of its neighbors", {
   # Two descriptions of one block -- four words and a length, against the text
   # `addr_within()` re-parses -- so a disagreement is either a wrong divisor or
   # a row whose text and words are not the same block.
   #
-  # The neighbours are the half of this that is new. An edge lying inside its
+  # The neighbors are the half of this that is new. An edge lying inside its
   # own block is equally true of a block one address too wide; the address one
   # past that edge lying *outside* it is not.
   bad <- over_tables(function(which, blocks, p) {
@@ -86,10 +86,10 @@ test_that("a block contains both its edges and neither of its neighbours", {
   expect_identical(bad, no_blocks)
 })
 
-test_that("only the ends of a space have no neighbour", {
+test_that("only the ends of a space have no neighbor", {
   # Pinning these is what stops a wrap-around from reading as a pass. If
   # `slow_bits_step()` carried round instead of answering `NA`, these lists
-  # would be empty, every neighbour assertion above would still pass, and it
+  # would be empty, every neighbor assertion above would still pass, and it
   # would be passing about the wrong four addresses.
   ends <- over_tables(function(which, blocks, p) {
     list(
@@ -139,7 +139,7 @@ test_that("the longest match at an edge is the block or one nested inside it", {
   expect_identical(bad, no_blocks)
 })
 
-test_that("no neighbour or sibling resolves to the block it sits beside", {
+test_that("no neighbor or sibling resolves to the block it sits beside", {
   # The off-by-one detector. Every one of these addresses matches *something* in
   # a table that covers its space, which is what makes a slip in the prefix
   # arithmetic silent -- the answer stays well formed and names a block one
@@ -156,7 +156,7 @@ test_that("no neighbour or sibling resolves to the block it sits beside", {
   expect_identical(bad, no_blocks)
 })
 
-test_that("a neighbour may still be in the registry, because blocks abut", {
+test_that("a neighbor may still be in the registry, because blocks abut", {
   # The escape hatch. "The address past the end of a block is outside the
   # registry" is the natural expectation and it is false for 20 of the 51
   # special-purpose blocks, ten of which are followed *immediately* by another
@@ -327,7 +327,7 @@ test_that("the special-purpose record never leaks across a block boundary", {
     )
   }
 
-  # Outside, the claim is *not* "no block matches" -- 20 of the 51 neighbours
+  # Outside, the claim is *not* "no block matches" -- 20 of the 51 neighbors
   # are still in the special-purpose registry, and the sibling of a nested block
   # is usually its parent. The claim is that the block named is never this one.
   leaked <- lapply(

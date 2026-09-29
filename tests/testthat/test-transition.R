@@ -2,7 +2,7 @@
 #
 # The bit offsets here are transcribed from RFCs by hand, which is exactly the
 # kind of data that is wrong in a way no amount of reading catches. So these
-# tests check the geometry against RFC 6052's own rules -- segments totalling
+# tests check the geometry against RFC 6052's own rules -- segments totaling
 # 32 bits, ordered, disjoint, and clear of the reserved u-byte -- rather than
 # only restating the numbers a second time.
 

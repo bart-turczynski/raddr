@@ -584,7 +584,7 @@ block_edges <- function(table) {
 #
 # So the probes below are built from the block's other stored form -- its text
 # -- as characters. The base address is truncated to `len` bits and padded out,
-# and a neighbour is a ripple carry over the same string. No divisor, no word,
+# and a neighbor is a ripple carry over the same string. No divisor, no word,
 # and no arithmetic the shipped code also does, which is what makes a
 # disagreement mean something.
 

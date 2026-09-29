@@ -567,7 +567,7 @@ test_that("no accepted hextet converts to NA", {
 })
 
 test_that("the fix does not reject a literal that only looks like it", {
-  # Newline-free neighbours of the rejected forms.
+  # Newline-free neighbors of the rejected forms.
   expect_identical(format(addr_pton("1:2:3:4:5:6:7:8")), "1:2:3:4:5:6:7:8")
   expect_identical(format(addr_pton("::1")), "::1")
   expect_identical(format(addr_pton("fe80::1")), "fe80::1")

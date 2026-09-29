@@ -79,7 +79,7 @@ test_that("test 3: blocks sharing an IANA name resolve to the same level", {
 })
 
 test_that("test 4: an unmapped row fails, never defaulting to global", {
-  # The failure mode this is the whole defence against: a registry update adds
+  # The failure mode this is the whole defense against: a registry update adds
   # a block, nobody classifies it, and it silently reads as ordinary public
   # space. Simulated here, because the real event is an upstream change.
   rows <- registry_rows()

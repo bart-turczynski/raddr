@@ -265,7 +265,7 @@ test_that("section 2.4's table round-trips through the supplied PREFIX", {
 })
 
 test_that("a wrong prefix length reads a plausible wrong address", {
-  # The reason the row is labelled caller-asserted. These are the same 128 bits
+  # The reason the row is labeled caller-asserted. These are the same 128 bits
   # read under two prefixes the caller might plausibly have configured, and
   # neither reading is detectably wrong from the address alone.
   a <- addr_pton("2001:db8:122:c000:2:2100::")

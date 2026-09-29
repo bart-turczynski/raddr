@@ -511,7 +511,7 @@ test_that("the three /96 wrapper forms carry their address verbatim", {
                "ipv4_translated/embedded 192.0.2.33 documentation")
 
   # Two textual spellings of one 128-bit value take one code path. Node's URL
-  # parser normalising `::ffff:169.254.169.254` to the hex form while the range
+  # parser normalizing `::ffff:169.254.169.254` to the hex form while the range
   # check only read the dotted one is the root cause docs/research/04 records
   # behind CVE-2024-29415 and six others.
   expect_equal(embedded_of("::ffff:7f00:1"), embedded_of("::ffff:127.0.0.1"))

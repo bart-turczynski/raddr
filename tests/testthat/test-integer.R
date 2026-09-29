@@ -376,7 +376,7 @@ test_that("bit64's integer64 is read exactly", {
 test_that("the seam survives a fuzz of both paths", {
   set.seed(915L)
   vals <- unique(c(
-    # Every power of ten from 10^13 to 10^17 and its immediate neighbours,
+    # Every power of ten from 10^13 to 10^17 and its immediate neighbors,
     # so the boundary is crossed at a value and at value +/- 1.
     unlist(lapply(10^(13:17), function(p) sprintf("%.0f", p + -2:2))),
     # The 2^53 limit of an exact double, and the 2^32 family boundary.
