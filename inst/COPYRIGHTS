@@ -1,4 +1,4 @@
-raddr bundled material: copyright and licence notices
+raddr bundled material: copyright and license notices
 =====================================================
 
 The raddr package SOURCE CODE is licensed under the MIT License (see the
@@ -63,7 +63,7 @@ IANA registry data is dedicated to the public domain under CC0 1.0
 Universal <https://creativecommons.org/publicdomain/zero/1.0/>. The
 registries and every derived representation bundled here (the block and
 address-space tables in R/sysdata.rda) carry that dedication. CC0 waives
-the conditions a licence would impose, so the entry above records
+the conditions a license would impose, so the entry above records
 provenance only.
 
 
@@ -86,7 +86,7 @@ the commit named above.
 raddr's own additions to the corpus are NOT covered by these terms, and
 are kept outside that directory, in
 tests/testthat/fixtures/raddr_extra_urltestdata.json, under raddr's MIT
-licence. The directory boundary is what makes this sentence checkable.
+license. The directory boundary is what makes this sentence checkable.
 
 --------------------------------------------------------------------------
 

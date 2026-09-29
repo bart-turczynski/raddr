@@ -7,7 +7,7 @@
 #   * inst/extdata/iana-ipv6-special-registry.csv  - exact upstream bytes
 #   * inst/extdata/iana-ipv4-address-space.csv     - exact upstream bytes
 #   * inst/extdata/iana-ipv6-address-space.csv     - exact upstream bytes
-#   * inst/COPYRIGHTS                              - bundled-material licences
+#   * inst/COPYRIGHTS                              - bundled-material licenses
 #   * R/sysdata.rda                                - the parsed block tables
 #
 # Two registry PAIRS, kept apart on purpose (subissue RADD-pekbpche):
@@ -164,7 +164,7 @@ sysdata_path <- "R/sysdata.rda"
 # packages surveyed locally use it, against zero using `LICENSE.note`.
 #
 # MECHANICAL: this file is GENERATED, and the line at the bottom of this script
-# overwrites it wholesale. A licence notice appended to it by hand would survive
+# overwrites it wholesale. A license notice appended to it by hand would survive
 # until the next registry rebuild and then vanish, turning a routine maintainer
 # action into a compliance failure with no error message. So the BSD-3 text is
 # an INPUT to this script -- read from data-raw/, which nothing generates -- and
@@ -1064,7 +1064,7 @@ notice_entry <- function(key) {
 }
 
 # The BSD-3 section is composed from two files this script only ever READS: the
-# pin that data-raw/vendor-wpt.R writes, and the licence text, which nothing
+# pin that data-raw/vendor-wpt.R writes, and the license text, which nothing
 # generates. Both must be present. Emitting a COPYRIGHTS without the WPT section
 # while the WPT bytes are in the tarball is the exact compliance failure section
 # 12.1 is about, so it is an error and never a warning.
@@ -1084,7 +1084,7 @@ wpt_license <- readLines(wpt_license_path, warn = FALSE)
 
 copyrights <- paste(
   c(
-    "raddr bundled material: copyright and licence notices",
+    "raddr bundled material: copyright and license notices",
     "=====================================================",
     "",
     "The raddr package SOURCE CODE is licensed under the MIT License (see the",
@@ -1127,7 +1127,7 @@ copyrights <- paste(
     "Universal <https://creativecommons.org/publicdomain/zero/1.0/>. The",
     "registries and every derived representation bundled here (the block and",
     "address-space tables in R/sysdata.rda) carry that dedication. CC0 waives",
-    "the conditions a licence would impose, so the entry above records",
+    "the conditions a license would impose, so the entry above records",
     "provenance only.",
     "",
     "",
@@ -1150,7 +1150,7 @@ copyrights <- paste(
     "raddr's own additions to the corpus are NOT covered by these terms, and",
     "are kept outside that directory, in",
     "tests/testthat/fixtures/raddr_extra_urltestdata.json, under raddr's MIT",
-    "licence. The directory boundary is what makes this sentence checkable.",
+    "license. The directory boundary is what makes this sentence checkable.",
     "",
     strrep("-", 74),
     "",

@@ -469,7 +469,7 @@ waiting workflow — it is the local route to rows a pipeline does not cover.
 
 It is the second half of a pair. \`docs/ci-workflow-lint.md\` establishes statically
 that the workflow is well-formed — actionlint clean, and its three unverifiable
-judgement calls resolved against the \`r-lib/actions\` sources — and closes by saying
+judgment calls resolved against the \`r-lib/actions\` sources — and closes by saying
 that this "does not say a run will pass". This file is what answers that, for three of
 the six rows, by running the checks somewhere rather than reading the file.
 
@@ -525,7 +525,7 @@ itself *is* measured: \`data-raw/check-r-floor.sh\` checks the package under R 4
 with pinned snapshots and reports Status OK, 0 errors, 0 warnings, 0 notes
 (\`docs/r-floor-check.md\`). With a covered floor below them and a covered release
 above them, two intermediate R versions earn little for two more slow emulated image
-builds. This is a judgement call, not a fact, and it is the one most worth revisiting
+builds. This is a judgment call, not a fact, and it is the one most worth revisiting
 if a version-sensitive bug ever appears.
 
 **\`windows-latest\` / \`release\` — unreachable.** Stated above and not softened here.

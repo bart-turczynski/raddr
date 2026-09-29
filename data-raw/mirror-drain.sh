@@ -40,7 +40,7 @@
 # UNREACHABLE TARGETS ARE REPORTED, NOT FATAL. This mattered when `github` was
 # still configured and 403'ing; that remote was removed on 2026-09-05
 # (RADD-ithxwzpr), so no target is currently expected to be unreachable. The
-# behaviour stays because the reasoning does: a mirror refresh that aborted on
+# behavior stays because the reasoning does: a mirror refresh that aborted on
 # the first dead remote would skip the live ones behind it, so each target is
 # handled independently and the exit status reflects the whole run.
 set -eu
@@ -50,7 +50,7 @@ set -eu
 #
 # Both lists are overridable from the environment so the script can be pointed
 # at throwaway remotes. That is not a convenience: the strict/working asymmetry
-# below is a behavioural claim, and it was checked by driving this script
+# below is a behavioral claim, and it was checked by driving this script
 # against scratch repositories carrying each fault class in turn rather than by
 # waiting for a real mirror to break.
 MIRROR_TARGETS="${MIRROR_TARGETS:-backup}"
@@ -64,7 +64,7 @@ if [ ! -d .git ]; then
 	exit 1
 fi
 
-# Local heads and tags, normalised to "<refname> <sha>" and sorted, so it can be
+# Local heads and tags, normalized to "<refname> <sha>" and sorted, so it can be
 # compared against the same shape derived from a remote.
 refs_local() {
 	git show-ref --heads --tags | awk '{print $2" "$1}' | sort

@@ -188,7 +188,7 @@ variables:
   cache:
     # Keyed on DESCRIPTION, so the library is rebuilt exactly when the declared
     # closure changes and reused when it has not. Shared-runner caches are
-    # best-effort and frequently cold: this is a speed optimisation, never a
+    # best-effort and frequently cold: this is a speed optimization, never a
     # correctness input. `policy` stays the default pull-push.
     #
     # SEOR-bmgkzhvy (this rule fires on every push to main, not only when
@@ -198,7 +198,7 @@ variables:
     # the point. Now most merges to main leave DESCRIPTION untouched, so most
     # runs reuse the cached library from the previous run, and it is only a
     # DESCRIPTION-changing merge or the v* tag pipeline right behind it that
-    # forces a rebuild. Still a speed optimisation, never a correctness
+    # forces a rebuild. Still a speed optimization, never a correctness
     # input: the vctrs >= 0.7.0 assert below runs regardless of cache state.
     #
     # The prefix is not decoration. Without it `check:linux-release`

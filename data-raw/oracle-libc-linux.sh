@@ -7,7 +7,7 @@
 # The Apple rows come from running data-raw/oracle-ipv4.py and
 # data-raw/oracle-ipv6.py directly; those two fixtures are the ones the dialect
 # tests assert against, because Apple is the libc raddr models (section 3.1).
-# The Linux rows are recorded rather than modelled: they are what makes the
+# The Linux rows are recorded rather than modeled: they are what makes the
 # "platform-varying" label in section 3.1 a measurement instead of a hedge, and
 # tests/testthat/test-libc.R asserts the *divergence set* so that a libc upgrade
 # in either image changes a committed file rather than passing quietly.

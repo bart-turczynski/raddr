@@ -58,7 +58,7 @@ wpt_url <- paste0(
 
 # The upstream basename is kept, and kept alone in its own directory, so an
 # upstream re-sync is a file swap and nothing else. The directory boundary is
-# also the LICENCE boundary (section 12.1): everything under fixtures/wpt/ is
+# also the LICENSE boundary (section 12.1): everything under fixtures/wpt/ is
 # BSD-3 material belonging to web-platform-tests contributors, and raddr's own
 # additions live outside it in raddr_extra_urltestdata.json under raddr's MIT
 # terms. A filename prefix would have left the two mixed in one directory and
@@ -271,7 +271,7 @@ build_corpus <- function(path, source) {
   pct <- !is.na(host) & grepl("%", host, fixed = TRUE)
 
   out <- data.frame(
-    # The licence boundary, carried into the data. A row's terms are not a
+    # The license boundary, carried into the data. A row's terms are not a
     # property anyone should have to recover by remembering which file it came
     # from -- inst/COPYRIGHTS says fixtures/wpt/ is BSD-3 and the extras are
     # raddr's MIT, and this column is what makes that statement checkable.
@@ -357,7 +357,7 @@ derived_text <- function(df) {
 # --- provenance --------------------------------------------------------------
 
 # DCF because inst/COPYRIGHTS is composed by build-registry.R, which must read
-# these numbers without re-parsing the JSON -- and because a licence-relevant
+# these numbers without re-parsing the JSON -- and because a license-relevant
 # pin should be readable by a human opening the file, not only by a parser.
 #
 # One function, used by both the write path and `--check`, so the field set has
