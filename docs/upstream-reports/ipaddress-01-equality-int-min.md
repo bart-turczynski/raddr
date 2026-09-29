@@ -181,7 +181,7 @@ Found while building [raddr](https://gitlab.com/bart-turczynski/raddr), an
 offline IP parsing/classification package, during a cross-implementation
 comparison. raddr stores big-endian, so the same class of defect would surface
 there on `128.0.0.0` instead; it carries missingness in a separate field to
-avoid the collision. Filing because the behaviour is silent and affects
+avoid the collision. Filing because the behavior is silent and affects
 ordinary addresses.
 
 ---

@@ -88,7 +88,7 @@ normalized away. Scoped like P2 to `addr_parse()`: the single-dialect parsers
 return an address without `codes`, and are documented as the shortcut they are.
 
 **P7 — Provenance travels with the verdict.** Registry snapshot version on every
-classification; RFC on every reason code; verification date on anything modelled
+classification; RFC on every reason code; verification date on anything modeled
 from an implementation rather than a standard.
 
 **P8 — raddr states facts; consumers make decisions.**
@@ -231,8 +231,8 @@ gate it always was for IPv4.
 **A second leak, found while implementing Epic D, and it is IPv6-only.** See
 §3.5.3: Apple's `getaddrinfo` lifts an embedded scope out of a link-local
 address where `inet_pton` does not, so the two disagree on bits for an input
-both accept. That one is modelled as a post-step on the composition, for the
-same reason the whitespace gate is modelled as a pre-step: the precedence is
+both accept. That one is modeled as a post-step on the composition, for the
+same reason the whitespace gate is modeled as a pre-step: the precedence is
 right, the entry point does something extra around it.
 
 ### 3.3 Measured divergence **[verified 2026-07-26]**
@@ -288,7 +288,7 @@ nowhere else.
 **raddr continues to model Apple, deliberately.** The alternative is not a
 better dialect but a non-function: `addr_pton()` would return different values
 on different machines, which P1 (pure, offline, no I/O) forbids and which would
-make every fixture in this repository unassertable. What changes is the labelling
+make every fixture in this repository unassertable. What changes is the labeling
 — §3.1 now names Apple in the "models" column rather than a standard — and the
 evidence, which is committed rather than deferred.
 
@@ -1305,7 +1305,7 @@ Three tools, three answers, all three wrong. `ipaddr.js`'s `reserved` is
 `2001::/23` + `2001:db8::/32` + `3fff::/20` — a set **disjoint** from CPython's
 `reserved`, which is the sharpest possible evidence for the ecosystem-ambiguity
 finding that deleted the word. `unallocated` is unattested in the survey, and
-that is a point in its favour: it cannot inherit four incompatible meanings.
+that is a point in its favor: it cannot inherit four incompatible meanings.
 
 R `ipaddress` is also the P9 case study in the flesh — its `::/3`-style
 aggregates lose `fec0::/10`'s RFC 3879 and `200::/7`'s RFC 4048 exactly as §2
@@ -1484,7 +1484,7 @@ The invariant that catches it is *not* that the two records agree — they must
 not, and §6.3 says why — but that the **embedded** address classifies as the
 address it is. It is checked over every IPv4 block raddr maps, through both
 `::ffff:` and the deprecated `::`, plus across four textual spellings of one
-128-bit value, since Node normalising `::ffff:169.254.169.254` to the hex form
+128-bit value, since Node normalizing `::ffff:169.254.169.254` to the hex form
 while the range check read only the dotted one is the documented root cause
 behind CVE-2024-29415 and six more.
 
@@ -1971,7 +1971,7 @@ malformed address or two IPv4 addresses, and the caller knows which. The list is
 the vectorized form, and `list()` around a single address is the fix the error
 names.
 
-The decoders return a missing address rather than signalling, matching the
+The decoders return a missing address rather than signaling, matching the
 single-dialect parsers of §6.1 — P2 is a promise about `addr_parse()`, not about
 every shortcut.
 
@@ -2324,7 +2324,7 @@ split it in two. /32, /64 and /96 are contiguous:
 The embedded address begins immediately after the prefix at every length
 **except `/64`**, where the u-byte sits between them. That single exception is
 the whole reason the geometry cannot be computed from the prefix length and has
-to be tabulated. The tests check the RFC's rules — segments totalling 32 bits,
+to be tabulated. The tests check the RFC's rules — segments totaling 32 bits,
 ordered, disjoint, and clear of bits 64–71 — rather than only restating the
 numbers a second time, because hand-transcribed offsets are wrong in ways
 re-reading does not catch.
@@ -2639,13 +2639,13 @@ the decisions are not relitigated.
 | O7 | IPv6 half of rust-url `host.rs` (~363–512) | **Read 2026-07-26.** §3.5.1 records what it settled: the WHATWG IPv6 tail is a separate, stricter grammar than the WHATWG IPv4 parser, and `%` is a rejection |
 | O8 | RFC 5952 test vectors | **Closed 2026-07-27.** None published upstream; raddr's own are in `tests/testthat/test-format.R`, by RFC section (§5.1.3) |
 | O9 | `hedgehog` 0.2 on R 4.6.0 aarch64 | **Settled 2026-07-29: yes, and it costs nothing.** Installs from a prebuilt `sonoma-arm64` binary, 180 KB, no compilation. Its entire dependency closure is `testthat` + `rlang (>= 0.1.6)`, both of which raddr already carries — so the §12 argument it needed to win, it wins by adding no transitive weight at all. `Suggests`, and §11.9's file skips whole when it is absent |
-| O10 | WPT vendoring licence mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analogue. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a licence notice appended there is deleted by the next registry rebuild |
+| O10 | WPT vendoring license mechanics under CRAN | **Settled 2026-07-28, see §12.1.** BSD-3 is fine to bundle, but `LICENSE.note` was the wrong instrument: it appears in **zero** of the 266 packages installed locally, while `inst/COPYRIGHTS` appears in 10 — `fs` and `vroom` among them, which are the exact analog. `License:` and `LICENSE` do not change, and cannot: measured against `tools:::.license_component_is_for_stub_and_ok`, **every** way of writing BSD-3 into `LICENSE` fails the MIT stub check. The hazard the survey turned up is that `inst/NOTICE` is **generated** — `build-registry.R` overwrites it wholesale, so a license notice appended there is deleted by the next registry rebuild |
 | O11a | **`davidchall/ipaddress`: the NAT64 gap** — plus an `is_global()` bug found alongside it | **Draft complete and duplicate-checked 2026-07-30; unfiled, blocked on the account suspension.** Neither `64:ff9b::/96` (RFC 6052) nor `64:ff9b:1::/48` (RFC 8215) is classified or unwrapped, and NAT64 is the **one missing member of a family the package already ships three times** — `is_ipv4_mapped`/`extract_ipv4_mapped`, `is_6to4`/`extract_6to4`, `is_teredo`/`extract_teredo_*`. That reframing is what makes it hard to decline. The re-measurement also turned up a **second, concrete defect**: `is_global()` returns `TRUE` for `64:ff9b:1::/48`, where IANA's IPv6 Special-Purpose registry records Globally Reachable = **False** — read field-by-field out of our own vendored `inst/extdata/iana-ipv6-special-registry.csv`, and cross-checked against Python's `ipaddress`, which gets it right. Looks like the `/48` row is simply absent from whatever table backs `is_global()`. No RFC 2119 claim is made: RFC 8215 does not invoke it here (§5.2.2's rule). File regardless of what raddr ships |
 | O11b | **`davidchall/ipaddress`: the `0x80000000` equality bug** of §5.1.1 | **Draft complete and duplicate-checked 2026-07-30; unfiled.** Reproducer `ip_address("0.0.0.128") == ip_address("0.0.0.128")` returning `NA`. Not an R bug — see §5.1.1. Re-measurement **narrowed** the blast radius to `==` and `!=` alone and found the mechanism (a missing `vec_proxy_equal` method), which yielded a verified one-line fix better than this doc's original suggestion of widening storage. `ip_network` and `ip_interface` are affected too |
 | O12 | `rurl::get_host_type()` NULL-default wart | **Filed 2026-07-30 as `RURL-hikovisr` in rurl's own local `fp` tracker — the one row in this table's outbound group that is *not* waiting on the suspension**, because a sibling repo's tracker needs no network and the 403 blocks a fix PR rather than the report. Verified read-only against `~/Projects/rurl` at `feat/serialize-url` 9625749 (rurl 2.8.0), with every line citation re-checked against `main` (c0c8dca) since both files differ across the two branches; rurl's working tree was not touched. Mechanism: `R/accessors.R:1212` defaults `url_standard = NULL`, and `R/diagnostics.R:562` on `main` (`:569` on the branch) short-circuits `._url_metadata_vec()` to all-`NA` **before** `._parse_stage_a_vec()` runs — silently, with no error, warning or message. **This row's own framing was wrong, and the report was filed on a better one: the defect is an overload, not the default.** `get_host_type(c("/relative/path", ""), url_standard = "rfc3986")` is `identical()` to `get_host_type(c("http://example.com/", "http://x.test/"))` — both `c(NA, NA)` — so a caller who forgets the argument gets output that reads as "rurl could not classify any of my URLs", and *that* is fixable without a default flip. It is also a **family, not one function**: the same gate covers `get_scheme_class()` (`R/accessors.R:1488`, documented at `:1450` as explicitly "mirroring `get_host_type()`'s contract") and `get_url_diagnostics()` (`character(0)` per row). Note which one escapes — `get_scheme_class()` has a distinct `missing-or-error` token for failed rows, so it does not collide; the two helpers returning a bare `NA`/`character(0)` are exactly the two that do. rurl's ADR 0007 is not challengeable here and the report says so: `get_host_type()` shipped in 2.2.0 (`v2.2.0`, e3d2b65), so the default is published contract. Filed with three non-breaking options — docs, signal a condition, sentinel token — recommending docs-plus-condition on the in-package precedent of `canonical_join()`'s classed legacy-dial warning, and leaving the choice to rurl's owner. **rurl had already found this and closed the audit without triaging it:** `RURL-zjbzdmdr` lists it as candidate divergence #1, "Bug or doc gap?", and it got neither the verdict its AC2 required nor a ticket, while candidates #2 and #3 were later handled — raddr reaching the same finding independently from outside is the useful signal. A retro-note was left there rather than reopening it. Counterpoint recorded rather than suppressed: the gate's stated justification (`R/accessors.R:1196-1199`, "a question only a standard answers, so with no selector there is no fact to report") is sound and matches raddr's own facts-not-verdicts posture — the narrower objection is that if there is no fact, `NA` is the wrong way to say so, because `NA` already means something else. That the gate was a per-function judgment rather than a blanket rule is supported by `get_parse_verdicts()` being deliberately ungated and returning real verdicts with no selector, and by `is_valid_host()`/`check_hosts()` both defaulting to `url_standard = "whatwg"`. **One durability caveat: rurl's `.fp/` is gitignored, so the submitted report body lives in an uncommitted local database, and this row is the only copy of the finding in any git history** |
 | O13 | The `curl` = aton-then-pton composition for **IPv6** | **Settled 2026-07-28 by running it, and the answer is no — see §11.6.** curl reaches **`getaddrinfo`**, not `inet_pton`, on all 88 IPv6 rows that can be asked through a URL at all; the derived half was wrong on the 10 rows where Apple's `getaddrinfo` lifts an embedded scope and `inet_pton` does not. The item's own premise was also wrong: the IPv4 composition had never been measured either — no `data-raw` script invoked curl before `RADD-xpmuxafb`, so §3.3's `curl` column was derived from the composition it was being used to support. Measured now, IPv4 holds on all 78 rows. `addr_curl()`'s fallback was corrected to `getaddrinfo` under `RADD-puzhycev` |
-| O15 | **CPython: `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id`** | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27, re-verified 2026-07-30]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed`. **This is a DUPLICATE — do not open a new issue.** `python/cpython#88178`, open since 2021-05-02 (originally bpo-44012), with PR `#25824` approved by a non-core reviewer but dormant since 2022 and marked stale 2026-04-09. Deliverable is therefore a **comment**, and its lead finding is time-sensitive: PR #25824 makes `.exploded` **retain** the scope suffix, and `_BaseV6._reverse_pointer()` is built on `self.exploded` (`self.exploded[::-1].replace(":","")`), so merging it would reverse the interface name into the label sequence and turn today's loud exception into a **malformed `ip6.arpa` name**. Neither the issue nor the PR mentions `reverse_pointer` at all. Also new to both threads: `IPv6Network("fe80::%lo0/64").exploded` raises the same way, the IPv4-mapped override raises with a *different* message, and `IPv6Interface` **silently drops** the scope instead of raising — three classes, three behaviours. The fix is smaller than this row used to imply: the re-parse is unnecessary, since the integer is already on the object as `self._ip`, so `"%032x" % self._ip` suffices. **Draft complete 2026-07-30; unposted, blocked on the suspension** |
-| O16 | **`davidchall/ipaddress` (third): the IPv6 zone ID is accepted and silently discarded** | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone — `grep` for `zone|scope` over the namespace returns `character(0)` **[verified 2026-07-27, re-verified 2026-07-30, 1.0.3]**. Nothing warns; `is.na` is `FALSE` for every form. **The most legible harm, which this row used to omit: the discard makes `ip_address("fe80::1%lo0") == ip_address("fe80::1%en0")` return `TRUE`.** `fe80::/10` is per-interface by construction, so those are different destinations collapsed to one value. The `inet_pton` half needed **narrowing**: Apple's `inet_pton` *accepts* `%lo0`, `%`, `%999` and `%nonexistent-if`, and rejects only the multi-`%` forms `%%` and `%lo0%en0%wat` — so the claim holds for those two rows and no further, and it is scoped to Apple libc / macOS 25.4.0 arm64, not generalised to glibc or musl. `getaddrinfo` accepts `%nonexistent-if` and `%999` too, so "the resolver validates the interface name" is not a claim available to us either. **Draft complete and duplicate-checked 2026-07-30; unfiled.** Joins the O11 list |
+| O15 | **CPython: `IPv6Address.exploded` and `.reverse_pointer` raise `AddressValueError` on any address with a `scope_id`** | Reproducer: `ipaddress.IPv6Address("fe80::1%lo0").exploded`. Present on 3.9.6, 3.12.13 and 3.14.6 **[verified 2026-07-27, re-verified 2026-07-30]**. `_explode_shorthand_ip_string()` re-parses `str(self)` without splitting the scope. See §3.5.2; raddr's oracle dodges it by reading `.packed`. **This is a DUPLICATE — do not open a new issue.** `python/cpython#88178`, open since 2021-05-02 (originally bpo-44012), with PR `#25824` approved by a non-core reviewer but dormant since 2022 and marked stale 2026-04-09. Deliverable is therefore a **comment**, and its lead finding is time-sensitive: PR #25824 makes `.exploded` **retain** the scope suffix, and `_BaseV6._reverse_pointer()` is built on `self.exploded` (`self.exploded[::-1].replace(":","")`), so merging it would reverse the interface name into the label sequence and turn today's loud exception into a **malformed `ip6.arpa` name**. Neither the issue nor the PR mentions `reverse_pointer` at all. Also new to both threads: `IPv6Network("fe80::%lo0/64").exploded` raises the same way, the IPv4-mapped override raises with a *different* message, and `IPv6Interface` **silently drops** the scope instead of raising — three classes, three behaviors. The fix is smaller than this row used to imply: the re-parse is unnecessary, since the integer is already on the object as `self._ip`, so `"%032x" % self._ip` suffices. **Draft complete 2026-07-30; unposted, blocked on the suspension** |
+| O16 | **`davidchall/ipaddress` (third): the IPv6 zone ID is accepted and silently discarded** | `ip_address("fe80::1%lo0")` is `fe80::1`, `ip_address("fe80::1%lo0%en0%wat")` is also `fe80::1`, and there is no accessor to recover the zone — `grep` for `zone|scope` over the namespace returns `character(0)` **[verified 2026-07-27, re-verified 2026-07-30, 1.0.3]**. Nothing warns; `is.na` is `FALSE` for every form. **The most legible harm, which this row used to omit: the discard makes `ip_address("fe80::1%lo0") == ip_address("fe80::1%en0")` return `TRUE`.** `fe80::/10` is per-interface by construction, so those are different destinations collapsed to one value. The `inet_pton` half needed **narrowing**: Apple's `inet_pton` *accepts* `%lo0`, `%`, `%999` and `%nonexistent-if`, and rejects only the multi-`%` forms `%%` and `%lo0%en0%wat` — so the claim holds for those two rows and no further, and it is scoped to Apple libc / macOS 25.4.0 arm64, not generalized to glibc or musl. `getaddrinfo` accepts `%nonexistent-if` and `%999` too, so "the resolver validates the interface name" is not a claim available to us either. **Draft complete and duplicate-checked 2026-07-30; unfiled.** Joins the O11 list |
 | O17 | **Why does the `raddr_parse` record cost more to build for IPv6 than for IPv4?** | **Settled 2026-07-29 by profiling it, and the question was wrong — see §11.1.1.** It does not cost more; it barely costs anything. `derive_status()` is 0.124 s on IPv4 against 0.116 s on IPv6 for the same length, and the whole record layer is 8% / 2% of the call. The suspicion was `blank_missing()`'s `proxy[is.na(code), ] <- NA` over an all-missing `aton` column: real, measurable, and **0.4% of the call** — not worth the branch to skip it. The 2.5 s / 5.7 s figures came from subtracting the bare dialect functions from `addr_parse()`, which charges the record for `parse_dialect_full()`'s attempt tracking (`ip_attempt()`, `ends_in_a_number()`, ~22% in both families). One real target did fall out: `parse_ipv4_number_slow()` at **13% of an IPv6 parse** — `RADD-tkpqvomv` |
 | O18 | **`davidchall/ipaddress` (fourth and fifth), both in `reverse_pointer()`** | **[verified 2026-07-28, re-verified 2026-07-30, 1.0.3]** (a) every IPv6 name ends in **`ip.arpa`**, not `ip6.arpa` — `reverse_pointer(ip_address("2001:db8::1"))` is one character short of RFC 3596 §2.5's suffix, and `ip.arpa` is not a registered `.arpa` sub-zone at all (research 08 gotcha 7), so every IPv6 answer the function has ever returned is a wrong name that looks right. (b) the IPv6 branch **accumulates**: element *k* carries the nibbles of elements 1..*k*, so `reverse_pointer(ip_address(c("::1", "2001:db8::1")))[[2]]` has **66 labels** — 64 nibbles plus `ip` plus `arpa`; `lengths()` gives 34 and 66, and `rep("::1", 5)` gives 34/66/98/130/162, exactly 32 nibbles per position. (An earlier version of this row said 64 labels, which was the nibble count.) Cost is quadratic in vector length (§11.1.3): 0.033/0.169/0.628/2.358 s at n = 1000/2000/4000/8000, 4x per doubling, against 0.002 s for IPv4 at n = 8000. **Cause**, which pins both: `std::ostringstream os;` is declared *outside* the per-element loop and never cleared, and the suffix literal is `"ip.arpa"`. IPv4 escapes both because its branch uses `snprintf` and never touches `os`. **Why it survived — and the most useful thing to tell the maintainer: the test suite asserts the bug.** `tests/testthat/test-reverse_pointer.R` hard-codes `...8.b.d.0.1.0.0.2.ip.arpa`, and every test input plus both `@examples` are length-1, so the accumulation is invisible; meanwhile `man/reverse_pointer.Rd` cites RFC 3596 §2.5, the section that says `IP6.ARPA`. Filed as **one** issue, not two: adjacent lines, one patch, one pinning test file. No RFC 2119 claim — RFC 3596 §2.5 is descriptive, so the report rests on IANA's `.arpa` registry having no `ip.arpa` entry. The trailing-dot remark this row used to carry was **dropped**: both families emit no trailing dot and a relative name is the normal convention, so it is not a defect. **Draft complete and duplicate-checked 2026-07-30 (66 PRs, zero open, so no fix in flight); unfiled.** Joins the O11/O16 list |
 | O14 | Apple `getaddrinfo` truncates a numeric zone modulo 2^16 | `fe80::1%99999999999` reports scope 59391 **[verified 2026-07-26]**. raddr keeps the literal zone text and does not truncate, on the same grounds as everything else in §3.5.3. Harmless; recorded so it is not rediscovered |
@@ -2743,7 +2743,7 @@ row per dialect, unpacked over the *distinct* masks rather than row by row. It
 is also the answer to whether Epic G should have been a separate opt-in pass. It
 should not.
 
-**The row labelled "+ the record" is not the record.** It was arrived at by
+**The row labeled "+ the record" is not the record.** It was arrived at by
 subtraction — `addr_parse()` minus the bare dialect functions — and that
 subtraction charges the record for work it does not do. Profiled directly on
 2026-07-29 (O17), the record layer proper (`derive_status()`,
@@ -2937,7 +2937,7 @@ row as easily as *whether* one matched, by returning `vec_match()`'s position
 in place of `vec_in()`'s logical, and visiting the groups longest-first keeps
 the first hit the longest one. `prefix_match()` now groups too, and the
 address-space table got **36x** out of it. What this section measured is
-unaffected — only its closing claim about the neighbouring function was.
+unaffected — only its closing claim about the neighboring function was.
 
 `bench/record.R` reports a disagreement count against `ipaddress` beside each
 ratio, on all 1e6 rows of both families, because a ratio between two functions
@@ -3119,7 +3119,7 @@ are `sort(unique(at))` rather than `names(split())`, so the scatter does not
 round-trip integer positions through the character names of a factor level; and
 it does not depend on `at` being ascending even though `order_in_element` makes
 it so, because an invariant that decides *which address gets which embedding*
-should not be held implicitly by a neighbouring sort.
+should not be held implicitly by a neighboring sort.
 
 **What is left is real work.** `extract_embeddings()` is now 0.028 s on the
 random corpus and 2.215 s on the inside-blocks one, and that spread is the
@@ -3396,7 +3396,7 @@ run all three ways, with agreement asserted rather than assumed:
 | `integer.R#167` `^[0-9]+$` | 0.213 s | **0.195 s** | 0.273 s |
 | `ipv6.R#137` `sub("^.*:")` | 0.751 s | **0.310 s** | 0.387 s |
 | `strsplit()` flat, IPv6 | **0.561 s** | — | 0.729 s |
-| `strtoi()`, base 16 | **0.214 s** | — | *no analogue* |
+| `strtoi()`, base 16 | **0.214 s** | — | *no analog* |
 
 **PCRE is ahead of ICU on every pattern the tokenizer runs.** The splits are a
 wash and `stringi`'s `simplify = NA` matrix — the one structural rather than
@@ -3409,7 +3409,7 @@ hextet regex — and restructuring that check in base R as a negated scan plus
 were superseded by §11.2.4**, which shipped the restructure and remeasured the
 pair with agreement asserted: 0.214 s for base R against 0.144 s for `stringi`,
 so what is left on the table is 1.1x rather than a third. Tagging the input
-UTF-8 moves neither engine, so the gap is engine speed and not marshalling.
+UTF-8 moves neither engine, so the gap is engine speed and not marshaling.
 
 So: **no dependency.** The measured conclusion is that a library swap was never
 the lever, which is the same answer §11.2 and §11.2.1 keep arriving at from
@@ -3822,7 +3822,7 @@ design.** `block_edges()` derives an edge from the stored words using the same
 containment — copied, line for line. A wrong step there moves the edge and the
 matcher's idea of the block *together*, and the two agree about the wrong block.
 So `block_probes()` truncates the base address to `len` characters and pads it
-out, and a neighbour is a ripple carry over the same string: no divisor, no
+out, and a neighbor is a ripple carry over the same string: no divisor, no
 word, and no arithmetic the shipped code also does. Agreement is the null
 result, and two copies of one formula cannot produce it.
 
@@ -3850,7 +3850,7 @@ for **20 of the 51** special-purpose blocks, and ten of those are followed
 
 So contiguity is **computed from the table** and the pairs are pinned, rather
 than a list of blocks hand-excused from a rule that was wrong for them. The
-sound assertion is not "the neighbour matches nothing"; it is "the neighbour
+sound assertion is not "the neighbor matches nothing"; it is "the neighbor
 never matches *this* block", which holds regardless of what else is next door.
 
 The address-space pair is the opposite case and the same test says so: it is a
@@ -3858,9 +3858,9 @@ partition, so every one of its blocks that has a successor at all — 274 of 276
 is followed immediately by another. That is gaplessness read off the boundary,
 where §7.3's partition check reads it off the tiling arithmetic.
 
-**Four blocks have no neighbour on one side**, and they are pinned by name for a
+**Four blocks have no neighbor on one side**, and they are pinned by name for a
 reason: a `+1` that wrapped around instead of answering `NA` would leave every
-neighbour assertion passing about the wrong address, at exactly the four places
+neighbor assertion passing about the wrong address, at exactly the four places
 the arithmetic is hardest. They are `0.0.0.0/8`, `0.0.0.0/32` and `::/128` at
 the bottom, `240.0.0.0/4` and `255.255.255.255/32` at the top of the
 special-purpose pair; `0.0.0.0/8`, `::/8`, `255.0.0.0/8` and `ff00::/8` in the
@@ -4049,7 +4049,7 @@ Eleven boundary rows closed it. The octal survivor is genuinely equivalent — a
 overflow whether or not the width check does, exactly as §11.3 records for the
 decimal case.
 
-**raddr's own additions are a separate file, and the split is a licence boundary
+**raddr's own additions are a separate file, and the split is a license boundary
 rather than a convenience** (§12.1). `fixtures/wpt/` holds nothing but upstream
 BSD-3 bytes, so a re-sync stays a file swap and `inst/COPYRIGHTS` can say which
 bytes are whose; `fixtures/raddr_extra_urltestdata.json` is raddr's own MIT work.
@@ -4438,16 +4438,16 @@ Target: **`vctrs` + `rlang`, and argue about anything else.**
 **carries in its tarball**, which is a separate question with separate
 obligations. O10 asked it about WPT and is closed here.
 
-Two bodies of third-party material, under two licences that demand different
+Two bodies of third-party material, under two licenses that demand different
 things:
 
-| Material | Licence | What redistribution requires |
+| Material | License | What redistribution requires |
 |---|---|---|
 | the four IANA registries, `inst/extdata/*.csv` | CC0 1.0 | nothing — CC0 waives |
 | WPT `urltestdata.json` (§8; RADD-xdgfyznt) | BSD-3-Clause, "web-platform-tests contributors" | clause 1: retain the copyright notice, the three conditions, and the disclaimer |
 
 **That difference is the whole of O10.** CC0 asks for nothing, so `inst/NOTICE`
-records provenance only — URL, sha256, byte count — and carries no licence
+records provenance only — URL, sha256, byte count — and carries no license
 text. BSD-3 clause 1 binds **source** redistributions, and an R source tarball
 is one, so with WPT the terms have to travel with the bytes. This is the first
 bundled material for which attribution is an obligation rather than a courtesy.
@@ -4475,7 +4475,7 @@ named `LICENSE.note`; a survey of the 266 packages installed locally found it in
 **none** of them, against 10 carrying `inst/COPYRIGHTS` (and 3 more using
 `AUTHORS` for the same purpose). `fs` and `vroom` are
 the precedent worth copying — MIT R packages bundling third-party
-permissive-licensed material, each reproducing the upstream licence **in full**
+permissive-licensed material, each reproducing the upstream license **in full**
 in `inst/COPYRIGHTS` and naming the upstream holder in `Authors@R` as
 `person(..., role = "cph", comment = "<what they hold>")`. Copy the structure,
 not the text: both files open by claiming GPL-3 terms that contradict their own
@@ -4486,15 +4486,15 @@ convention.
 is not hand-maintained — `data-raw/build-registry.R` composes it and ends with
 `writeLines(notice, notice_path)`, overwriting the file wholesale. A BSD-3
 notice appended to it would survive until the next registry rebuild and then
-vanish, turning a routine maintainer action into a licence-compliance failure
+vanish, turning a routine maintainer action into a license-compliance failure
 with no error message. So the WPT terms may **not** live in a
 build-script-owned file. The resolution is that `build-registry.R` composes
 `inst/COPYRIGHTS` from its generated IANA provenance section plus a static
-third-party section it *reads* from `data-raw/`, so the licence text is an
+third-party section it *reads* from `data-raw/`, so the license text is an
 input to the script and not something the script can destroy. `inst/NOTICE` is
 retired into that one file, which is also the name CRAN reviewers look for.
 
-**The `raddr_extra_*.json` split is a licence boundary, not just a re-sync
+**The `raddr_extra_*.json` split is a license boundary, not just a re-sync
 convenience.** RADD-xdgfyznt keeps local additions out of the vendored file so
 upstream re-sync stays a file swap; the same split is what lets
 `inst/COPYRIGHTS` say which bytes are BSD-3 and which are raddr's own MIT work.
@@ -4518,7 +4518,7 @@ the package does not yet contain.
 **[implemented 2026-07-29.]** All four changes landed as written. Two details
 this section did not anticipate, both discovered while executing it:
 
-- **The licence boundary works better as a directory than as a filename
+- **The license boundary works better as a directory than as a filename
   prefix.** O10 assumed `raddr_extra_*.json` beside the vendored file. Putting
   the upstream bytes alone under `fixtures/wpt/` instead makes the `-text`
   attribute and the three whitespace-hook exemptions one-line rules over a path,
@@ -4526,7 +4526,7 @@ this section did not anticipate, both discovered while executing it:
   that will change. The extras keep the `raddr_extra_` name, outside it.
 - **`inst/COPYRIGHTS` is composed by `build-registry.R` but the WPT pin is
   written by `vendor-wpt.R`,** so the file has two upstreams. The rule that keeps
-  §12.1's guarantee is that the *licence text* — `data-raw/wpt-LICENSE.txt` — is
+  §12.1's guarantee is that the *license text* — `data-raw/wpt-LICENSE.txt` — is
   written by hand and generated by nothing, while only the numbers are generated.
   Missing WPT inputs are an **error** and never a warning, because emitting a
   `COPYRIGHTS` with no WPT section while the WPT bytes ship in the tarball is

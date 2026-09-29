@@ -18,7 +18,7 @@ No NAT64 support: `64:ff9b::/96` and `64:ff9b:1::/48` have no predicate or extra
 Two related gaps around the IPv4/IPv6 translation prefixes:
 
 1. **Missing API.** There is no `is_nat64()` / `extract_nat64()`, so NAT64
-   addresses cannot be recognised and the embedded IPv4 address cannot be
+   addresses cannot be recognized and the embedded IPv4 address cannot be
    recovered — even though the package already ships exactly this API shape for
    three *other* embedding schemes.
 2. **A concrete classification error.** `is_global()` returns `TRUE` for

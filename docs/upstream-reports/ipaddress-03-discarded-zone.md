@@ -126,7 +126,7 @@ common blind spot rather than an exotic requirement.
   `%nonexistent-if` and `%999` — so "the resolver validates the interface name"
   is not a claim I can make either. Left it out.
 - Scoped the platform claim to Apple libc / this machine explicitly, rather than
-  generalising across libcs.
+  generalizing across libcs.
 - Added the `==` consequence (`fe80::1%lo0 == fe80::1%en0` → `TRUE`), which the
   issue did not state and which is the most legible harm.
 - Offered three directions instead of one, because option 2 has real design
