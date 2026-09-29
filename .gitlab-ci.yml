@@ -185,6 +185,19 @@ variables:
     # The images carry no LaTeX toolchain and gain nothing from one. The
     # pre-push hook deliberately does not set this; see data-raw/verify.sh.
     NO_MANUAL: "1"
+    # Where `--as-cran`'s "checking CRAN incoming feasibility" reads CRAN's
+    # metadata. By default that is the repos option's CRAN entry, which
+    # rocker/r-ver:latest points at p3m, and p3m serves neither
+    # src/contrib/Meta/current.rds nor web/packages/packages.rds (404). Once
+    # raddr was on CRAN, the check halted there about 12 seconds in, and
+    # rcmdcheck read the cut-off log as "0 errors | 0 warnings | 0 notes": the
+    # job went green having checked nothing (pipeline 2893490558,
+    # check:linux-release). These two variables move only that step to
+    # cloud.r-project.org; package installs still come from p3m. The devel
+    # image already points at cloud.r-project.org, where they change nothing.
+    # SEOR-ygzjighu.
+    R_CRAN_SRC: "https://cloud.r-project.org"
+    R_CRAN_WEB: "https://cloud.r-project.org"
   cache:
     # Keyed on DESCRIPTION, so the library is rebuilt exactly when the declared
     # closure changes and reused when it has not. Shared-runner caches are

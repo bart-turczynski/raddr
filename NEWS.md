@@ -16,6 +16,12 @@
 
 ## Internal
 
+* CI's `--as-cran` check reads CRAN's incoming-feasibility metadata from
+  `cloud.r-project.org` instead of the image's p3m mirror, which returns 404
+  for it. Since raddr reached CRAN, the release job had halted at that step
+  and still passed, because `rcmdcheck` read the cut-off log as clean
+  (`SEOR-ygzjighu`).
+
 * The agent instructions no longer import `FP_AGENTS.md`, the file the `fp`
   tracker generates, which is deleted, and point at the house `agent-workflow` and `fp` skills for the
   git workflow (`SEOR-ipwcbcov`).

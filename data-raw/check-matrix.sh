@@ -245,8 +245,14 @@ DOCKERFILE
     fi
 
     # The heredoc is quoted: nothing below is expanded by the host shell.
+    # R_CRAN_SRC and R_CRAN_WEB send the incoming-feasibility step to
+    # cloud.r-project.org: the release image's p3m repository returns 404 for
+    # the CRAN metadata it reads, which halts the check (SEOR-ygzjighu; the
+    # same two variables are set on the CI jobs in .gitlab-ci.yml).
     ROW_RC=0
-    docker run --rm -i --platform linux/amd64 -v "$REPO:/src:ro" "$ROW_TAG" \
+    docker run --rm -i --platform linux/amd64 -v "$REPO:/src:ro" \
+        -e R_CRAN_SRC=https://cloud.r-project.org \
+        -e R_CRAN_WEB=https://cloud.r-project.org "$ROW_TAG" \
         bash -s > "$WORK/$ROW_OUT.log" 2>&1 <<'INNER' || ROW_RC=$?
 set -eu
 mkdir -p /work && cd /work
