@@ -20,6 +20,21 @@ repos:
       - id: mixed-line-ending
         exclude: '^(inst/extdata/|tests/testthat/fixtures/wpt/)'
       - id: check-case-conflict
+  # spelling::spell_check_package() (data-raw/verify.sh) reads DESCRIPTION,
+  # roxygen, vignettes, README and NEWS, but not code, comments, string
+  # literals or tooling. This covers those for British spellings. Skipped:
+  # generated man/, fixture and upstream data, the tracker snapshot, and what
+  # docs/ holds as a record rather than prose -- the run transcripts
+  # (AGENTS.md: never edited to match a later state) and docs/research/
+  # (evidence, docs/research/README.md). SEOR-xtmnpmae.
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        name: codespell (British spellings, en-GB_to_en-US; SEOR-xtmnpmae)
+        args: [--builtin, en-GB_to_en-US]
+        stages: [pre-commit, pre-push]
+        exclude: '^(man/|inst/extdata/|tests/testthat/fixtures/|docs/research/|docs/tracker-snapshot\.md$|docs/(check-matrix|ci-workflow-lint|dep-floor-check|gitlab-ci|r-floor-check|release-build|win-builder)\.md$)'
   - repo: local
     hooks:
       # Scoped to the five files that can put the declared floors out of step
