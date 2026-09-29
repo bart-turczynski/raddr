@@ -16,9 +16,9 @@
 
 ## Internal
 
-* CI's `--as-cran` check reads CRAN's incoming-feasibility metadata from
-  `cloud.r-project.org` instead of the image's p3m mirror, which returns 404
-  for it. Since raddr reached CRAN, the release job had halted at that step
+* The `--as-cran` check in CI reads the CRAN metadata behind its
+  incoming-feasibility step from `cloud.r-project.org` instead of the p3m
+  mirror of the image, which returns 404 for it. Since raddr reached CRAN, the release job had halted at that step
   and still passed, because `rcmdcheck` read the cut-off log as clean
   (`SEOR-ygzjighu`).
 
