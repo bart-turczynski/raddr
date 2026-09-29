@@ -16,7 +16,7 @@
 # nothing else; its own DESCRIPTION says it "is pure R, performs no network
 # access". `stringi` is 34.7 MB installed, is a C++ package bundling ICU, and
 # declares `SystemRequirements: ICU4C (>= 61, optional)`. It has no R package
-# dependencies of its own, which is genuinely in its favour -- but a user
+# dependencies of its own, which is genuinely in its favor -- but a user
 # installing raddr from source would compile ICU to parse an address literal.
 # So the burden of proof sits on `stringi`: it has to be *needed*, not merely
 # ahead.
@@ -213,7 +213,7 @@ report("ICU stri_join(), three ways", timing(
 # The stage with no ICU counterpart at all. `stringi` has no base-N integer
 # parser, so whatever else moved, this does not.
 cat("\n")
-report("base strtoi(base 16) -- no ICU analogue", timing(
+report("base strtoi(base 16) -- no ICU analog", timing(
   strtoi(pieces_v6, 16L)
 ))
 
@@ -251,7 +251,7 @@ cat("\n== 5. does ICU pay for the encoding it offers? ===============\n\n")
 
 # `stringi` converts to UTF-8 internally, so the suspicion is that it carries a
 # conversion base R skips on ASCII. If the two forms cost the same, the gap
-# measured above is engine speed and not marshalling, which is the more
+# measured above is engine speed and not marshaling, which is the more
 # interesting reading -- ICU is not losing on a technicality.
 tagged <- pieces_v6
 Encoding(tagged) <- "UTF-8"

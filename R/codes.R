@@ -357,7 +357,7 @@ codes_from_mask <- function(mask, levels = parse_code_levels,
 #
 # `fc00::/8` is the L = 0 half of RFC 4193's `fc00::/7`, and raddr stores only
 # the /7 -- so the half that has no defining specification has no registry row
-# to be recognised by, and this is where it becomes visible.
+# to be recognized by, and this is where it becomes visible.
 classify_code_block_row <- function(block, code = NA_character_) {
   list(block = block, code = code)
 }
