@@ -100,5 +100,9 @@ Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); q
 echo "==> spelling::spell_check_package()"
 Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }'
 
-echo "==> rcmdcheck::rcmdcheck(args = $CHECK_ARGS, error_on = \"warning\")"
-Rscript -e "rcmdcheck::rcmdcheck(args = $CHECK_ARGS, error_on = \"warning\")"
+# rcmdcheck reads a check that halted partway as 0/0/0 and returns normally,
+# so error_on never fires. The guard also fails on R CMD check's own exit
+# status (SEOR-maavnxdm). It is single-quoted so the shell leaves `$status`
+# alone; only $CHECK_ARGS is expanded.
+echo "==> rcmdcheck::rcmdcheck(args = $CHECK_ARGS, error_on = \"warning\") + exit-status guard"
+Rscript -e "res <- rcmdcheck::rcmdcheck(args = $CHECK_ARGS, error_on = \"warning\"); "'if (!identical(as.integer(res$status), 0L)) stop("R CMD check exited with status ", res$status, "; the run did not complete.", call. = FALSE)'

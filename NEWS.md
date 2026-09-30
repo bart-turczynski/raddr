@@ -19,6 +19,10 @@
 
 ## Internal
 
+* The verify chain (`data-raw/verify.sh`, run by the pre-push hook and CI) also
+  fails when `R CMD check` exits non-zero. `rcmdcheck` reads a check that halted
+  partway as 0 errors, 0 warnings and 0 notes, which is how a halted
+  `check:linux-release` job passed in pipeline 2893490558 (`SEOR-maavnxdm`).
 * `.Rbuildignore` now lists `^\.git$` (in a checkout made by `git worktree add`,
   `.git` is a file that `R CMD build` does not exclude, so the tarball shipped
   it) and `^\.claude$` (agent checkouts live under `.claude/worktrees/`).
