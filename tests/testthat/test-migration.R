@@ -57,7 +57,10 @@ test_that("the IPv6 blocks the guards match on carry the same categories", {
   # `fd00:0ec2::254` are one address, and a string match on the literal let the
   # second through. raddr compares addresses, so the two are equal by
   # construction rather than by a rule someone remembered to write.
-  expect_true(addr_strict("fd00:ec2::254") == addr_strict("fd00:0ec2::254"))
+  expect_same_address(
+    addr_strict("fd00:ec2::254"),
+    addr_strict("fd00:0ec2::254")
+  )
 })
 
 # --- the embedding inventory -------------------------------------------------
@@ -148,7 +151,7 @@ test_that("the obfuscation the guard greps for is a dialect disagreement", {
   p <- addr_parse(obfuscated)
 
   expect_true(all(is.na(addr_family(addr_reading(p, "strict")))))
-  expect_false(any(is.na(addr_family(addr_reading(p, "aton")))))
+  expect_false(anyNA(addr_family(addr_reading(p, "aton"))))
   # And the canonical dotted-quad is NOT obfuscated, so the same rule does not
   # fire on it -- which is what makes the test above a discriminator.
   plain <- addr_parse("127.0.0.1")

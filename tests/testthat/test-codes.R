@@ -9,7 +9,7 @@ test_that("the registry has the documented columns", {
     registry,
     c("code", "layer", "rfc", "summary", "strength", "since")
   )
-  expect_true(nrow(registry) > 0L)
+  expect_gt(nrow(registry), 0L)
 })
 
 test_that("every code is unique, non-empty and snake_case", {
@@ -51,7 +51,7 @@ test_that("every strength is from the scale", {
 test_that("a parse code is never graded and a classify code always is", {
   registry <- addr_codes_registry()
   expect_true(all(is.na(registry$strength[registry$layer == "parse"])))
-  expect_true(all(!is.na(registry$strength[registry$layer == "classify"])))
+  expect_false(anyNA(registry$strength[registry$layer == "classify"]))
 })
 
 # The grading is a claim about the RFCs, so it is pinned rather than left to

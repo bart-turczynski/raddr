@@ -302,7 +302,7 @@ addr_within_any <- function(x, blocks) {
   for (group in within_index(parsed)) {
     # Only addresses in the right space, and only those not already matched:
     # "any" is done with an address the moment one block contains it.
-    sel <- in_space[[group$space]] & !(out %in% TRUE)
+    sel <- in_space[[group$space]] & (is.na(out) | !out)
     if (!any(sel)) {
       next
     }

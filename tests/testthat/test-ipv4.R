@@ -136,11 +136,15 @@ architecture_divergence <- function() {
     stop("no divergence table under section 3.3 in docs/architecture.md")
   }
 
-  cells <- strsplit(sub("^\\| ", "", sub(" \\|$", "", rows)), " \\| ")
+  cells <- strsplit(
+    sub("^\\| ", "", sub(" \\|$", "", rows)),
+    " | ",
+    fixed = TRUE
+  )
   table <- as.data.frame(do.call(rbind, cells), stringsAsFactors = FALSE)
   names(table) <- c("input", "strict", "whatwg", "pton", "aton",
                     "getaddrinfo", "curl")
-  table$input <- gsub("`", "", table$input)
+  table$input <- gsub("`", "", table$input, fixed = TRUE)
   # "reject" is how the document spells what `format()` renders as NA.
   table[table == "reject"] <- NA_character_
   table
@@ -311,7 +315,7 @@ test_that("128.0.0.0 survives the parsers (the 0x80000000 address)", {
   for (parser in list(addr_strict, addr_whatwg, addr_pton, addr_aton)) {
     parsed <- parser("128.0.0.0")
     expect_identical(format(parsed), "128.0.0.0")
-    expect_identical(parsed == parsed, TRUE)
+    expect_same_address(parsed, parsed)
   }
   expect_identical(format(addr_aton("2147483648")), "128.0.0.0")
 })

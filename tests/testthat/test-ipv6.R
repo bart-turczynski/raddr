@@ -73,7 +73,7 @@ address_only <- function(x) sub("%.*$", "", addr_expand(x))
 test_that("aton has no IPv6 reading at all", {
   # Measured rather than assumed: both compositions in section 3.2 lean on it.
   oracle <- ipv6_oracle()
-  expect_true(all(!nzchar(oracle$aton)))
+  expect_false(any(nzchar(oracle$aton)))
   expect_true(all(is.na(addr_aton(oracle$literal))))
 })
 
@@ -129,7 +129,7 @@ test_that("pton matches Apple libc, except for the interface-index fold", {
   expect_identical(address_only(addr_pton(oracle$literal[keep])), expected)
 
   # And the fold rows still parse; it is only the bits that differ.
-  expect_false(any(is.na(addr_pton(folded))))
+  expect_false(anyNA(addr_pton(folded)))
 })
 
 test_that("getaddrinfo matches Apple libc bit for bit", {
@@ -374,7 +374,7 @@ test_that("a 4-in-6 literal is its own family, whatever it was spelled as", {
     as.character(addr_family(mapped)),
     c("v6_4in6", "v6_4in6")
   )
-  expect_true(mapped[[1]] == mapped[[2]])
+  expect_same_address(mapped[[1]], mapped[[2]])
   expect_false(mapped[[1]] == addr_strict("127.0.0.1"))
 
   # The deprecated v4-compatible form sits in ::/96 and is not 4-in-6.
@@ -398,7 +398,7 @@ test_that("the reality dialects keep the zone beside the bits, never inside", {
   a <- addr_pton(c("fe80::1%lo0", "::1%lo0", "2001:db8::1%lo0", "fe80::1"))
   expect_identical(addr_zone(a), c("lo0", "lo0", "lo0", NA_character_))
   # The bits are the same with and without the zone.
-  expect_true(a[[1]] == addr_pton("fe80::1"))
+  expect_same_address(a[[1]], addr_pton("fe80::1"))
 })
 
 test_that("a zone ID is accepted on any address, and may be empty or bogus", {
@@ -406,7 +406,7 @@ test_that("a zone ID is accepted on any address, and may be empty or bogus", {
   # time and so has no opinion about whether the interface exists.
   a <- addr_pton(c("fe80::1%", "fe80::1%bogus0", "fe80::1%99999999999",
                    "1:2:3:4:5:6:7:8%lo0", "::ffff:1.2.3.4%lo0"))
-  expect_false(any(is.na(a)))
+  expect_false(anyNA(a))
   expect_identical(
     addr_zone(a),
     c("", "bogus0", "99999999999", "lo0", "lo0")
@@ -421,9 +421,9 @@ test_that("a second % is a rejection, and a bare zone is not an address", {
 test_that("the zone does not participate in equality (O2)", {
   a <- addr_pton("fe80::1%lo0")
   b <- addr_pton("fe80::1%en0")
-  expect_true(a == b)
+  expect_same_address(a, b)
   expect_false(addr_zone(a) == addr_zone(b))
-  expect_identical(length(unique(c(a, b))), 1L)
+  expect_length(unique(c(a, b)), 1L)
 })
 
 test_that("getaddrinfo lifts an embedded scope out of a link-local address", {
@@ -454,7 +454,7 @@ test_that("the scope lift is fe80::/10 and nothing else", {
   # scopes, which is Apple's IN6_IS_ADDR_LINKLOCAL and not a broader rule.
   lifted <- c("fe80:1::1", "fe81:1::1", "fe8f:1::1", "fe90:1::1", "fea0:1::1",
               "febf:1::1")
-  expect_true(all(!is.na(addr_zone(addr_getaddrinfo(lifted)))))
+  expect_false(anyNA(addr_zone(addr_getaddrinfo(lifted))))
 
   untouched <- c("fe7f:1::1", "fec0:1::1", "ff02:1::1", "2001:abcd::1")
   a <- addr_getaddrinfo(untouched)
@@ -484,9 +484,9 @@ test_that("an address parses equal to itself in every word position", {
   # asserts this on constructed values; here it is asserted through the parser.
   collide <- c("8000::", "0:0:8000::", "::8000:0:0:0", "::8000:0")
   a <- addr_strict(collide)
-  expect_false(any(is.na(a)))
+  expect_false(anyNA(a))
   expect_true(all(a == a))
-  expect_identical(length(unique(a)), 4L)
+  expect_length(unique(a), 4L)
 })
 
 # --- the families sort and compare as section 5.1.2 says ---------------------
@@ -515,7 +515,7 @@ test_that("the parse is per-row, not per-vector", {
 })
 
 test_that("empty and missing input come back empty and missing", {
-  expect_identical(length(addr_pton(character())), 0L)
+  expect_length(addr_pton(character()), 0L)
   expect_true(is.na(addr_pton(NA_character_)))
   expect_true(is.na(addr_pton("")))
 })

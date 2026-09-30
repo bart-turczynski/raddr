@@ -125,7 +125,7 @@ test_that("addr_whatwg() reaches WPT's address, on every row that has one", {
   got <- addr_whatwg(unbracket(d$host))
   want <- addr_whatwg(unbracket(d$hostname))
 
-  expect_false(any(is.na(addr_family(want))))
+  expect_false(anyNA(addr_family(want)))
   expect_equal(got, want)
 })
 
@@ -226,7 +226,7 @@ test_that("raddr's own additions carry the readings WPT has no row for", {
   # the records themselves would compare the zone field too and assert the
   # opposite of what O2 says.
   expect_equal(addr_zone(addr_pton("fe80::1%eth0")), "eth0")
-  expect_true(addr_pton("fe80::1%eth0") == addr_pton("fe80::1"))
+  expect_same_address(addr_pton("fe80::1%eth0"), addr_pton("fe80::1"))
 })
 
 # --- the expected-failure record ---------------------------------------------

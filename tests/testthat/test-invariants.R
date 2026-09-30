@@ -185,7 +185,7 @@ test_that("addr_parse() is total over the hostile corpus", {
   literals <- corpus_literals()
   expect_silent(p <- addr_parse(literals))
 
-  expect_identical(length(p), length(literals))
+  expect_length(p, length(literals))
   # The input is kept verbatim, control characters and all -- it is what the
   # print method shows, and a parser that rewrote its own input would make
   # every divergence report unreadable.
@@ -193,7 +193,7 @@ test_that("addr_parse() is total over the hostile corpus", {
 
   present <- !is.na(literals)
   status <- addr_status(p)
-  expect_false(any(is.na(status[present])))
+  expect_false(anyNA(status[present]))
   # A missing literal is missing, not rejected. That is the one `NA` status,
   # and it is the input's own missingness handed back.
   expect_true(all(is.na(status[!present])))
@@ -201,7 +201,7 @@ test_that("addr_parse() is total over the hostile corpus", {
   # An outcome is stated for every primitive on every non-missing row, which is
   # what "per-dialect" means once it has to be a vector (section 5.2.1).
   outcomes <- outcome_matrix(p)
-  expect_false(any(is.na(outcomes[present, ])))
+  expect_false(anyNA(outcomes[present, ]))
   expect_true(all(is.na(outcomes[!present, ])))
 
   # The corpus has to reach all four outcomes for the rest of this to say
@@ -235,11 +235,9 @@ test_that("section 5.2.1's two silences are told apart on every row", {
   # the accepting dialects agreed, which `addr_is_divergent()` answers.
   accepted <- rowSums(outcomes == "ok", na.rm = TRUE) > 0L
   refused <- rowSums(outcomes == "rejected", na.rm = TRUE) > 0L
-  want <- ifelse(
-    accepted,
-    ifelse(addr_is_divergent(p), "divergent", "ok"),
-    ifelse(refused, "malformed", "not_an_address")
-  )
+  divergent <- addr_is_divergent(p)
+  want <- ifelse(refused, "malformed", "not_an_address")
+  want[accepted] <- ifelse(divergent[accepted], "divergent", "ok")
   want[is.na(literals)] <- NA_character_
 
   expect_identical(as.character(addr_status(p)), want)
@@ -349,11 +347,11 @@ test_that("classification never errors on anything addr_parse produced", {
     known <- !is.na(addr_family(a))
 
     expect_silent(cl <- addr_classify(a))
-    expect_identical(length(cl), length(a))
+    expect_length(cl, length(a))
 
     for (name in c("block", "category", "registry", "registry_version")) {
       value <- field(cl, name)
-      expect_false(any(is.na(value[known])))
+      expect_false(anyNA(value[known]))
       expect_true(all(is.na(value[!known])))
     }
 
@@ -364,7 +362,7 @@ test_that("classification never errors on anything addr_parse produced", {
     expect_silent(addr_embeddings(a))
     # `embeddings` is size-stable by construction: one element per row, however
     # many addresses that element holds (section 5.3.5).
-    expect_identical(length(addr_embeddings(a)), length(a))
+    expect_length(addr_embeddings(a), length(a))
   }
 })
 
@@ -422,7 +420,7 @@ invariant_wrapper <- function(kind, role, value) {
     # by the IPv4 address, so the address is bits 96-127.
     isatap = paste0("::0:5efe:", quad),
     stop("unknown wrapper: ", kind)
-  )
+  ) # nolint: unreachable_code_linter.
 }
 
 test_that("every wrapper gives back the address it was built around", {
@@ -508,8 +506,8 @@ test_that("every address matches exactly one registry row", {
   block <- field(cl, "block")
   registry <- as.character(field(cl, "registry"))
 
-  expect_false(any(is.na(block)))
-  expect_false(any(is.na(registry)))
+  expect_false(anyNA(block))
+  expect_false(anyNA(registry))
   expect_true(all(addr_within(a, block)))
 
   contains <- function(blocks) {
@@ -530,7 +528,7 @@ test_that("every address matches exactly one registry row", {
   # when several nest.
   hit <- rowSums(in_special) > 0L
   expect_true(any(hit))
-  expect_true(any(!hit))
+  expect_false(all(hit))
   expect_identical(
     registry,
     ifelse(hit, "special_purpose", "address_space")
@@ -554,7 +552,7 @@ test_that("a missing address classifies to a missing row, never a wrong one", {
   cl <- addr_classify(addr_pton(c("1.2.3.4", NA, "::1")))
   row <- as.data.frame(cl)
 
-  expect_false(any(is.na(unlist(row[c(1L, 3L), c("block", "category")]))))
+  expect_false(anyNA(unlist(row[c(1L, 3L), c("block", "category")])))
 
   # Every scalar column is `NA`. The two list columns are EMPTY instead, and
   # that is not the same silence: `codes` and `embeddings` hold zero-length
@@ -578,7 +576,7 @@ test_that("comparison is antisymmetric and total", {
   b <- a[sample.int(length(a))]
 
   forward <- vctrs::vec_compare(a, b)
-  expect_false(any(is.na(forward)))
+  expect_false(anyNA(forward))
   expect_identical(forward, -vctrs::vec_compare(b, a))
   expect_identical(vctrs::vec_compare(a, a), rep(0L, length(a)))
 
@@ -608,5 +606,5 @@ test_that("the zone stays out of equality and out of the order", {
   expect_identical(order(zoned), order(bare))
   # And `unique()` does not partition by interface, which is the failure O2
   # names.
-  expect_identical(length(unique(c(bare[1L], zoned[1L]))), 1L)
+  expect_length(unique(c(bare[1L], zoned[1L])), 1L)
 })

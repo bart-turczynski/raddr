@@ -341,11 +341,9 @@ parse_ipv6_addr <- function(x, rules, codes = FALSE) {
 }
 
 ipv6_address <- function(parsed) {
-  family <- ifelse(
-    parsed$ok,
-    ifelse(parsed$four_in_six, "v6_4in6", "v6"),
-    NA_character_
-  )
+  family <- rep(NA_character_, length(parsed$ok))
+  ok <- which(parsed$ok)
+  family[ok] <- ifelse(parsed$four_in_six[ok], "v6_4in6", "v6")
   new_raddr_address(
     w1 = ipv4_word(parsed$w1),
     w2 = ipv4_word(parsed$w2),

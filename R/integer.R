@@ -323,6 +323,8 @@ addr_to_integer <- function(x, output = c("character", "double", "bignum")) {
     # optional package -- and only because the caller named it.
     if (!has_bignum()) {
       abort(
+        # Repeated `i =` names are cli bullets, not duplicate arguments.
+        # nolint start: duplicate_argument_linter.
         c(
           '`output = "bignum"` needs the bignum package, which is missing.',
           i = 'Install it with `install.packages("bignum")`.',
@@ -331,6 +333,7 @@ addr_to_integer <- function(x, output = c("character", "double", "bignum")) {
             "same, but they sort as text rather than as numbers."
           )
         ),
+        # nolint end
         class = "raddr_error_dependency"
       )
     }
@@ -355,11 +358,7 @@ integer_to_addr <- function(x, family) {
     family = integer_family(family)
   )
   s <- recycled$x
-  bits <- ifelse(
-    is.na(recycled$family),
-    NA_integer_,
-    ifelse(recycled$family == "v4", 32L, 128L)
-  )
+  bits <- unname(c(v4 = 32L, v6 = 128L, v6_4in6 = 128L)[recycled$family])
 
   decoded <- decimal_words(ifelse(is.na(s), "0", s))
   w <- decoded$words
@@ -400,7 +399,7 @@ integer_family <- function(family) {
       c(
         sprintf(
           "`family` must be one of %s.",
-          paste(sprintf('"%s"', addr_families), collapse = ", ")
+          toString(sprintf('"%s"', addr_families))
         ),
         i = sprintf('Got "%s".', family[which(unknown)[[1L]]])
       ),

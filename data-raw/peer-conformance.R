@@ -117,7 +117,7 @@ if (!all(canonical_ok)) {
   bad <- literal[!canonical_ok]
   stop(
     "untriaged canonical divergence on ", length(bad), " rows: ",
-    paste(utils::head(escape_control(bad), 10L), collapse = ", ")
+    toString(utils::head(escape_control(bad), 10L))
   )
 }
 

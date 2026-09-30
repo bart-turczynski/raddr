@@ -291,7 +291,7 @@ test_that("every missing policy value carries the column that explains it", {
   expect_true(all(is.na(field(declined, "termination_date"))))
   expect_true(all(field(declined, "forwardable")))
   expect_true(all(is.na(field(declined, "globally_reachable"))))
-  expect_equal(length(unique(field(declined, "footnotes"))), 2L)
+  expect_length(unique(field(declined, "footnotes")), 2L)
   expect_true(all(nzchar(field(declined, "footnotes"))))
 })
 
@@ -662,7 +662,7 @@ test_that("extraction survives the 0x80000000 word, in both directions", {
   mapped <- field(embedded_of("::ffff:128.0.0.0"), "address")
   expect_equal(mapped, addr_pton("128.0.0.0"))
   expect_true(is.na(field(mapped, "w4")))
-  expect_true(mapped == mapped)
+  expect_same_address(mapped, mapped)
 })
 
 # --- the record's shape and API ----------------------------------------------
@@ -687,7 +687,7 @@ test_that("the record is size-stable and one type", {
   expect_equal(vec_size(cl), length(lits))
 
   embeddings <- field(cl, "embeddings")
-  expect_equal(length(embeddings), length(lits))
+  expect_length(embeddings, length(lits))
   expect_true(all(vapply(embeddings, is_raddr_embedding, logical(1))))
   expect_equal(
     vctrs::vec_ptype(embeddings),
@@ -711,8 +711,7 @@ test_that("as.data.frame exposes every field", {
   cl <- addr_classify(addr_pton("127.0.0.1"))
   df <- as.data.frame(cl)
   expect_s3_class(df, "data.frame")
-  expect_equal(
-    names(df),
+  expect_named(df,
     c(
       "block", "name", "rfc", "footnotes", "category",
       "globally_reachable", "forwardable", "source", "destination",
@@ -1095,7 +1094,7 @@ test_that("where the special-purpose layer answered, it is IANA's column", {
     "127.0.0.1", "192.0.0.9", "192.0.0.170", "fe80::1", "64:ff9b::1", "100::1"
   ))
   cl <- addr_classify(a)
-  at <- field(cl, "registry") %in% "special_purpose"
+  at <- field(cl, "registry") == "special_purpose"
 
   expect_true(all(at))
   expect_identical(

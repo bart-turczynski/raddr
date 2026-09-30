@@ -255,7 +255,7 @@ test_that("the zone runs to the end of the string, delimiters included", {
   parsed <- addr_pton(literal)
 
   expect_identical(addr_zone(parsed), "1]foo.bar baz'\"")
-  expect_true(addr_pton("::1") == parsed)
+  expect_same_address(addr_pton("::1"), parsed)
   expect_identical(
     as.character(field(addr_classify(parsed), "category")), "loopback"
   )

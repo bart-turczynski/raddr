@@ -68,7 +68,7 @@ package_root <- function() {
 # job's script. Anchored on the assignment target, not a line number, so
 # reformatting the surrounding YAML does not silently stop this from matching.
 extract_keep_list <- function(lines) {
-  hit <- grep("keep <- c\\(", lines, perl = TRUE)
+  hit <- grep("keep <- c(", lines, fixed = TRUE)
   if (length(hit) != 1L) {
     stop(
       sprintf(
@@ -84,7 +84,7 @@ extract_keep_list <- function(lines) {
     line,
     regexec("keep <- c\\(([^)]*)\\)", line, perl = TRUE)
   )[[1]][[2]]
-  trimws(gsub('"', "", strsplit(inner, ",")[[1]]))
+  trimws(gsub('"', "", strsplit(inner, ",", fixed = TRUE)[[1]], fixed = TRUE))
 }
 
 checks <- function(lines) {
@@ -171,7 +171,7 @@ report <- function(results) {
 
 self_test <- function(root) {
   src <- readLines(file.path(root, ".gitlab-ci.yml"), warn = FALSE)
-  hit <- grep("keep <- c\\(", src, perl = TRUE)
+  hit <- grep("keep <- c(", src, fixed = TRUE)
 
   cases <- list(
     list("the file as-is is green", TRUE, function(x) x),

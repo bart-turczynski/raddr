@@ -265,7 +265,7 @@ test_that("a composition shrugs only when both of its primitives do", {
     c("not_an_address", "rejected")
   )
   expect_identical(addr_codes(p, "curl")[[1L]], character())
-  expect_true(length(addr_codes(p, "curl")[[2L]]) > 0L)
+  expect_gt(length(addr_codes(p, "curl")[[2L]]), 0L)
 })
 
 test_that("a composition's codes are the union of its primitives'", {

@@ -120,7 +120,8 @@ test_that("the anchor and the dot-all flag are both load-bearing", {
 # one pattern built in a variable is the hextet grammar, pinned below.
 pcre_pattern_literals <- function() {
   engines <- c("grepl", "sub", "gsub", "regexpr", "gregexpr", "regexec")
-  found <- character()
+  found <- new.env()
+  found$patterns <- character()
   walk <- function(e) {
     if (!is.call(e)) {
       return(invisible(NULL))
@@ -134,7 +135,7 @@ pcre_pattern_literals <- function() {
       literal <- !is.null(matched) && identical(matched$perl, TRUE) &&
         is.character(matched$pattern)
       if (literal) {
-        found <<- c(found, matched$pattern)
+        found$patterns <- c(found$patterns, matched$pattern)
       }
     }
     for (part in as.list(e)) {
@@ -151,7 +152,7 @@ pcre_pattern_literals <- function() {
       walk(body(object))
     }
   }
-  found
+  found$patterns
 }
 
 test_that("no pattern running under PCRE is anchored with a dollar sign", {
@@ -159,7 +160,7 @@ test_that("no pattern running under PCRE is anchored with a dollar sign", {
   # A guard is worthless if it is scanning nothing.
   expect_gt(length(patterns), 8L)
   expect_identical(
-    patterns[grepl("$", patterns, fixed = TRUE)],
+    grep("$", patterns, fixed = TRUE, value = TRUE),
     character()
   )
 })
@@ -170,9 +171,10 @@ test_that("no pattern running under PCRE is anchored with a dollar sign", {
 # the wrong-address defect, and it is the one place in the package with a
 # history.
 test_that("the hextet grammar is an unanchored scan", {
-  body_text <- paste(
-    deparse(body(asNamespace("raddr")$parse_ipv6_addr)),
-    collapse = " "
+  body_text <- deparse1(
+    body(asNamespace("raddr")$parse_ipv6_addr),
+    collapse = " ",
+    width.cutoff = 60L
   )
   hextets <- regmatches(
     body_text,
@@ -190,10 +192,10 @@ test_that("the restructured hextet width rule holds on both dialects", {
   expect_true(all(is.na(addr_pton(wide))))
 
   # Leading zeros run free, so validity is the count *after* them.
-  expect_false(any(is.na(addr_pton(c(
+  expect_false(anyNA(addr_pton(c(
     "00001:2:3:4:5:6:7:8", "000000001::", "0000::", "00000::",
     "0abcd::", "00abcd::", "0000abcd::"
-  )))))
+  ))))
   expect_true(all(is.na(addr_pton(c("012345::", "0abcde::", "00abcde::")))))
 
   # An all-zero piece is a legal zero and must not strip to the empty string:

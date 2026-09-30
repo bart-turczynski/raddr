@@ -211,7 +211,7 @@ test_that("the round trip keeps equality and drops the zone", {
   a <- addr_pton("fe80::1%eth0")
   back <- hex_to_addr(addr_to_hex(a))
 
-  expect_true(back == a)
+  expect_same_address(back, a)
   expect_identical(addr_zone(a), "eth0")
   expect_identical(addr_zone(back), NA_character_)
 })
@@ -225,27 +225,27 @@ test_that("hex output is lowercase and uppercase input is accepted", {
     addr_to_hex(addr_pton("2001:DB8::AB")),
     "20010db80000000000000000000000ab"
   )
-  expect_true(hex_to_addr("C0000201") == addr_pton("192.0.2.1"))
-  expect_true(hex_to_addr("C0000201") == hex_to_addr("c0000201"))
+  expect_same_address(hex_to_addr("C0000201"), addr_pton("192.0.2.1"))
+  expect_same_address(hex_to_addr("C0000201"), hex_to_addr("c0000201"))
 })
 
 test_that("a 0x prefix is read and never written", {
-  expect_true(hex_to_addr("0xc0000201") == addr_pton("192.0.2.1"))
-  expect_true(hex_to_addr("0XC0000201") == addr_pton("192.0.2.1"))
+  expect_same_address(hex_to_addr("0xc0000201"), addr_pton("192.0.2.1"))
+  expect_same_address(hex_to_addr("0XC0000201"), addr_pton("192.0.2.1"))
   expect_identical(addr_to_hex(hex_to_addr("0xc0000201")), "c0000201")
   # The prefix is not a license to drop digits.
   expect_true(is.na(hex_to_addr("0xc201")))
 })
 
 test_that("whitespace grouping is stripped by both string decoders", {
-  expect_true(hex_to_addr("c000 0201") == addr_pton("192.0.2.1"))
-  expect_true(
-    binary_to_addr("11000000 00000000 00000010 00000001") ==
-      addr_pton("192.0.2.1")
+  expect_same_address(hex_to_addr("c000 0201"), addr_pton("192.0.2.1"))
+  expect_same_address(
+    binary_to_addr("11000000 00000000 00000010 00000001"),
+    addr_pton("192.0.2.1")
   )
-  expect_true(
-    hex_to_addr("2001 0db8 0000 0000 0000 0000 0000 0001") ==
-      addr_pton("2001:db8::1")
+  expect_same_address(
+    hex_to_addr("2001 0db8 0000 0000 0000 0000 0000 0001"),
+    addr_pton("2001:db8::1")
   )
 })
 
@@ -301,7 +301,7 @@ test_that("bytes_to_addr refuses a bare raw vector rather than guessing", {
   expect_error(bytes_to_addr("c0000201"), class = "raddr_error_type")
   # Wrapped, it is unambiguous.
   one <- bytes_to_addr(list(as.raw(c(192L, 0L, 2L, 1L))))
-  expect_true(one == addr_pton("192.0.2.1"))
+  expect_same_address(one, addr_pton("192.0.2.1"))
 })
 
 # --- vectorization ------------------------------------------------------------

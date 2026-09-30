@@ -96,7 +96,8 @@ test_that("the name is the reversed nibbles of the expanded form", {
   by_hand <- vapply(
     addr_expand(a[is_v6]),
     function(text) {
-      nibbles <- strsplit(gsub(":", "", text, fixed = TRUE), "")[[1L]]
+      hex <- gsub(":", "", text, fixed = TRUE)
+      nibbles <- strsplit(hex, "", fixed = TRUE)[[1L]]
       paste0(paste(rev(nibbles), collapse = "."), ".ip6.arpa.")
     },
     character(1L),
@@ -306,7 +307,7 @@ test_that("no ip6.int, no bitstring label, no RFC 2317 separator", {
   # RFC 4159: "the DNS domain 'ip6.int' should no longer be used".
   expect_false(any(grepl("ip6.int", got, fixed = TRUE)))
   # RFC 2673 bitstring labels, made Experimental by RFC 3363.
-  expect_false(any(grepl("\\[", got)))
+  expect_false(any(grepl("[", got, fixed = TRUE)))
   # RFC 2317 classless delegation names, which are generate-only.
   expect_false(any(grepl("/", got, fixed = TRUE)))
 })

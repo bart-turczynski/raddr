@@ -108,7 +108,7 @@ test_that("the carve-outs that force longest-prefix matching are present", {
     reg$space == "v4" & reg$prefix_len < 32L &
       startsWith(reg$block, "192.0.0.")
   ]
-  expect_true(length(containing) > 0L)
+  expect_gt(length(containing), 0L)
 })
 
 test_that("footnote markers are recorded without inventing their text", {
@@ -238,7 +238,7 @@ test_that("the snapshot id is a sha256 over the documented manifest", {
   keys <- c("v4", "v6", "v4_space", "v6_space")
   expect_equal(
     manifest,
-    paste0(
+    paste(
       vapply(
         keys,
         function(k) {
@@ -254,7 +254,12 @@ test_that("the snapshot id is a sha256 over the documented manifest", {
   # different order would hash differently and identify the same bytes as a
   # different snapshot.
   expect_equal(
-    vapply(strsplit(trimws(strsplit(manifest, "\n")[[1]]), " "), `[`, "", 1L),
+    vapply(
+      strsplit(trimws(strsplit(manifest, "\n", fixed = TRUE)[[1]]), " ",
+        fixed = TRUE
+      ),
+      `[`, "", 1L
+    ),
     keys
   )
 })
@@ -296,8 +301,8 @@ test_that("the snapshot id tracks content, and only content", {
   # Reordering the same four lines is also a different snapshot, which is what
   # makes the fixed order part of the definition rather than a formatting
   # choice.
-  lines <- strsplit(manifest, "\n")[[1]]
-  reordered <- paste0(paste0(rev(lines), "\n"), collapse = "")
+  lines <- strsplit(manifest, "\n", fixed = TRUE)[[1]]
+  reordered <- paste(paste0(rev(lines), "\n"), collapse = "")
   expect_false(identical(id_of(reordered), addr_registry_snapshot()))
 })
 

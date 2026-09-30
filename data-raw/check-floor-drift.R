@@ -100,7 +100,7 @@ parse_deps <- function(field) {
   if (is.na(field) || !nzchar(trimws(field))) {
     return(character())
   }
-  entries <- trimws(strsplit(field, ",")[[1L]])
+  entries <- trimws(strsplit(field, ",", fixed = TRUE)[[1L]])
   entries <- entries[nzchar(entries)]
   names <- sub("^([[:alnum:].]+).*$", "\\1", entries)
   floors <- rep(NA_character_, length(entries))

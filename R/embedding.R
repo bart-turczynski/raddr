@@ -573,9 +573,9 @@ addr_nat64_embeddings <- function(x, prefix) {
   empty <- empty_raddr_embedding()
   slots <- rep(list(empty), n)
 
-  # `%in% TRUE` rather than `isTRUE`-per-element: `addr_within()` returns NA for
-  # an address that is itself NA, and an unknown address embeds nothing.
-  at <- which(addr_within(x, prefix) %in% TRUE)
+  # `addr_within()` returns NA for an address that is itself NA, and an unknown
+  # address embeds nothing: `which()` drops the NAs.
+  at <- which(addr_within(x, prefix))
   if (!length(at)) {
     return(new_list_of(slots, ptype = empty))
   }

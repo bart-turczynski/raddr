@@ -13,7 +13,7 @@ dialect_fn <- function(name) {
     getaddrinfo = addr_getaddrinfo,
     curl = addr_curl,
     stop("unknown dialect: ", name)
-  )
+  ) # nolint: unreachable_code_linter.
 }
 
 # A row-major literal table, so a divergence table in a test reads the way it
@@ -34,11 +34,11 @@ rows_table <- function(names, ...) {
 # trailing-whitespace hook would eat it; the IPv4 fixture has no such column and
 # leaves its spaces literal, which this handles either way.
 unescape_control <- function(x) {
-  x <- gsub("\\\\s", " ", x)
-  x <- gsub("\\\\t", "\t", x)
-  x <- gsub("\\\\r", "\r", x)
-  x <- gsub("\\\\n", "\n", x)
-  x <- gsub("\\\\v", "\v", x)
-  x <- gsub("\\\\f", "\f", x)
-  gsub("\\\\\\\\", "\\\\", x)
+  x <- gsub("\\s", " ", x, fixed = TRUE)
+  x <- gsub("\\t", "\t", x, fixed = TRUE)
+  x <- gsub("\\r", "\r", x, fixed = TRUE)
+  x <- gsub("\\n", "\n", x, fixed = TRUE)
+  x <- gsub("\\v", "\v", x, fixed = TRUE)
+  x <- gsub("\\f", "\f", x, fixed = TRUE)
+  gsub("\\\\", "\\", x, fixed = TRUE)
 }

@@ -222,7 +222,7 @@ parse_flag <- function(x, column) {
   if (any(unknown)) {
     stop(
       "unexpected value in column ", column, ": ",
-      paste(unique(v[unknown]), collapse = ", "),
+      toString(unique(v[unknown])),
       call. = FALSE
     )
   }
@@ -255,7 +255,7 @@ read_registry <- function(path, space) {
   if (!identical(names(raw), expected)) {
     stop(
       "unexpected columns in ", path, ": ",
-      paste(names(raw), collapse = ", "),
+      toString(names(raw)),
       call. = FALSE
     )
   }
@@ -264,7 +264,8 @@ read_registry <- function(path, space) {
     r <- raw[i, ]
     # One registry row, possibly several prefixes: "192.0.0.170/32,
     # 192.0.0.171/32". Split, or longest-prefix match never matches either.
-    blocks <- trimws(strsplit(strip_footnotes(r[["Address Block"]]), ",")[[1]])
+    blocks <- strsplit(strip_footnotes(r[["Address Block"]]), ",", fixed = TRUE)
+    blocks <- trimws(blocks[[1]])
     blocks <- blocks[nzchar(blocks)]
 
     data.frame(
@@ -316,7 +317,7 @@ v4_space_blocks <- function(prefix) {
   if (!all(grepl("^[0-9]{3}/8$", prefix))) {
     stop(
       "unexpected IPv4 address-space prefix format: ",
-      paste(unique(prefix[!grepl("^[0-9]{3}/8$", prefix)]), collapse = ", "),
+      toString(unique(prefix[!grepl("^[0-9]{3}/8$", prefix)])),
       call. = FALSE
     )
   }
@@ -324,7 +325,7 @@ v4_space_blocks <- function(prefix) {
   if (any(octet > 255L)) {
     stop(
       "IPv4 address-space octet out of range: ",
-      paste(unique(octet[octet > 255L]), collapse = ", "),
+      toString(unique(octet[octet > 255L])),
       call. = FALSE
     )
   }
@@ -347,7 +348,7 @@ read_address_space_v4 <- function(path) {
   if (!identical(names(raw), expected)) {
     stop(
       "unexpected columns in ", path, ": ",
-      paste(names(raw), collapse = ", "),
+      toString(names(raw)),
       call. = FALSE
     )
   }
@@ -386,7 +387,7 @@ read_address_space_v4 <- function(path) {
   if (length(unexpected)) {
     stop(
       "unexpected IPv4 address-space status: ",
-      paste(unexpected, collapse = ", "),
+      toString(unexpected),
       call. = FALSE
     )
   }
@@ -405,7 +406,7 @@ read_address_space_v6 <- function(path) {
   if (!identical(names(raw), expected)) {
     stop(
       "unexpected columns in ", path, ": ",
-      paste(names(raw), collapse = ", "),
+      toString(names(raw)),
       call. = FALSE
     )
   }
@@ -440,7 +441,7 @@ parse_blocks <- function(tbl) {
   if (any(split_at < 0L)) {
     stop(
       "block with no prefix length: ",
-      paste(tbl$block[split_at < 0L], collapse = ", "),
+      toString(tbl$block[split_at < 0L]),
       call. = FALSE
     )
   }
@@ -451,7 +452,7 @@ parse_blocks <- function(tbl) {
   if (anyNA(addr_family(addr))) {
     stop(
       "unparseable registry block: ",
-      paste(tbl$block[is.na(addr_family(addr))], collapse = ", "),
+      toString(tbl$block[is.na(addr_family(addr))]),
       call. = FALSE
     )
   }
@@ -460,7 +461,7 @@ parse_blocks <- function(tbl) {
   if (any(prefix_len < 0L | prefix_len > width)) {
     stop(
       "prefix length out of range: ",
-      paste(tbl$block[prefix_len < 0L | prefix_len > width], collapse = ", "),
+      toString(tbl$block[prefix_len < 0L | prefix_len > width]),
       call. = FALSE
     )
   }
@@ -480,7 +481,7 @@ parse_blocks <- function(tbl) {
       bad <- which(masked != words[[k]] | xor(is.na(masked), is.na(words[[k]])))
       stop(
         "block has bits set below its prefix: ",
-        paste(tbl$block[bad], collapse = ", "),
+        toString(tbl$block[bad]),
         call. = FALSE
       )
     }
@@ -614,7 +615,7 @@ check_category_coverage <- function(blocks, space) {
   if (length(unmapped)) {
     stop(
       "registry block(s) with no category entry: ",
-      paste(unmapped, collapse = ", "),
+      toString(unmapped),
       "\nadd them to R/category.R -- an unclassified block must not default ",
       "to `global`",
       call. = FALSE
@@ -669,7 +670,7 @@ read_sidecar <- function(path) {
     return(NA_character_)
   }
   lines <- readLines(path, warn = FALSE)
-  if (!length(lines)) NA_character_ else trimws(lines[1])
+  if (length(lines)) trimws(lines[1]) else NA_character_
 }
 
 # An editorial date is trusted only when it has the shape of one, and
@@ -784,7 +785,7 @@ snapshot_manifest <- function(entries, keys) {
     function(k) sprintf("%s %s\n", k, entries[[k]]$sha256),
     character(1)
   )
-  paste0(lines, collapse = "")
+  paste(lines, collapse = "")
 }
 
 snapshot_id <- function(manifest) {
@@ -803,7 +804,7 @@ if (check_only) {
   ))
   if (length(missing)) {
     stop(
-      "missing generated artifact(s): ", paste(missing, collapse = ", "),
+      "missing generated artifact(s): ", toString(missing),
       "\nrun: Rscript data-raw/build-registry.R",
       call. = FALSE
     )
@@ -1074,7 +1075,7 @@ missing_wpt <- Filter(
 if (length(missing_wpt)) {
   stop(
     "cannot compose ", copyrights_path, " without the WPT inputs: ",
-    paste(missing_wpt, collapse = ", "),
+    toString(missing_wpt),
     "\nrun: Rscript data-raw/vendor-wpt.R",
     call. = FALSE
   )

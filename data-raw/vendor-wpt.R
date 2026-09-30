@@ -164,7 +164,7 @@ wpt_host_token <- function(input) {
   authority <- m[3]
   # A backslash terminates the authority under a special scheme and does not
   # under any other, so its presence makes the token scheme-dependent.
-  if (grepl("\\\\", authority)) {
+  if (grepl("\\", authority, fixed = TRUE)) {
     return(refused("backslash-authority"))
   }
   # Userinfo is delimited by the LAST "@", but percent-encoding can spell an "@"
@@ -253,16 +253,14 @@ build_corpus <- function(path, source) {
   # from a port or scheme failure needs the expected-failure bookkeeping of
   # RADD-aitbetjb, and guessing here would bake the guess into the corpus.
   serialized <- ifelse(is.na(hostname), "", hostname)
+  # Lowest precedence first, so each later assignment overrides the one before.
+  # Neither `failure` (isTRUE) nor `serialized` ("" for NA) can be NA.
   expect <- ifelse(
-    failure, "url-failure",
-    ifelse(
-      startsWith(serialized, "["), "ipv6",
-      ifelse(
-        grepl("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$", serialized),
-        "ipv4", "regname"
-      )
-    )
+    grepl("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$", serialized),
+    "ipv4", "regname"
   )
+  expect[startsWith(serialized, "[")] <- "ipv6"
+  expect[failure] <- "url-failure"
 
   # A percent-encoded host is text the URL parser DECODES before any address
   # parser sees it, so raddr is looking at different bytes than WPT is. Flagged
@@ -395,7 +393,7 @@ if (check_only) {
   missing <- Filter(Negate(file.exists), wanted)
   if (length(missing)) {
     stop(
-      "missing vendored artifact(s): ", paste(missing, collapse = ", "),
+      "missing vendored artifact(s): ", toString(missing),
       "\nrun: Rscript data-raw/vendor-wpt.R",
       call. = FALSE
     )

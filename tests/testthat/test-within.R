@@ -14,9 +14,8 @@ test_that("an address is inside its own block at every IPv4 length", {
     base <- 3221225984 # 192.0.2.0
     size <- 2^(32 - len)
     masked <- (base %/% size) * size
-    block <- paste0(
-      addr_format(integer_to_addr(sprintf("%.0f", masked), "v4")), "/", len
-    )
+    base_addr <- integer_to_addr(sprintf("%.0f", masked), "v4")
+    block <- sprintf("%s/%s", addr_format(base_addr), len)
     inside <- integer_to_addr(
       sprintf("%.0f", c(masked, masked + size - 1)), "v4"
     )
@@ -63,14 +62,14 @@ test_that("an address is inside its own block at every IPv6 word boundary", {
 
   a <- addr_pton("2001:db8:dead:beef:1234:5678:9abc:def0")
   for (len in c(0:2, 31:33, 63:65, 95:97, 126:128)) {
-    block <- paste0(addr_format(mask_addr(a, len)), "/", len)
+    block <- sprintf("%s/%s", addr_format(mask_addr(a, len)), len)
     expect_true(addr_within_any(a, block), info = block)
     # One bit past the prefix is a different block at the same length.
     if (len > 0L) {
       other <- mask_addr(addr_pton("f000::"), len)
       if (other != mask_addr(a, len)) {
         expect_false(
-          addr_within_any(a, paste0(addr_format(other), "/", len)),
+          addr_within_any(a, sprintf("%s/%s", addr_format(other), len)),
           info = block
         )
       }
@@ -194,7 +193,7 @@ test_that("the empty vector is answered on both sides", {
   )
   expect_identical(addr_within(addr_pton(character()), character()), logical())
   # No blocks contain nothing, which is FALSE rather than an error.
-  expect_identical(addr_within_any(addr_pton("10.0.0.1"), character()), FALSE)
+  expect_false(addr_within_any(addr_pton("10.0.0.1"), character()))
 })
 
 # --- a block is the question, so a bad block is loud -------------------------

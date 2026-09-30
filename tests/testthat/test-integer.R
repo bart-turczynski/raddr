@@ -58,7 +58,7 @@ test_that("the two decode paths agree across the digit-count boundary", {
   a <- integer_to_addr(seam, "v6")
 
   expect_identical(addr_to_integer(a), seam)
-  expect_false(any(is.na(a)))
+  expect_false(anyNA(a))
 })
 
 test_that("the values are the ones the RFC layouts give", {
@@ -351,8 +351,9 @@ test_that("what bignum shows is not what it stores", {
     format(big, notation = "dec"),
     "42540766411282592856903984951653826561"
   )
-  expect_true(
-    big == bignum::biginteger("42540766411282592856903984951653826561")
+  expect_identical(
+    big,
+    bignum::biginteger("42540766411282592856903984951653826561")
   )
 })
 
@@ -400,7 +401,8 @@ test_that("the seam survives a fuzz of both paths", {
   ceiling128 <- "340282366920938463463374607431768211455"
   padded <- paste0(strrep("0", decimal_max_digits - nchar(vals)), vals)
   fits <- padded <= ceiling128
-  expect_true(any(fits) && any(!fits))
+  expect_true(any(fits))
+  expect_false(all(fits))
 
   # Decoding and re-encoding uses the two directions independently: the fast
   # path is only in the decoder, so a seam bug cannot cancel itself out.

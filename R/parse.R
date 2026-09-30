@@ -220,7 +220,9 @@ ip_attempt <- function(x, colon, ipv6) {
 }
 
 outcome_factor <- function(accepted, attempt, input) {
-  out <- ifelse(accepted, "ok", ifelse(attempt, "rejected", "not_an_address"))
+  # `accepted` is never NA: both callers derive it from `!is.na()`.
+  out <- ifelse(attempt, "rejected", "not_an_address")
+  out[accepted] <- "ok"
   out[is.na(input)] <- NA_character_
   factor(out, levels = raddr_outcomes)
 }
@@ -574,7 +576,7 @@ obj_print_footer.raddr_parse <- function(x, ...) {
   tally <- tally[tally > 0L]
   cat(sprintf(
     "Status: %s\n",
-    paste(sprintf("%s %d", names(tally), as.integer(tally)), collapse = ", ")
+    toString(sprintf("%s %d", names(tally), as.integer(tally)))
   ))
 
   at <- which(addr_is_divergent(x))
@@ -608,7 +610,7 @@ describe_reading <- function(x, dialect, i) {
   if (!length(codes)) {
     return(sprintf("<%s>", outcome))
   }
-  sprintf("<%s: %s>", outcome, paste(codes, collapse = ", "))
+  sprintf("<%s: %s>", outcome, toString(codes))
 }
 
 #' @export

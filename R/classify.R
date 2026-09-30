@@ -723,6 +723,8 @@ addr_classify <- function(x) {
 check_classify_input <- function(x, arg = "x") {
   if (is_raddr_parse(x)) {
     abort(
+      # Repeated `i =` names are cli bullets, not duplicate arguments.
+      # nolint start: duplicate_argument_linter.
       c(
         sprintf(
           "`%s` must be a <raddr_address> vector, not a <raddr_parse>.",
@@ -737,6 +739,7 @@ check_classify_input <- function(x, arg = "x") {
           "`addr_whatwg()`, `addr_pton()` or `addr_aton()`."
         )
       ),
+      # nolint end
       class = "raddr_error_type"
     )
   }
@@ -981,7 +984,7 @@ obj_print_footer.raddr_class <- function(x, ...) {
     sprintf("%s %s%s", registry_labels[[level]], version[at][[1L]], count)
   }, character(1L))
 
-  cat(sprintf("Registry: %s\n", paste(parts, collapse = ", ")))
+  cat(sprintf("Registry: %s\n", toString(parts)))
   invisible(x)
 }
 

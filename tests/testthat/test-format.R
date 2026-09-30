@@ -250,10 +250,7 @@ test_that("the canonical form is a fixed point", {
 
 test_that("equal addresses format identically, and unequal ones do not", {
   a <- addr_strict(format_corpus())
-  expect_identical(
-    length(unique(addr_format(a))),
-    length(unique(a))
-  )
+  expect_length(unique(addr_format(a)), length(unique(a)))
 })
 
 test_that("the rendering is per-row, not per-vector", {

@@ -555,7 +555,7 @@ slow_expand <- function(hex, family, zone) {
 block_edges <- function(table) {
   words <- lapply(
     list(table$w1, table$w2, table$w3, table$w4),
-    function(w) widen_word(w)
+    widen_word
   )
   len <- table$prefix_len
   is_v4 <- table$space == "v4"
@@ -675,7 +675,7 @@ block_probes <- function(blocks) {
   middle <- binary_to_addr(bits("middle"))
   block_text <- function(x, len) {
     text <- addr_format(x)
-    ifelse(is.na(text) | is.na(len), NA_character_, paste0(text, "/", len))
+    ifelse(is.na(text) | is.na(len), NA_character_, sprintf("%s/%s", text, len))
   }
 
   list(

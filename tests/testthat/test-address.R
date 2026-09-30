@@ -56,7 +56,7 @@ test_that("128.0.0.0 equals itself (the 0x80000000 IPv4 address)", {
   a <- raddr_address(0L, 0L, 0L, NA_integer_, "v4")
   b <- raddr_address(0L, 0L, 0L, NA_integer_, "v4")
 
-  expect_identical(a == b, TRUE)
+  expect_same_address(a, b)
   expect_false(is.na(a == b))
   expect_identical(vctrs::vec_compare(a, b), 0L)
 })
@@ -69,7 +69,7 @@ test_that("the 0x80000000 pattern equals itself in every IPv6 word", {
     a <- raddr_address(words[[1]], words[[2]], words[[3]], words[[4]], "v6")
     b <- raddr_address(words[[1]], words[[2]], words[[3]], words[[4]], "v6")
 
-    expect_identical(a == b, TRUE)
+    expect_same_address(a, b)
     expect_identical(vctrs::vec_compare(a, b), 0L)
   }
 })
@@ -118,7 +118,7 @@ test_that("zone does not participate in equality (O2)", {
   lo0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", "lo0")
   en0 <- raddr_address(-25165824L, 0L, 0L, 1L, "v6", "en0")
 
-  expect_true(lo0 == en0)
+  expect_same_address(lo0, en0)
   expect_identical(vctrs::vec_compare(lo0, en0), 0L)
   expect_false(addr_zone(lo0) == addr_zone(en0))
 })

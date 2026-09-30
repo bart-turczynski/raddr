@@ -50,7 +50,7 @@ test_that("the corpus is worth running two implementations over", {
   # And both families, and a zone, are actually represented.
   families <- addr_family(addr_pton(literals))
   expect_true(all(c("v4", "v6", "v6_4in6") %in% as.character(families)))
-  expect_true(any(!is.na(addr_zone(addr_pton(literals)))))
+  expect_false(all(is.na(addr_zone(addr_pton(literals)))))
 })
 
 test_that("the strict dialect agrees with the naive parser", {

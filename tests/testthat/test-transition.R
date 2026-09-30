@@ -40,7 +40,7 @@ test_that("the overlay agrees with the IANA table where they overlap", {
 
   shared <- intersect(prefixes$block, iana$block)
   # The overlay annotates the IANA table far more than it extends it.
-  expect_true(length(shared) >= 5L)
+  expect_gte(length(shared), 5L)
 
   # And the two forms it annotates hardest are exactly the ones IANA declined
   # to answer for -- the overlay exists to pick up where the table stops.

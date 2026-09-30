@@ -49,7 +49,7 @@ test_that("glibc and musl inet_pton reject the zeros Apple reads as decimal", {
     )
     # Every one of them is a rejection there, not a different reading.
     gap <- apple$pton != linux$pton
-    expect_true(all(!nzchar(linux$pton[gap])), label = libc)
+    expect_false(any(nzchar(linux$pton[gap])), label = libc)
   }
 })
 
@@ -70,7 +70,7 @@ test_that("glibc and musl inet_aton refuse the overflow Apple wraps", {
     linux <- libc_fixture(sprintf("ipv4-libc-%s.csv", libc))
     keep <- apple$input %in% wrapped
     expect_true(all(nzchar(apple$aton[keep])), label = libc)
-    expect_true(all(!nzchar(linux$aton[keep])), label = libc)
+    expect_false(any(nzchar(linux$aton[keep])), label = libc)
   }
 })
 
@@ -91,12 +91,12 @@ test_that("glibc inet_aton matches Apple on garbage; musl is the outlier", {
   expect_identical(sum(keep), length(lenient))
   expect_identical(glibc$aton[keep], apple$aton[keep])
   expect_true(all(nzchar(apple$aton[keep])))
-  expect_true(all(!nzchar(musl$aton[keep])))
+  expect_false(any(nzchar(musl$aton[keep])))
 
   # Glued garbage is a rejection everywhere. No libc ignores it.
   glued <- apple$literal == "1.2.3.4x"
   expect_identical(sum(glued), 1L)
-  expect_true(all(!nzchar(
+  expect_false(any(nzchar(
     c(apple$aton[glued], glibc$aton[glued], musl$aton[glued])
   )))
 })
@@ -139,7 +139,7 @@ test_that("getaddrinfo is pton-then-aton behind the gate on every libc", {
       label = libc
     )
     # And the gate is a refusal, never a different answer.
-    expect_true(all(!nzchar(d$getaddrinfo[d$literal %in% gated])), label = libc)
+    expect_false(any(nzchar(d$getaddrinfo[d$literal %in% gated])), label = libc)
   }
 })
 
@@ -167,7 +167,7 @@ test_that("glibc and musl inet_pton reject leading zeros in IPv6 too", {
   keep <- apple$input %in% zeros
   expect_identical(sum(keep), length(zeros))
   expect_true(all(nzchar(apple$pton[keep])))
-  expect_true(all(!nzchar(linux$pton[keep])))
+  expect_false(any(nzchar(linux$pton[keep])))
 })
 
 # --- The zone, the fold and the lift -----------------------------------------
@@ -197,7 +197,7 @@ test_that("glibc and musl inet_pton take no zone ID at all", {
   for (libc in c("glibc", "musl")) {
     d <- zone_native(libc)
     zoned <- grepl("%", d$input, fixed = TRUE)
-    expect_true(all(!nzchar(d$pton[zoned])), label = libc)
+    expect_false(any(nzchar(d$pton[zoned])), label = libc)
     expect_true(all(nzchar(apple$pton[zoned])), label = libc)
   }
 })

@@ -181,7 +181,7 @@ test_that("a generated address survives being rendered and read back", {
   hedgehog::forall(gen_address(), function(a) {
     for (render in list(addr_format, addr_expand)) {
       back <- addr_pton(render(a))
-      expect_true(back == a)
+      expect_same_address(back, a)
       expect_identical(addr_family(back), addr_family(a))
       # And the fixed point, which is the half that catches a renderer that is
       # merely self-consistent rather than canonical.
@@ -198,10 +198,10 @@ test_that("the four encodings decode to the generated address", {
   # corpus only reaches by luck.
   set.seed(60221L)
   hedgehog::forall(gen_address(), function(a) {
-    expect_true(integer_to_addr(addr_to_integer(a), addr_family(a)) == a)
-    expect_true(hex_to_addr(addr_to_hex(a)) == a)
-    expect_true(bytes_to_addr(addr_to_bytes(a)) == a)
-    expect_true(binary_to_addr(addr_to_binary(a)) == a)
+    expect_same_address(integer_to_addr(addr_to_integer(a), addr_family(a)), a)
+    expect_same_address(hex_to_addr(addr_to_hex(a)), a)
+    expect_same_address(bytes_to_addr(addr_to_bytes(a)), a)
+    expect_same_address(binary_to_addr(addr_to_binary(a)), a)
   }, tests = property_tests())
 })
 
@@ -248,10 +248,10 @@ test_that("the order over addresses is transitive", {
     expect_false(is.na(ac))
 
     if (ab <= 0L && bc <= 0L) {
-      expect_true(ac <= 0L)
+      expect_lte(ac, 0L)
     }
     if (ab >= 0L && bc >= 0L) {
-      expect_true(ac >= 0L)
+      expect_gte(ac, 0L)
     }
     # Ties are an equivalence, not merely a zero: if a == b and b == c then
     # a == c, which is what lets `unique()` group by the proxy.
@@ -293,7 +293,7 @@ property_block <- function(o, len) {
       collapse = ":"
     )
   }
-  paste0(host, "/", len)
+  sprintf("%s/%s", host, len)
 }
 
 test_that("containment is downward closed in the prefix length", {
@@ -396,13 +396,13 @@ test_that("every reading of a generated literal classifies without erroring", {
       # them is allowed to be the one that errors (section 6.3).
       expect_silent(addr_category(a))
       expect_silent(addr_embedded_kind(a))
-      expect_identical(length(addr_embeddings(a)), 1L)
+      expect_length(addr_embeddings(a), 1L)
 
       # Whatever a dialect accepted, `addr_pton()` reads back (section 5.1.3),
       # and this reaches it through the six dialects rather than through a
       # draw -- the accepted set is different for each of them.
       if (known) {
-        expect_true(addr_pton(addr_format(a)) == a)
+        expect_same_address(addr_pton(addr_format(a)), a)
       }
     }
   }, tests = property_tests(cran = 15L, local = 200L))

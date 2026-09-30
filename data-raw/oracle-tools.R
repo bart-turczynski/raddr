@@ -95,7 +95,7 @@ split_nul <- function(r) {
 # agreed between R and Go; see the note in data-raw/oracle-netip.go.
 netip_readings <- function(literal, family) {
   stopifnot(family %in% c(4L, 6L))
-  if (nzchar(Sys.which("go")) == FALSE) {
+  if (!nzchar(Sys.which("go"))) {
     stop("oracle-netip needs a Go toolchain on PATH")
   }
 
@@ -155,7 +155,7 @@ curl_measurable <- function(literal, family) {
   if (family == 4L) {
     structural <- c(structural, ":")
   }
-  hits <- lapply(structural, function(ch) grepl(ch, literal, fixed = TRUE))
+  hits <- lapply(structural, grepl, x = literal, fixed = TRUE)
   !grepl("[[:space:][:cntrl:]]", literal) & !Reduce(`|`, hits)
 }
 
@@ -187,7 +187,7 @@ curl_resolver_is_honest <- function() {
     ),
     stdout = NULL, stderr = TRUE
   ))
-  length(grep("^\\*\\s+Trying ", out)) == 0L
+  !any(grepl("^\\*\\s+Trying ", out))
 }
 
 # curl prints "* Trying <addr>:<port>..." after it has resolved the host and
@@ -203,7 +203,7 @@ curl_resolver_is_honest <- function() {
 # network access, and data-raw/build-registry.R already fetches from IANA.
 curl_readings <- function(literal, family) {
   stopifnot(family %in% c(4L, 6L))
-  if (nzchar(Sys.which("curl")) == FALSE) {
+  if (!nzchar(Sys.which("curl"))) {
     stop("the curl oracle needs curl on PATH")
   }
   if (!curl_resolver_is_honest()) {

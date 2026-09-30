@@ -67,7 +67,7 @@ codes_by_dialect <- function(literal) {
   p <- addr_parse(literal)
   found <- vapply(
     c("strict", "whatwg", "pton", "aton", "getaddrinfo", "curl"),
-    function(d) paste(unlist(addr_codes(p, d)), collapse = ", "),
+    function(d) toString(unlist(addr_codes(p, d))),
     character(1)
   )
   data.frame(codes = found)
