@@ -68,6 +68,17 @@ The check moves to release time instead. **Before every CRAN release**, as a rel
 
 Tracker notes from the GitHub suspension say R-hub v2 is blocked. That was about `rhub::rhub_check()`, which runs in the package's own GitHub repository. `rc_submit()` does not use one.
 
+## Dependency floors are re-measured at release
+
+The declared floors (`R (>= 4.0.0)`, `vctrs (>= 0.7.0)`, `rlang (>= 1.1.7)`) are measured by `data-raw/check-r-floor.sh` and `data-raw/check-dep-floor.sh`, with transcripts `docs/r-floor-check.md` and `docs/dep-floor-check.md`. Four triggers call for re-running both scripts and refreshing both transcripts (`RADD-olitgnsw`). Two are file state, and `data-raw/check-floor-drift.R` gates them in `data-raw/verify.sh`, so the pre-push hook and CI carry it: a floor raised in `DESCRIPTION`, and a new `Imports:` entry. The other two need the network or a person, so they are a release-checklist step. **Before every CRAN release after the first:**
+
+1. Check whether any `Imports:` dependency, at its current CRAN version, now requires a newer R than the declared floor: `tools::package_dependencies()` on the CRAN package db, or its `Depends` field, for `rlang`, `vctrs` and their closure. A dependency release that drops R 4.0.0 makes the declared floor unreachable in practice without changing a byte of this repository (trigger 3).
+2. Re-run `sh data-raw/check-r-floor.sh > docs/r-floor-check.md` and `sh data-raw/check-dep-floor.sh > docs/dep-floor-check.md` when step 1 found one, and at every resubmission, since the dependency closure will have moved (trigger 4). Both need Docker. Commit the refreshed transcripts; `data-raw/check-floor-drift.R` then confirms they match `DESCRIPTION`.
+
+Two cautions travel with a re-run. `check-dep-floor.sh` moves R and vctrs to their floors together, so a failure does not attribute to either alone; its header's `BASE=` fallback (for example `BASE=rocker/r-ver:4.4.2`) separates them. And its equality assert is load-bearing: it installs vctrs at exactly the floor, not `>=`, because a `>=` assert once let a gap stand while an earlier script installed a newer vctrs and looked like a measurement. Don't relax it.
+
+Don't re-run the scripts when no trigger fired. A green re-run against an unchanged premise is not evidence.
+
 ## No dependency vulnerability audit, on purpose
 
 Some fleet packages run a dependency vulnerability audit: `tests/testthat/test-security.R` against OSS Index via oysteR, `test-osv.R` against OSV via rosv, and scheduled `security-audit` and `osv-audit` CI jobs. raddr has none of these, and that is a decision, not an omission (owner, 2026-09-24, confirmed 2026-09-27; `RADD-hmvlwcyi`, `SEOR-fftbjnpl`). Its direct imports are rlang and vctrs; the full hard-dependency closure, measured 2026-09-27 with `tools::package_dependencies(c("rlang", "vctrs"), which = c("Depends", "Imports", "LinkingTo"), recursive = TRUE)`, is five r-lib packages: cli, glue, lifecycle, rlang and vctrs. None of them reaches the network or links a system library such as curl or OpenSSL, which is where the only advisories found anywhere in the fleet came from. The cost of an audit is adding oysteR or rosv to `Suggests:` of a package already on CRAN, or keeping a CI-only audit script outside the build; neither is worth it for this closure. Revisit if the closure grows, and at once if it gains a network or TLS dependency.
