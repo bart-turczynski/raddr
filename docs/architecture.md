@@ -50,13 +50,13 @@ discards the rest. raddr does not pick.
 | HTTP, redirects, connection pinning | `ssrfr` |
 | Allow/deny policy, risk scores, verdicts | `ssrfr` |
 | Cloud-metadata endpoint tables | `ssrfr` |
-| "Most restrictive reading wins" convenience | `ssrfr` |
+| "Most restrictive reading wins" convenience | nobody: not needed, `ssrfr` fixes one reading (INV-1) |
 | Geolocation, ASN, country data | nowhere |
 | IDNA, punycode | `punycoder` |
 | Public-suffix logic | `pslr` |
 | URL parsing, scheme/port policy, reg-name-vs-IP host form | `rurl` |
 | General CIDR set algebra (collapse, exclude, subnets) | `ipaddress` |
-| `X-Forwarded-For` extraction (HTTP header parsing, not address parsing) | `ssrfr` |
+| `X-Forwarded-For` extraction (HTTP header parsing, not address parsing) | the application (no stack package) |
 | Visualization | `ggip` |
 
 ---
