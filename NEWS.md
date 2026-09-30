@@ -22,6 +22,12 @@
 * `.Rbuildignore` now lists `^\.git$` (in a checkout made by `git worktree add`,
   `.git` is a file that `R CMD build` does not exclude, so the tarball shipped
   it) and `^\.claude$` (agent checkouts live under `.claude/worktrees/`).
+* New `CITATION.cff` and `.zenodo.json` name 0.1.2, released to CRAN on
+  2026-09-21, and carry no DOI yet. DOI archiving is on for the GitHub mirror,
+  so the next GitHub Release mints one either way, and these files keep that
+  record from being built out of scraped metadata. Both are excluded from the
+  build, and `docs/verification-gates.md` gains the post-tag archiving step
+  (`RADD-dxzfcbjx`).
 * The `--as-cran` check in CI reads the CRAN metadata behind its
   incoming-feasibility step from `cloud.r-project.org` instead of the p3m
   mirror of the image, which returns 404 for it. Since raddr reached CRAN, the release job had halted at that step

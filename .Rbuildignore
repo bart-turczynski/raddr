@@ -52,3 +52,8 @@
 # pkgdown config and its build output (destination: public in _pkgdown.yml).
 ^_pkgdown\.yml$
 ^public$
+# Citation metadata for the forge and Zenodo (RADD-dxzfcbjx), not package
+# content. In the tarball, CITATION.cff is a non-standard top-level file and
+# .zenodo.json a hidden one, and --as-cran reports both.
+^CITATION\.cff$
+^\.zenodo\.json$
