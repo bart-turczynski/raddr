@@ -23,6 +23,12 @@
 ^\.env\.example$
 ^\.gitattributes$
 ^\.gitignore$
+# In a git worktree .git is a regular file (a gitdir: pointer), which R CMD build
+# does not exclude the way it does a .git directory; it would ship as a hidden file.
+^\.git$
+# Agent worktrees live under .claude/worktrees/; keep them out of a tarball
+# built from the main clone.
+^\.claude$
 ^\.pre-commit-config\.yaml$
 ^\.fp$
 ^_scratch$

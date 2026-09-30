@@ -9,7 +9,7 @@ IANA special-purpose address registries.
 > type, the six dialects, `addr_parse()`, RFC 5952 formatting, registry-backed
 > classification, containment, encoding round-trips, reverse pointers, three
 > vignettes and the reference docs — and the design is written down in
-> `docs/architecture.md`. The API is not yet stable.
+> [`docs/architecture.md`](https://gitlab.com/bart-turczynski/raddr/-/blob/main/docs/architecture.md). The API is not yet stable.
 
 ## The problem, in one string
 
@@ -167,5 +167,5 @@ check.
 - `tests/testthat/` contains the testthat tests.
 - `vignettes/` contains long-form documentation.
 - `DESCRIPTION` declares package metadata and dependencies.
-- `docs/architecture.md` is the settled design record — read it before changing the API.
+- [`docs/architecture.md`](https://gitlab.com/bart-turczynski/raddr/-/blob/main/docs/architecture.md) is the settled design record — read it before changing the API.
 - `_scratch/` is local-only planning space and is ignored by git.
