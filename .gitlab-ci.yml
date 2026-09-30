@@ -62,6 +62,12 @@
 # that no longer get a pipeline.
 
 default:
+  # The fleet's jobs run only on the self-hosted Docker runners on the
+  # maintainer's Mac, which carry this tag. Naming it makes that dependency
+  # explicit: while the Mac sleeps, jobs sit pending and then fail as
+  # `stuck_pending_no_matching_runners`, which is infrastructure, not code
+  # (seor CONTRIBUTING.md, "Stuck-pending runbook"; SEOR-hhtzaknn).
+  tags: [local-docker]
   image: rocker/r-ver:latest
   # Runner slots are finite -- one Mac serves the whole fleet -- and
   # superseded pipelines answer a question nobody is still asking.
