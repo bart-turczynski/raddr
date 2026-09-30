@@ -13,15 +13,15 @@
 * The documentation site moved to `https://bart-turczynski.gitlab.io/raddr/`,
   the fleet's standard GitLab Pages address; the old per-project
   `gitlab.io` domain stops resolving (`SEOR-hcmtspmv`).
-* The README's links to `docs/architecture.md` now point at the GitLab copy;
+* The links in `README.md` to `docs/architecture.md` now point at the GitLab copy;
   `docs/` is not part of the installed package, so the relative path did not
   resolve for CRAN installs.
 
 ## Internal
 
-* `.Rbuildignore` now lists `^\.git$` (in a git worktree `.git` is a file that
-  `R CMD build` does not exclude, so the tarball shipped it) and `^\.claude$`
-  (agent worktrees live under `.claude/worktrees/`).
+* `.Rbuildignore` now lists `^\.git$` (in a checkout made by `git worktree add`,
+  `.git` is a file that `R CMD build` does not exclude, so the tarball shipped
+  it) and `^\.claude$` (agent checkouts live under `.claude/worktrees/`).
 * The `--as-cran` check in CI reads the CRAN metadata behind its
   incoming-feasibility step from `cloud.r-project.org` instead of the p3m
   mirror of the image, which returns 404 for it. Since raddr reached CRAN, the release job had halted at that step
