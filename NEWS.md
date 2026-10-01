@@ -92,6 +92,12 @@
   hook and in CI: `BugReports:` and the package help page keep `/-/issues`,
   and no human-facing file links it (`SEOR-ocbtrrnl`).
 
+* `.lintr` gains `case_folding_linter`, which bans `tolower()`, `toupper()` and
+  `casefold()` in `R/` and the tests alike. They follow `LC_CTYPE`, and under a
+  Turkish locale `tolower("I")` is `"ı"`, not `"i"`; use `chartr()` over `A-Z`
+  and `a-z`. The three test calls, all on ASCII hex and digit strings,
+  now use `chartr()` (`SEOR-rxxuzhmc`).
+
 # raddr 0.1.2
 
 First published release. 0.1.0 and 0.1.1 were tagged during development, on

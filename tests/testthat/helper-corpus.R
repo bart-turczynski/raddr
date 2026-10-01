@@ -91,7 +91,7 @@ corpus_generated_literals <- local({
       paste0("000", v),
       format(as.hexmode(v)),
       paste0("0x", format(as.hexmode(v))),
-      paste0("0X", toupper(format(as.hexmode(v))))
+      paste0("0X", chartr("a-z", "A-Z", format(as.hexmode(v))))
     )
   }
   values_v4 <- c(0:12, 250:258, 65535, 65536, 16777215, 16777216, 2147483647)

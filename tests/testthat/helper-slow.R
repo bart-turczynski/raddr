@@ -65,7 +65,7 @@ slow_run_value <- function(digits, base) {
   value <- 0
   over <- FALSE
   for (ch in slow_chars(digits)) {
-    d <- match(tolower(ch), slow_digit_chars) - 1L
+    d <- match(chartr("A-Z", "a-z", ch), slow_digit_chars) - 1L
     if (is.na(d) || d >= base) {
       return(list(value = 0, ok = FALSE, over = FALSE))
     }

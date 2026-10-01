@@ -249,7 +249,7 @@ test_that("hex labels and the suffix are lowercase", {
     "2001:DB8::ABCD",
     "192.0.2.1"
   )))
-  expect_identical(got, tolower(got))
+  expect_identical(got, chartr("A-Z", "a-z", got))
   expect_false(any(grepl("[A-Z]", got)))
 })
 
