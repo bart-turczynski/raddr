@@ -13,6 +13,7 @@ Useful links:
 \itemize{
   \item \url{https://gitlab.com/bart-turczynski/raddr}
   \item \url{https://bart-turczynski.gitlab.io/raddr/}
+  \item \url{https://CRAN.R-project.org/package=raddr}
   \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/issues}
 }
 

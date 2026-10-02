@@ -32,6 +32,12 @@
   "notes": "The package code is MIT-licensed. It bundles the IANA IPv4 and IPv6 address-space and special-purpose registries (CC0 1.0) and, as a test fixture, the web-platform-tests URL test data (BSD-3-Clause); see inst/COPYRIGHTS.",
   "related_identifiers": [
     {
+      "identifier": "https://CRAN.R-project.org/package=raddr",
+      "relation": "isIdenticalTo",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
       "identifier": "https://gitlab.com/bart-turczynski/raddr",
       "relation": "isSupplementTo",
       "resource_type": "software",

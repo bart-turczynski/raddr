@@ -18,6 +18,7 @@ authors:
     given-names: Bart
     orcid: "https://orcid.org/0000-0002-8788-7980"
 repository-code: "https://gitlab.com/bart-turczynski/raddr"
+repository: "https://CRAN.R-project.org/package=raddr"
 url: "https://bart-turczynski.gitlab.io/raddr/"
 license: MIT
 keywords:

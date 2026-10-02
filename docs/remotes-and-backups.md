@@ -14,7 +14,7 @@ Demoted verbatim from `AGENTS.md` on 2026-09-05. Self-references such as "this f
 
 **Corrected 2026-09-10 — this was previously recorded as anti-scraping, and that was wrong.** Measured from one anonymous client in a single run, `/-/work_items` returns **200** for both `bart-turczynski/raddr` and `gitlab-org/gitlab`, while `/-/issues` returns 404 for both. Scripted clients are not blocked; the legacy path is. So the NOTE *is* fixable, by repointing `BugReports:` at `https://gitlab.com/bart-turczynski/raddr/-/work_items` — which is where issues are now filed, not a decoy 200. Do that in a release cycle, never inside a submission: it changes `DESCRIPTION`, which invalidates the tarball every recorded check row was measured against.
 
-`DESCRIPTION` deliberately carries **no `https://CRAN.R-project.org/package=raddr` URL**, unlike rurl's and punycoder's. Those two are on CRAN; raddr is not yet (measured: that address 404s). Add it once raddr is accepted — adding it before would introduce exactly the kind of dead link this repoint removed, and a second NOTE that obscures the expected one.
+**Added 2026-10-02: `DESCRIPTION`'s `URL:` now lists `https://CRAN.R-project.org/package=raddr`, last, as rurl and punycoder do (`RADD-fdabvrqv`).** raddr 0.1.2 was published on CRAN on 2026-09-21, and the canonical address redirects (303) to the package page, which answers 200. `CITATION.cff` names it as `repository:` and `.zenodo.json` as an `isIdenticalTo` related identifier. Until acceptance `DESCRIPTION` deliberately carried no CRAN URL, because the address 404'd and would have drawn a second NOTE obscuring the expected one.
 
 Two local layers remain, following the convention used by sibling repos in `~/Projects/_backups/`:
 

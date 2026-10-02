@@ -16,6 +16,8 @@
 * The links in `README.md` to `docs/architecture.md` now point at the GitLab copy;
   `docs/` is not part of the installed package, so the relative path did not
   resolve for CRAN installs.
+* `URL:` now lists the CRAN page, `https://CRAN.R-project.org/package=raddr`,
+  which `CITATION.cff` and `.zenodo.json` also name (`RADD-fdabvrqv`).
 
 ## Internal
 
