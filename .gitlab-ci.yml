@@ -339,7 +339,7 @@ variables:
     # tests/testthat/test-hedgehog.R skips whole when hedgehog is absent, and
     # the bignum, bit64 and digest paths do the same.
     - |
-      Rscript -e 'p <- c("rlang", "vctrs", "bignum", "bit64", "digest", "hedgehog", "knitr", "rmarkdown", "spelling", "testthat", "lintr", "rcmdcheck"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); print(ok); if (!all(ok)) quit(status = 1)'
+      Rscript -e 'p <- c("rlang", "vctrs", "bignum", "bit64", "digest", "hedgehog", "knitr", "oysteR", "rmarkdown", "rosv", "spelling", "testthat", "lintr", "rcmdcheck"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); print(ok); if (!all(ok)) quit(status = 1)'
     # Asserted rather than assumed, because vctrs is the one dependency whose
     # version has already produced a wrong conclusion. vctrs < 0.7.0 modifies
     # vctrs_rcrd types in place in vec_assign(), which corrupts raddr_address
@@ -427,10 +427,7 @@ check:linux-devel:
 # every URL those two files declare must also appear in DESCRIPTION's URL field.
 # Ported from seor, where the rule is design/adr/0001 and design/adr/0002.
 #
-# raddr carries NEITHER file today (SEOR-lreejxat item 4 is an open owner
-# decision). The gate reads absence as nothing to check rather than as a
-# violation, so this job passes either way and is in place before the files can
-# arrive.
+# raddr carries both files (RADD-dxzfcbjx).
 #
 # The workflow rules above (SEOR-bmgkzhvy) mean this pipeline now fires on
 # every push to main and on a v* tag, not only on a DESCRIPTION-changing MR --
@@ -490,7 +487,9 @@ citation-version:
 # on 2026-09-23 (CHANGELOG.html, CONTRIBUTING.html and SECURITY.html all
 # return 200 at https://bart-turczynski.gitlab.io/raddr/) -- de-publishing any
 # of them is an editorial call this ticket does not make, so all three are
-# grandfathered rather than dropped. README.md, NEWS.md and cran-comments.md
+# grandfathered rather than dropped. LICENSE.md, CODE_OF_CONDUCT.md and
+# ARCHITECTURE.md joined on 2026-10-03 with the fleet standard (SEOR-lavybtkr),
+# which makes them public files in every package. README.md, NEWS.md and cran-comments.md
 # are listed too even though pkgdown special-cases them on its own (index.html,
 # the changelog, and a no_render inventory entry respectively): moving one of
 # those out from under pkgdown would break the site rather than merely hide a
@@ -538,7 +537,7 @@ pages:
     - |
       mkdir -p /tmp/agent-md
     - |
-      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); copied <- file.copy(drop, "/tmp/agent-md", overwrite = TRUE); if (!all(copied)) stop("could not copy into /tmp/agent-md: ", paste(drop[!copied], collapse = ", "), call. = FALSE); unlink(drop); left <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(left)) stop("unlisted .md still in the site source, refusing to publish it: ", paste(left, collapse = ", "), call. = FALSE); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
+      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE.md", "CODE_OF_CONDUCT.md", "ARCHITECTURE.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); copied <- file.copy(drop, "/tmp/agent-md", overwrite = TRUE); if (!all(copied)) stop("could not copy into /tmp/agent-md: ", paste(drop[!copied], collapse = ", "), call. = FALSE); unlink(drop); left <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(left)) stop("unlisted .md still in the site source, refusing to publish it: ", paste(left, collapse = ", "), call. = FALSE); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
     - |
       Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
   artifacts:

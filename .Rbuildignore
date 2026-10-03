@@ -57,3 +57,13 @@
 # .zenodo.json a hidden one, and --as-cran reports both.
 ^CITATION\.cff$
 ^\.zenodo\.json$
+# Fleet-standard files (SEOR-lavybtkr): forge, policy and metadata files, not
+# package content. LICENSE.md is the full MIT text for the forge's license
+# detector; the package ships the two-line LICENSE stub CRAN expects.
+^LICENSE\.md$
+^CODE_OF_CONDUCT\.md$
+^ARCHITECTURE\.md$
+^SECURITY-INSIGHTS\.yml$
+^codemeta\.json$
+^\.gitlab$
+^README\.Rmd$

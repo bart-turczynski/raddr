@@ -52,7 +52,10 @@ expected_keep <- c(
   "cran-comments.md",
   "CHANGELOG.md",
   "CONTRIBUTING.md",
-  "SECURITY.md"
+  "SECURITY.md",
+  "LICENSE.md",
+  "CODE_OF_CONDUCT.md",
+  "ARCHITECTURE.md"
 )
 
 package_root <- function() {

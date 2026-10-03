@@ -4,7 +4,7 @@ Title: Show What an IP Address Literal Means Under Every Standard
 Version: 0.1.2.9000
 Language: en-US
 Authors@R: c(
-    person("Bart", "Turczynski", email = "bartek@turczynski.pl", role = c("aut", "cre"),
+    person("Bart", "Turczynski", email = "bartek@turczynski.pl", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-8788-7980")),
     person("web-platform-tests contributors", role = "cph",
            comment = "bundled URL test corpus, BSD-3-Clause; see inst/COPYRIGHTS"))
@@ -24,8 +24,9 @@ Depends:
 Imports:
     rlang (>= 1.1.7),
     vctrs (>= 0.7.0)
-URL: https://gitlab.com/bart-turczynski/raddr,
-    https://bart-turczynski.gitlab.io/raddr/,
+URL: https://bart-turczynski.gitlab.io/raddr/,
+    https://gitlab.com/bart-turczynski/raddr,
+    https://bart-turczynski.r-universe.dev/raddr,
     https://CRAN.R-project.org/package=raddr
 BugReports: https://gitlab.com/bart-turczynski/raddr/-/issues
 X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
@@ -37,7 +38,9 @@ Suggests:
     digest,
     hedgehog,
     knitr,
+    oysteR,
     rmarkdown,
+    rosv,
     spelling,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

@@ -1,0 +1,17 @@
+citHeader("To cite the raddr package in publications, use:")
+
+year <- sub("-.*", "", meta$Date)
+if (!length(year) || is.na(year) || !nzchar(year)) {
+  year <- format(Sys.Date(), "%Y")
+}
+note <- sprintf("R package version %s", meta$Version)
+
+bibentry(
+  bibtype = "Manual",
+  title   = "{raddr}: Show What an IP Address Literal Means Under Every Standard",
+  author  = person("Bart", "Turczynski",
+                   comment = c(ORCID = "0000-0002-8788-7980")),
+  year    = year,
+  note    = note,
+  url     = "https://CRAN.R-project.org/package=raddr"
+)

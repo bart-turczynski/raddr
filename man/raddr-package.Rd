@@ -11,19 +11,20 @@ Standards and implementations disagree about what an IP address literal means: t
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://gitlab.com/bart-turczynski/raddr}
   \item \url{https://bart-turczynski.gitlab.io/raddr/}
+  \item \url{https://gitlab.com/bart-turczynski/raddr}
+  \item \url{https://bart-turczynski.r-universe.dev/raddr}
   \item \url{https://CRAN.R-project.org/package=raddr}
   \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Bart Turczynski \email{bartek@turczynski.pl} (\href{https://orcid.org/0000-0002-8788-7980}{ORCID})
+\strong{Maintainer}: Bart Turczynski \email{bartek@turczynski.pl} (\href{https://orcid.org/0000-0002-8788-7980}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Bart Turczynski \email{bartek@turczynski.pl} (\href{https://orcid.org/0000-0002-8788-7980}{ORCID})
+  \item Bart Turczynski \email{bartek@turczynski.pl} (\href{https://orcid.org/0000-0002-8788-7980}{ORCID}) [copyright holder]
 }
 
 Other contributors:

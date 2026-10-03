@@ -1,0 +1,97 @@
+header:
+  schema-version: 2.2.0
+  last-updated: '2026-10-03'
+  last-reviewed: '2026-10-03'
+  url: https://gitlab.com/bart-turczynski/raddr/-/raw/main/SECURITY-INSIGHTS.yml
+  comment: |
+    OpenSSF Security Insights self-report. Maintained alongside SECURITY.md
+    (human-readable policy). Refresh both header dates whenever anything below
+    is re-measured, not only when it changes.
+
+project:
+  name: raddr
+  homepage: https://bart-turczynski.gitlab.io/raddr/
+  administrators:
+    - name: Bart Turczynski
+      email: bartek@turczynski.pl
+      primary: true
+  documentation:
+    quickstart-guide: https://bart-turczynski.gitlab.io/raddr/
+    detailed-guide: https://bart-turczynski.gitlab.io/raddr/reference/index.html
+    release-process: https://gitlab.com/bart-turczynski/raddr/-/blob/main/CONTRIBUTING.md
+  repositories:
+    - name: raddr
+      url: https://gitlab.com/bart-turczynski/raddr
+      comment: |
+        Sole repository for the raddr package.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: Bart Turczynski
+      email: bartek@turczynski.pl
+      primary: true
+    policy: https://gitlab.com/bart-turczynski/raddr/-/blob/main/SECURITY.md
+    comment: |
+      Please do not report vulnerabilities through public GitLab issues. Open
+      a **confidential** issue instead (tick "This issue is confidential" when
+      creating it), or email the maintainer. GitLab Free has no equivalent to
+      GitHub private vulnerability reporting; a confidential issue is the
+      closest supported channel.
+
+repository:
+  url: https://gitlab.com/bart-turczynski/raddr
+  status: active
+  bug-fixes-only: false
+  accepts-change-request: true
+  accepts-automated-change-request: false
+  no-third-party-packages: false
+  core-team:
+    - name: Bart Turczynski
+      email: bartek@turczynski.pl
+      primary: true
+  documentation:
+    contributing-guide: https://gitlab.com/bart-turczynski/raddr/-/blob/main/CONTRIBUTING.md
+    security-policy: https://gitlab.com/bart-turczynski/raddr/-/blob/main/SECURITY.md
+  license:
+    url: https://gitlab.com/bart-turczynski/raddr/-/blob/main/LICENSE.md
+    expression: MIT
+  release:
+    changelog: https://gitlab.com/bart-turczynski/raddr/-/blob/main/NEWS.md
+    automated-pipeline: false
+    distribution-points:
+      - uri: https://CRAN.R-project.org/package=raddr
+        comment: Canonical release channel (CRAN).
+      - uri: https://bart-turczynski.r-universe.dev/raddr
+        comment: r-universe builds.
+  security:
+    tools:
+      - name: rosv (OSV)
+        type: SCA
+        rulesets:
+          - default
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          The osv-audit job in .gitlab-ci.yml audits the runtime dependency
+          closure against the OSV database (osv.dev). No account or secrets
+          required. It runs only on a pipeline schedule that sets
+          SCHEDULE_KIND=dependency-audit.
+      - name: oysteR (Sonatype OSS Index)
+        type: SCA
+        rulesets:
+          - default
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+        results: {}
+        comment: |
+          The security-audit job in .gitlab-ci.yml audits the hard
+          dependencies against the Sonatype OSS Index, on the same
+          dependency-audit schedule. It needs the OSSINDEX_USER and
+          OSSINDEX_TOKEN CI/CD variables and fails, rather than skipping,
+          when they are missing.
