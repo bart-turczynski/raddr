@@ -307,6 +307,10 @@ variables:
     # future source-built dependency to add another entry, and read a failure of
     # this shape as a missing -dev package before anything else.
     #
+    # `curl`, the binary, is the floor leg's entry: the R curl package's
+    # configure needs it to fetch a static libcurl where the system one is
+    # too old (see deep-check:floor).
+    #
     # Every command below is a literal block scalar. That is not a style
     # choice: a plain YAML scalar may not contain ": ", and the vctrs assert
     # further down calls message("vctrs: ", v). It parsed as a mapping and the
@@ -317,13 +321,13 @@ variables:
     - |
       apt-get install -y --no-install-recommends \
         pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf \
-        libcurl4-openssl-dev libssl-dev
+        libcurl4-openssl-dev libssl-dev curl
     # Only the floor leg sets FLOOR_SNAPSHOT. Its image's own repository is a
     # p3m snapshot from the year that R was released, which predates
     # vctrs 0.7.0, so point it at a dated snapshot whose closure still
     # installs on the floor R. Source packages (the runner is arm64); the
     # option is appended, so the later line wins. Every other job leaves the
-    # image's repository alone.
+    # image's repository alone. The date is chosen at the floor leg below.
     - |
       if [ -n "${FLOOR_SNAPSHOT:-}" ]; then
         echo "options(repos = c(CRAN = 'https://p3m.dev/cran/${FLOOR_SNAPSHOT}'))" >> "${R_HOME}/etc/Rprofile.site"
@@ -449,13 +453,24 @@ deep-check:devel:
     - .deep-check
   image: rocker/r-ver:devel
 
+# FLOOR_SNAPSHOT is the newest p3m date whose closure builds on this image
+# (Ubuntu 20.04: gcc 9, libcurl 7.68), and its window is narrow. vctrs 0.7.0,
+# the Imports floor, reached CRAN on 2026-01-16; bit64 4.8.0, whose
+# integer64.h puts `__has_builtin(...)` in an #if that gcc 9's preprocessor
+# rejects, is in every snapshot from 2026-04-22. So 2026-04-21 (bit64
+# 4.6.0-1, vctrs 0.7.3). 2026-09-01 failed on exactly that in pipeline
+# 2909397520 (SEOR-lavybtkr). Every curl since 7.0.0 wants libcurl >= 7.73
+# and, below that, has its configure fetch a static libcurl -- with the curl
+# binary, which this image lacks and .r-job's apt list now installs; without
+# it the build falls through to `CURLINFO_EFFECTIVE_METHOD undeclared`. Move
+# the date forward only to a snapshot re-proven in this image.
 deep-check:floor:
   extends:
     - .r-job
     - .deep-check
   image: rocker/r-ver:4.1.3
   variables:
-    FLOOR_SNAPSHOT: "2026-09-01"
+    FLOOR_SNAPSHOT: "2026-04-21"
 
 # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
 # DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
