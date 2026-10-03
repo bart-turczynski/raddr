@@ -64,10 +64,12 @@
 # THE FLEET STANDARD (seor design/fleet-standard.md; SEOR-lavybtkr,
 # 2026-10-03). A push to main runs check:linux-release, coverage, readme,
 # news-version, citation-version and pages. Two weekly schedules on main,
-# told apart by the SCHEDULE_KIND variable each one sets, run the rest:
+# told apart by the SCHEDULE_KIND variable each one sets, add the rest:
 # `deep-check` (the R release, oldrel, devel and floor legs) and
 # `dependency-audit` (osv-audit and security-audit). A scheduled pipeline
-# runs only the jobs of its own kind; every push job declines schedules.
+# runs every push-to-main job plus the jobs of its own kind, never the other
+# kind's (seor design/fleet.md, "Scheduled pipelines"). A v* tag runs the
+# push jobs except pages.
 
 default:
   # The fleet's jobs run only on the self-hosted Docker runners on the
@@ -195,13 +197,18 @@ variables:
 
 # Which pipeline runs a job. A schedule on main is admitted by the workflow:
 # rules above like any push to main, so every job states which side it is on.
-# Push jobs decline every schedule. Scheduled jobs require a schedule AND its
-# SCHEDULE_KIND, a variable set on the schedule itself, never a project or
-# group variable that every schedule would inherit (seor design/fleet.md;
-# SEOR-ihmntqzm, SEOR-fftbjnpl).
+# Push jobs also run on a schedule on main, whatever its kind: that re-checks
+# main against dependencies that moved since the last merge, and it keeps the
+# coverage badge alive, because GitLab reads it from the latest SUCCESSFUL
+# pipeline on main and a schedule pipeline without the coverage job left it
+# reading "unknown" after every green weekly run (SEOR-lavybtkr). The first
+# rule only spells out what the workflow already guarantees. Scheduled jobs
+# require a schedule AND its SCHEDULE_KIND, a variable set on the schedule
+# itself, never a project or group variable that every schedule would inherit
+# (seor design/fleet.md; SEOR-ihmntqzm, SEOR-fftbjnpl).
 .on-push:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
       when: never
     - when: on_success
 
@@ -461,8 +468,8 @@ deep-check:floor:
 # every push to main and on a v* tag, not only on a DESCRIPTION-changing MR --
 # so this job runs more often than the moment it actually cares about (both
 # files move at the DESCRIPTION bump, not at every merge), but that is a cost
-# paid once per merge either way, and it is seconds. It declines schedules
-# like every push job (.on-push).
+# paid once per merge either way, and it is seconds. Like every push job
+# (.on-push) it also runs on the two schedules on main.
 #
 # Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
 # which matters because the fleet shares a few runner slots on one Mac
@@ -579,7 +586,9 @@ coverage:
 # _pkgdown.yml sets `destination: public` (docs/ holds the project notes).
 #
 # Default branch only, not the v* tag pipeline: the site tracks main, and a
-# tag rebuild would publish the same commit twice.
+# tag rebuild would publish the same commit twice. A schedule on main runs it
+# like every other push job (.on-push), so a weekly run also re-proves the
+# site still builds against current pkgdown and dependencies.
 #
 # Needs only check:linux-release. Waiting on the devel job would tie the docs
 # to upcoming-R breakage, which that job reports loudly on its own.
@@ -639,8 +648,6 @@ pages:
     - job: check:linux-release
       artifacts: false
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   cache: []
   before_script:
