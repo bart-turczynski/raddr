@@ -64,6 +64,7 @@
 ^CODE_OF_CONDUCT\.md$
 ^ARCHITECTURE\.md$
 ^SECURITY-INSIGHTS\.yml$
+^\.bestpractices\.json$
 ^codemeta\.json$
 ^\.gitlab$
 ^README\.Rmd$

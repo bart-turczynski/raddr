@@ -17,6 +17,7 @@ output: github_document
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![Zenodo](https://img.shields.io/badge/Zenodo-all_software-1682D4?logo=zenodo&logoColor=white)](https://zenodo.org/search?q=metadata.creators.person_or_org.identifiers.identifier:0000-0002-8788-7980)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15190/badge)](https://www.bestpractices.dev/projects/15190)
 [![License](https://img.shields.io/gitlab/license/bart-turczynski%2Fraddr)](https://gitlab.com/bart-turczynski/raddr/-/blob/main/LICENSE.md)
 [![Dependencies](https://tinyverse.netlify.app/badge/raddr)](https://CRAN.R-project.org/package=raddr)
 [![Last commit](https://img.shields.io/gitlab/last-commit/bart-turczynski%2Fraddr)](https://gitlab.com/bart-turczynski/raddr/-/commits/main)
