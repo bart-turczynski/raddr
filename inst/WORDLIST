@@ -7,6 +7,7 @@ autoconfiguration
 bignum
 bitstring
 checksums
+config
 CIDR
 CPython's
 CVE
@@ -16,6 +17,7 @@ denylist
 dev
 digitless
 DNS
+DOI
 DS
 embeddings
 Embeddings
@@ -43,6 +45,7 @@ libc
 libcs
 Lifecycle
 loopback
+macOS
 multicast
 musl
 musl's
@@ -61,6 +64,7 @@ reachability
 renderer
 renderers
 representable
+reproducibility
 resolvers
 rlang
 RIR
@@ -76,6 +80,7 @@ ULA
 unanchored
 unexamined
 unicast
+URI
 validator
 vctrs
 vendored
