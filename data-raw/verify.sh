@@ -1,6 +1,6 @@
 #!/bin/sh
 # The verify chain, in one place: floor drift, then lintr, then spelling, then
-# R CMD check --as-cran. Fail-fast, in that order.
+# the URL check, then R CMD check --as-cran. Fail-fast, in that order.
 #
 #     sh data-raw/verify.sh              # the whole chain
 #     NO_MANUAL=1 sh data-raw/verify.sh  # skip the PDF manual
@@ -99,6 +99,13 @@ Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); q
 # rcmdcheck, neither of which sets NOT_CRAN; this call is the authoritative one.
 echo "==> spelling::spell_check_package()"
 Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }'
+
+# Every URL the package declares must resolve (the fleet standard's URL check,
+# SEOR-lavybtkr). --as-cran fetches them too, but reports a dead one only as a
+# NOTE, which error_on = "warning" lets through. Network, so it runs after the
+# offline steps. data-raw/check-urls.R's header has the rules.
+echo "==> data-raw/check-urls.R"
+Rscript data-raw/check-urls.R
 
 # rcmdcheck reads a check that halted partway as 0/0/0 and returns normally,
 # so error_on never fires. The guard also fails on R CMD check's own exit

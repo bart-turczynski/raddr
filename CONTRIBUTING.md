@@ -26,7 +26,7 @@ Run verification:
 sh data-raw/verify.sh
 ```
 
-That is the whole chain — floor drift, `lintr`, `spelling`, then `rcmdcheck` with
+That is the whole chain — floor drift, `lintr`, `spelling`, the URL check, then `rcmdcheck` with
 `--as-cran` and `error_on = "warning"` — and it is one file, so the pre-push hook
 and `.gitlab-ci.yml` run it rather than restating it. `NO_MANUAL=1` skips the PDF
 manual, which is what CI passes and the hook does not.
