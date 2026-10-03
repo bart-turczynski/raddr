@@ -60,6 +60,14 @@
 # a script. It is also load-bearing for the rule set below, which is only
 # affordable BECAUSE the hook runs the identical chain on the merge requests
 # that no longer get a pipeline.
+#
+# THE FLEET STANDARD (seor design/fleet-standard.md; SEOR-lavybtkr,
+# 2026-10-03). A push to main runs check:linux-release, coverage, readme,
+# news-version, citation-version and pages. Two weekly schedules on main,
+# told apart by the SCHEDULE_KIND variable each one sets, run the rest:
+# `deep-check` (the R release, oldrel, devel and floor legs) and
+# `dependency-audit` (osv-audit and security-audit). A scheduled pipeline
+# runs only the jobs of its own kind; every push job declines schedules.
 
 default:
   # The fleet's jobs run only on the self-hosted Docker runners on the
@@ -138,18 +146,17 @@ default:
 #     CLI, because `glab ci run` starts an api-source pipeline. That
 #     asymmetry is deliberate: the button is a human deciding to spend a
 #     runner slot, an api call is a script that could do it in a loop.
-#   - The unconditional `schedule` carve-out. Checked before dropping it,
-#     not assumed: `glab api projects/:id/pipeline_schedules` returns `[]` --
-#     no schedule exists today, so dropping it is a no-op. A schedule added
-#     later MUST target main to survive; one targeting a branch would now
-#     create nothing.
+#   - The unconditional `schedule` carve-out. A schedule MUST target main to
+#     survive; one targeting a branch creates nothing. The fleet standard's
+#     two schedules do (SEOR-lavybtkr), and the rule above admits them
+#     through `$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH`.
 #
 # WHAT THIS ADDS THAT THE OLD RULES DID NOT: a plain push to main now gets a
 # pipeline UNCONDITIONALLY, whether or not DESCRIPTION changed. Read that the
 # right way round -- most merges to main do not bump DESCRIPTION, and under
 # the old rules those got no pipeline at all, before or after the merge.
-# Under this rule set every one of them now runs check:linux-release,
-# check:linux-devel and citation-version. THAT IS MORE CI THAN THE OLD DESIGN
+# Under this rule set every one of them now runs the push jobs listed at the
+# top of this file. THAT IS MORE CI THAN THE OLD DESIGN
 # RAN FOR ORDINARY, NON-RELEASE WORK, not less, even though SEOR-bmgkzhvy's
 # fleet-wide point is reducing pipeline count. The fleet-wide reduction is
 # real -- one pipeline per merged slice instead of three -- but for raddr
@@ -185,6 +192,28 @@ variables:
   # the log point at a line rather than at a byte offset.
   R_KEEP_PKG_SOURCE: "yes"
   GIT_DEPTH: "1"
+
+# Which pipeline runs a job. A schedule on main is admitted by the workflow:
+# rules above like any push to main, so every job states which side it is on.
+# Push jobs decline every schedule. Scheduled jobs require a schedule AND its
+# SCHEDULE_KIND, a variable set on the schedule itself, never a project or
+# group variable that every schedule would inherit (seor design/fleet.md;
+# SEOR-ihmntqzm, SEOR-fftbjnpl).
+.on-push:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: on_success
+
+.deep-check:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "deep-check"
+    - when: never
+
+.dependency-audit:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "dependency-audit"
+    - when: never
 
 .r-job:
   variables:
@@ -282,6 +311,16 @@ variables:
       apt-get install -y --no-install-recommends \
         pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf \
         libcurl4-openssl-dev libssl-dev
+    # Only the floor leg sets FLOOR_SNAPSHOT. Its image's own repository is a
+    # p3m snapshot from the year that R was released, which predates
+    # vctrs 0.7.0, so point it at a dated snapshot whose closure still
+    # installs on the floor R. Source packages (the runner is arm64); the
+    # option is appended, so the later line wins. Every other job leaves the
+    # image's repository alone.
+    - |
+      if [ -n "${FLOOR_SNAPSHOT:-}" ]; then
+        echo "options(repos = c(CRAN = 'https://p3m.dev/cran/${FLOOR_SNAPSHOT}'))" >> "${R_HOME}/etc/Rprofile.site"
+      fi
     # SEOR-dyzgzyot: the cache above was never holding anything. rocker's own
     # Renviron.site sets `R_LIBS=${R_LIBS-'/usr/local/lib/R/site-library:...'}`,
     # and R_LIBS -- not R_LIBS_USER -- wins first place in .libPaths(), so every
@@ -362,65 +401,54 @@ variables:
 # Fleet-wide job consolidation (SEOR-pgammbgo) folded cheap verify-stage jobs
 # into one `gates` job on pagerankr, punycoder and robotstxtr -- repos with a
 # dozen-plus jobs where per-job GitLab overhead dwarfed the work each one did.
-# raddr is NOT consolidated: it defines four jobs total, already at the floor
-# that consolidation targets. Folding them would cost per-concern red/green
-# (one gates failure no longer says which check broke) and buy roughly one
-# runner acquisition. Not worth it here.
+# raddr is NOT consolidated: folding its few push jobs would cost per-concern
+# red/green (one gates failure no longer says which check broke) and buy
+# roughly one runner acquisition. Not worth it here.
 check:linux-release:
-  extends: .r-job
+  extends:
+    - .r-job
+    - .on-push
 
-check:linux-devel:
-  extends: .r-job
+# The deep-check schedule's four legs, the same chain on four R versions
+# (seor design/fleet-standard.md, "Scheduled pipelines"). R-devel used to run
+# on every push to main as check:linux-devel; it moved here with the fleet
+# standard (SEOR-lavybtkr), so a red devel leg reports upcoming-R breakage
+# weekly rather than on every merge. allow_failure is not set on any leg: a
+# scheduled detector that cannot go red is worthless.
+#
+# oldrel is pinned to the previous R minor's image tag, so it moves when R
+# releases a new minor. The floor leg tests DESCRIPTION's `R (>= x.y)` at
+# that minor's last patch release; data-raw/check-floor-drift.R fails the
+# verify chain when the two disagree. rocker publishes no arm64 image for any
+# R 4.0.x, so 4.1 is the oldest minor the fleet's arm64 runner can test.
+deep-check:release:
+  extends:
+    - .r-job
+    - .deep-check
+  image: rocker/r-ver:latest
+
+deep-check:oldrel:
+  extends:
+    - .r-job
+    - .deep-check
+  image: rocker/r-ver:4.5
+
+# R-devel resolves against cloud.r-project.org because p3m serves no R-devel
+# binaries, so its whole closure builds from source; the libcurl headers in
+# .r-job's apt list were found by this leg's first run (pipeline 2725127124).
+deep-check:devel:
+  extends:
+    - .r-job
+    - .deep-check
   image: rocker/r-ver:devel
-  # HISTORY OF THE ADMISSION RULES (not of the source build itself). It used
-  # to carry `when: manual` with `allow_failure: true`, justified as catching
-  # upcoming breakage "worth having before a release and not worth paying for
-  # on every MR" -- sound reasoning with a self-defeating conclusion, since a
-  # manual job on a free-tier budget is a job nobody starts. That override was
-  # dropped when the workflow rules narrowed to version bumps (RADD-ofvmkjsj),
-  # so the job ran only a handful of times a year, on a version bump or a v*
-  # tag.
-  #
-  # SEOR-bmgkzhvy widens that again, in the opposite direction from the
-  # manual-job problem: the job inherited the top-level workflow rules, which
-  # fire on EVERY push to main, so this became the long source-build job
-  # running on every merge rather than a handful of times a year. That is part
-  # of what "WHAT THIS ADDS" in the workflow: block above is flagging -- more
-  # CI on ordinary merges, not less, is the cost of not gating on DESCRIPTION
-  # any more.
-  #
-  # allow_failure is NOT set, so R-devel breakage turns the pipeline red. That
-  # is deliberate and it is cheap here: with only_allow_merge_if_pipeline_
-  # succeeds off, red is information rather than a block, and upcoming-R
-  # breakage is information worth having loudly, now on every merge instead
-  # of only near a release.
-  #
-  # SEOR-ihmntqzm: the paragraphs above describe every pipeline source the
-  # workflow: block currently admits (tag, the main-branch push, web) and this
-  # job ran on all of them unconditionally, because until now it carried no
-  # `rules:` of its own -- an admitted pipeline reached every job by default.
-  # That included a pipeline source nobody had populated yet: a schedule whose
-  # ref is main satisfies the workflow block's own
-  # `$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH` rule, because that rule tests the
-  # branch, not $CI_PIPELINE_SOURCE -- so this job was always reachable by any
-  # future schedule, not just the one this ticket's owner plans to add
-  # (verified today: `glab api projects/:id/pipeline_schedules` returns `[]`,
-  # so nothing has exercised this path yet). $SCHEDULE_KIND is the selector
-  # that closes that gap: a schedule pipeline must carry
-  # SCHEDULE_KIND=deep-check (set on the schedule itself -- this file does not
-  # create one) to reach this job. A second schedule added later for an
-  # unrelated purpose falls to the explicit `when: never` below instead of
-  # silently inheriting this job the way it would have before this rule
-  # existed. Every OTHER admitted source -- tag, the main-branch push, web --
-  # is unchanged: none of them match `$CI_PIPELINE_SOURCE == "schedule"`, so
-  # they all fall through to the final `when: on_success`, which is exactly
-  # the "no rules" behavior this job had a moment ago. Nothing that used to
-  # run this job stops running it.
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "deep-check"
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - when: on_success
+
+deep-check:floor:
+  extends:
+    - .r-job
+    - .deep-check
+  image: rocker/r-ver:4.1.3
+  variables:
+    FLOOR_SNAPSHOT: "2026-09-01"
 
 # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
 # DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
@@ -433,13 +461,14 @@ check:linux-devel:
 # every push to main and on a v* tag, not only on a DESCRIPTION-changing MR --
 # so this job runs more often than the moment it actually cares about (both
 # files move at the DESCRIPTION bump, not at every merge), but that is a cost
-# paid once per merge either way, and it is seconds. It still does not need
-# rules of its own.
+# paid once per merge either way, and it is seconds. It declines schedules
+# like every push job (.on-push).
 #
 # Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
 # which matters because the fleet shares a few runner slots on one Mac
 # (`concurrent` = 4 since 2026-09-23) and the two check jobs are long.
 citation-version:
+  extends: .on-push
   stage: test
   image: python:3.13-alpine
   cache: []
@@ -452,6 +481,73 @@ citation-version:
     # seconds of work. BugReports split, SEOR-ocbtrrnl.
     - python3 scripts/check-bugreports.py --self-test
     - python3 scripts/check-bugreports.py
+
+# The top NEWS.md heading must be either "(development version)" or exactly
+# the DESCRIPTION Version, which catches a stale heading left in at release.
+# seor's job, the package name swapped (SEOR-lavybtkr). Pure shell, so it does
+# not need the R image and runs in seconds.
+news-version:
+  extends: .on-push
+  stage: test
+  image: alpine:3
+  cache: []
+  before_script:
+    - apk add --no-cache grep sed
+  script:
+    - |
+      set -eu
+      version="$(grep -E '^Version:' DESCRIPTION | head -n1 | sed -E 's/^Version:[[:space:]]*//')"
+      # First top-level NEWS heading, e.g. "# raddr 0.1.2" or
+      # "# raddr (development version)". Strip the name prefix.
+      heading="$(grep -m1 -E '^# ' NEWS.md | sed -E 's/^#[[:space:]]+(raddr[[:space:]]+)?//')"
+      echo "DESCRIPTION Version : '$version'"
+      echo "Top NEWS heading    : '$heading'"
+      if [ "$heading" = "(development version)" ] || [ "$heading" = "$version" ]; then
+        echo "OK: NEWS heading and version are consistent."
+      else
+        echo "Top NEWS.md heading ('$heading') is neither '(development version)' nor the DESCRIPTION Version ('$version'). Update NEWS.md before release."
+        exit 1
+      fi
+
+# README.md is knit from README.Rmd, so a hand-edit to the markdown is lost on
+# the next render. README.Rmd has no code chunks, so rendering it needs
+# rmarkdown and pandoc but not raddr itself. Blank-line-only differences don't
+# count: pandoc versions disagree about the blank line after
+# `<!-- badges: start -->` (seor SEOR-oaqnafzs).
+readme:
+  extends:
+    - .r-job
+    - .on-push
+  script:
+    - |
+      cp README.md /tmp/README.committed.md
+    - |
+      Rscript -e 'rmarkdown::render("README.Rmd", output_options = list(html_preview = FALSE))'
+    - |
+      if ! diff -B -u /tmp/README.committed.md README.md; then
+        echo "README.md is out of sync with README.Rmd. Run devtools::build_readme() and commit the result."
+        exit 1
+      fi
+
+# Coverage, reported through GitLab natively: the `coverage:` regex drives the
+# badge and the cobertura artifact drives per-line annotations in a diff. The
+# job fails below 95%, the fleet's floor, which is never lowered: a package
+# under it adds tests (seor design/adr/0007; SEOR-lavybtkr).
+coverage:
+  extends:
+    - .r-job
+    - .on-push
+  script:
+    - |
+      Rscript -e 'p <- c("covr", "xml2"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4)'
+    - |
+      Rscript -e 'cov <- covr::package_coverage(quiet = FALSE); covr::to_cobertura(cov); pct <- covr::percent_coverage(cov); cat(sprintf("Coverage: %.2f%%\n", pct)); if (pct < 95) quit(status = 1)'
+  coverage: '/Coverage: (\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: cobertura.xml
 
 # The pkgdown site (RADD-yksdevhs). Must be named `pages` and publish
 # `public/` -- that pairing is what GitLab Pages deploys, and it is why
@@ -518,6 +614,8 @@ pages:
     - job: check:linux-release
       artifacts: false
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   cache: []
   before_script:
@@ -543,3 +641,41 @@ pages:
   artifacts:
     paths:
       - public
+
+# The dependency-audit schedule: seor's two audits, in seor's shape
+# (seor design/fleet-standard.md, "dependency-audit"). raddr's written
+# exemption from them (RADD-hmvlwcyi) was reversed by the owner on 2026-10-03
+# for fleet alignment (SEOR-lavybtkr). Each runs one test file with
+# testthat::test_local(), which loads raddr with pkgload, so the package's
+# closure is installed by .r-job and raddr itself never is.
+#
+# NOT_CRAN makes sure skip_on_cran() cannot skip an audit silently.
+
+# OSV (https://osv.dev) via {rosv}: no account, token or CI/CD variable.
+osv-audit:
+  extends:
+    - .r-job
+    - .dependency-audit
+  variables:
+    NOT_CRAN: "true"
+  script:
+    - |
+      Rscript -e 'testthat::test_local(filter = "osv", stop_on_failure = TRUE)'
+
+# Sonatype OSS Index via {oysteR}. OSS Index rejects anonymous requests, so
+# this job needs two CI/CD variables: OSSINDEX_USER, the literal placeholder
+# `x` (not the account email), and OSSINDEX_TOKEN, a Sonatype Guide personal
+# access token (seor's security-audit job has the measurements, SEOR-ipgxtzca).
+# OSSINDEX_AUDIT_REQUIRED turns every missing precondition in
+# tests/testthat/test-security.R into a failure, so this job goes red rather
+# than green when the credentials are absent. It is set here and nowhere else.
+security-audit:
+  extends:
+    - .r-job
+    - .dependency-audit
+  variables:
+    NOT_CRAN: "true"
+    OSSINDEX_AUDIT_REQUIRED: "true"
+  script:
+    - |
+      Rscript -e 'testthat::test_local(filter = "security", stop_on_failure = TRUE)'

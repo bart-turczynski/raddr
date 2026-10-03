@@ -35,6 +35,16 @@
 # sign why. Every extraction below fails loudly on zero matches and on two, so
 # re-formatting a transcript breaks this script rather than blinding it.
 #
+# THE R FLOOR MOVED TO THE CI FLOOR LEG (2026-10-03, SEOR-lavybtkr). The
+# fleet standard declares the oldest R minor its arm64 CI runner can test,
+# which is 4.1 (rocker publishes no arm64 image for any R 4.0.x), and the
+# `deep-check:floor` job in .gitlab-ci.yml checks the package there weekly.
+# So the declared R floor is now compared with that leg's image tag, at minor
+# precision. The two docker transcripts under docs/ were taken on R 4.0.0,
+# below the new floor; they still carry the Imports floor measurements, so
+# they must record an R at or below the declared floor, and each docker
+# script's image must match the R its transcript records.
+#
 # WHY EQUALITY AND NOT `>=` ON THE IMPORTS FLOORS. RADD-lfjdkynn's own finding:
 # an earlier script asserted `>=`, installed vctrs 0.7.2, and produced something
 # that looked like a floor measurement and was not one. A transcript showing a
@@ -46,7 +56,8 @@ paths <- c(
   r_script = "data-raw/check-r-floor.sh",
   dep_script = "data-raw/check-dep-floor.sh",
   r_doc = "docs/r-floor-check.md",
-  dep_doc = "docs/dep-floor-check.md"
+  dep_doc = "docs/dep-floor-check.md",
+  ci = ".gitlab-ci.yml"
 )
 
 # The package root, derived from --file= rather than from the working directory,
@@ -126,31 +137,48 @@ check_anchor <- function(label, expected, root, key, pattern, missing = NULL) {
   )
 }
 
-# The R floor appears in five places and every one of them is a number a human
-# typed. The docker image tags are included deliberately: check-dep-floor.sh
-# builds on the image check-r-floor.sh leaves behind, so a bumped R floor that
-# reaches only one of the two scripts produces a dependency transcript taken on
-# the wrong R.
+# The R floor appears in several places and every one of them is a number a
+# human typed. The CI floor leg must test the declared minor. The transcripts
+# must have been taken at or below it, and the docker image tags must match
+# the R their transcript records: check-dep-floor.sh builds on the image
+# check-r-floor.sh leaves behind, so a bump that reaches only one of the two
+# scripts produces a dependency transcript taken on the wrong R.
+minor_of <- function(version) sub("^([0-9]+[.][0-9]+).*$", "\\1", version)
+
+at_or_below <- function(label, r_floor, root, key) {
+  measured <- anchor(
+    read_file(root, key), "^R version ([0-9.]+) ", paths[[key]]
+  )
+  ok <- package_version(measured) <= package_version(r_floor)
+  expected <- sprintf("at or below %s", r_floor)
+  check(label, expected, if (ok) expected else measured, paths[[key]])
+}
+
 r_floor_checks <- function(root, r_floor) {
+  measured <- anchor(
+    read_file(root, "r_doc"), "^R version ([0-9.]+) ", paths[["r_doc"]]
+  )
   list(
     check_anchor(
-      "R floor measured", r_floor, root, "r_doc",
-      "^R version ([0-9.]+) "
+      "R floor deep-check leg", minor_of(r_floor), root, "ci",
+      "^  image: rocker/r-ver:([0-9]+[.][0-9]+)[.][0-9]+$"
+    ),
+    at_or_below("R floor transcript taken at or below it", r_floor, root,
+      "r_doc"
+    ),
+    at_or_below("dependency run taken at or below it", r_floor, root,
+      "dep_doc"
     ),
     check_anchor(
-      "R floor under the dependency run", r_floor, root, "dep_doc",
-      "^R version ([0-9.]+) "
-    ),
-    check_anchor(
-      "R floor image base", r_floor, root, "r_script",
+      "R floor image base", measured, root, "r_script",
       "^FROM rocker/r-ver:(.+)$"
     ),
     check_anchor(
-      "R floor image tag", r_floor, root, "r_script",
+      "R floor image tag", measured, root, "r_script",
       "^IMAGE=raddr-rfloor:(.+)$"
     ),
     check_anchor(
-      "R floor image reused", r_floor, root, "dep_script",
+      "R floor image reused", measured, root, "dep_script",
       "^BASE=\\$\\{BASE:-raddr-rfloor:(.+)\\}$"
     )
   )
@@ -319,6 +347,10 @@ outcome_label <- function(x) {
 self_test <- function(root) {
   desc <- read.dcf(file.path(root, paths[["description"]]))[1L, ]
   r_floor <- parse_deps(desc[["Depends"]])[["R"]]
+  floor_version <- package_version(r_floor)
+  next_minor <- sprintf(
+    "%d.%d.0", floor_version$major, floor_version$minor + 1L
+  )
   imports <- parse_deps(desc[["Imports"]])
   versioned <- names(imports)[!is.na(imports)]
   pkg <- versioned[[1L]]
@@ -333,7 +365,15 @@ self_test <- function(root) {
       "a raised R floor", FALSE,
       function(x) {
         mutate(x, "description", sprintf("R (>= %s)", r_floor),
-          sprintf("R (>= %s.1)", r_floor)
+          sprintf("R (>= %s)", next_minor)
+        )
+      }
+    ),
+    list(
+      "the CI floor leg moved off the floor", FALSE,
+      function(x) {
+        mutate(x, "ci", sprintf("rocker/r-ver:%s.", minor_of(r_floor)),
+          sprintf("rocker/r-ver:%s.", minor_of(next_minor))
         )
       }
     ),

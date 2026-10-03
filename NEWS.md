@@ -1,5 +1,8 @@
 # raddr 0.1.2.9000
 
+* raddr now requires R 4.1.0 or later (was 4.0.0). The fleet declares the
+  oldest R minor its CI can test, and no arm64 image exists for R 4.0; a weekly
+  scheduled check now runs the package on R 4.1.3.
 * `addr_global_reachability()`'s help no longer says exactly one block answers
   `NA`: four do, including all of 6to4 (`2002::/16`) and Teredo (`2001::/32`),
   and it now points 6to4 callers at the embedding row.

@@ -37,18 +37,19 @@ repos:
         exclude: '^(man/|inst/extdata/|tests/testthat/fixtures/|docs/research/|docs/tracker-snapshot\.md$|docs/(check-matrix|ci-workflow-lint|dep-floor-check|gitlab-ci|r-floor-check|release-build|win-builder)\.md$)'
   - repo: local
     hooks:
-      # Scoped to the five files that can put the declared floors out of step
-      # with the measured ones, and run at COMMIT time rather than push time on
-      # purpose: the moment DESCRIPTION is edited is the moment the answer is
-      # cheap to act on. data-raw/verify.sh runs the same script unconditionally
-      # at push time and in CI, so this hook is the fast local signal and not
-      # the gate. RADD-olitgnsw.
+      # Scoped to the files that can put the declared floors out of step with
+      # the measured ones (.gitlab-ci.yml carries the R floor leg), and run at
+      # COMMIT time rather than push time on purpose: the moment DESCRIPTION
+      # is edited is the moment the answer is cheap to act on.
+      # data-raw/verify.sh runs the same script unconditionally at push time
+      # and in CI, so this hook is the fast local signal and not the gate.
+      # RADD-olitgnsw.
       - id: floor-drift
         name: declared floors match the measured ones
         entry: Rscript data-raw/check-floor-drift.R --self-test
         language: system
         pass_filenames: false
-        files: '^(DESCRIPTION|data-raw/check-(r|dep)-floor\.sh|data-raw/check-floor-drift\.R|docs/(r|dep)-floor-check\.md)$'
+        files: '^(DESCRIPTION|\.gitlab-ci\.yml|data-raw/check-(r|dep)-floor\.sh|data-raw/check-floor-drift\.R|docs/(r|dep)-floor-check\.md)$'
         verbose: true
       # CITATION.cff's `version:` and .zenodo.json's `"version"` must name the
       # release DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 ->
