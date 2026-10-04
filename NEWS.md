@@ -2,8 +2,8 @@
 
 * raddr has a logo, the fleet's black hex, in `man/figures/logo.svg` and
   `logo.png`. r-universe shows it on the package card and the documentation
-  site in its header, and the `README.md` heading carries it
-  (`SEOR-wxjuxbtu`).
+  site in its header, and the `README.md` heading carries it with the alt text
+  "hex logo, white on black" (`SEOR-wxjuxbtu`, `SEOR-wfleahtg`).
 
 * raddr now requires R 4.1.0 or later (was 4.0.0). The fleet declares the
   oldest R minor its CI can test, and no arm64 image exists for R 4.0; a weekly
