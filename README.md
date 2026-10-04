@@ -39,8 +39,9 @@ Most libraries pick one reading and discard the rest. raddr returns
 every reading, with the reason codes that explain each one, so code that
 validates, logs or compares addresses can see where the readings split.
 It reports facts, never an allow/deny verdict or a risk score. The full
-case, with the measured divergence tables, is the *Why raddr* article,
-`vignette("why-raddr", package = "raddr")`.
+case, with the measured divergence tables, is the [Why
+raddr](https://bart-turczynski.gitlab.io/raddr/articles/why-raddr.html)
+article.
 
 ## Installation
 
@@ -100,9 +101,10 @@ with the articles listed under
 - [Introduction to
   raddr](https://bart-turczynski.gitlab.io/raddr/articles/introduction.html):
   the dialects, the parse record, and classification, worked through.
-- *Why raddr*, `vignette("why-raddr", package = "raddr")`: the measured
-  disagreement between standards and implementations, and what raddr
-  leaves to other packages.
+- [Why
+  raddr](https://bart-turczynski.gitlab.io/raddr/articles/why-raddr.html):
+  the measured disagreement between standards and implementations, and
+  what raddr leaves to other packages.
 - [Reason
   codes](https://bart-turczynski.gitlab.io/raddr/articles/reason-codes.html):
   every code the parse and classify layers emit.
