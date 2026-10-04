@@ -217,16 +217,9 @@
     "inet-pton",
     "inet-aton",
     "whatwg-url",
-    "cidr",
     "iana",
     "special-purpose-registry",
-    "nat64",
-    "teredo",
-    "6to4",
-    "r",
-    "rstats",
-    "r-stats",
-    "r-package"
+    "cidr"
   ],
   "releaseNotes": "https://gitlab.com/bart-turczynski/raddr/-/blob/main/NEWS.md",
   "readme": "https://gitlab.com/bart-turczynski/raddr/-/blob/main/README.md",

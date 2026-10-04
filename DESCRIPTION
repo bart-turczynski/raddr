@@ -30,8 +30,7 @@ URL: https://bart-turczynski.gitlab.io/raddr/,
     https://CRAN.R-project.org/package=raddr
 BugReports: https://gitlab.com/bart-turczynski/raddr/-/issues
 X-schema.org-keywords: ip-address, ipv4, ipv6, ip-parser, inet-pton,
-    inet-aton, whatwg-url, cidr, iana, special-purpose-registry, nat64,
-    teredo, 6to4, r, rstats, r-stats, r-package
+    inet-aton, whatwg-url, iana, special-purpose-registry, cidr
 Suggests:
     bignum,
     bit64,
