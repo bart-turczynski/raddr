@@ -56,9 +56,10 @@
 * Every CI job that runs R now installs `pandoc` 3.10, the version
   `README.md` is knit with, from the `pandoc` release, checked against its
   published sha256 digest. Only the `readme` job had pinned it, without the
-  digest, so the check, coverage and `pages` jobs rendered with the image's
-  3.1.3. `scripts/check-toolchain.R` now also fails the pre-push gate when the
-  local `pandoc` differs from the CI pin (`SEOR-dpjdwhbi`).
+  digest, so the check, coverage and `pages` jobs rendered with the older
+  `pandoc` each image's apt provides. `scripts/check-toolchain.R` now also
+  fails the pre-push gate when the local `pandoc` differs from the CI pin
+  (`SEOR-dpjdwhbi`).
 
 * The agent instructions no longer import `FP_AGENTS.md`, the file the `fp`
   tracker generates, which is deleted, and point at the house `agent-workflow` and `fp` skills for the
