@@ -1,0 +1,28 @@
+<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1.732in" height="2in" viewBox="0 0 1732 2000" role="img" aria-labelledby="raddr-title">
+<title id="raddr-title">raddr</title>
+<desc id="raddr-desc">IP address library for R</desc>
+<metadata id="raddr-metadata"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#">
+<cc:Work rdf:about="">
+<dc:title>raddr</dc:title>
+<dc:description>IP address library for R</dc:description>
+<dc:creator><cc:Agent><dc:title>Bart Turczynski</dc:title></cc:Agent></dc:creator>
+<dc:rights><cc:Agent><dc:title>&#169; 2026 Bart Turczynski. MIT License.</dc:title></cc:Agent></dc:rights>
+<cc:license>https://opensource.org/license/mit</cc:license>
+<dc:date>2026-10-04</dc:date>
+<dc:format>image/svg+xml</dc:format>
+<dc:language>en</dc:language>
+<dc:identifier>raddr</dc:identifier>
+<dc:source>https://github.com/bart-turczynski/raddr</dc:source>
+<dc:relation>https://github.com/bart-turczynski/raddr</dc:relation>
+<dc:relation>https://gitlab.com/bart-turczynski/raddr</dc:relation>
+<dc:relation>https://CRAN.R-project.org/package=raddr</dc:relation>
+<dc:relation>https://bart-turczynski.r-universe.dev/raddr</dc:relation>
+<dc:subject><rdf:Bag><rdf:li>R</rdf:li><rdf:li>rstats</rdf:li><rdf:li>R package</rdf:li><rdf:li>SEO</rdf:li><rdf:li>IP address</rdf:li><rdf:li>IPv4</rdf:li><rdf:li>IPv6</rdf:li></rdf:Bag></dc:subject>
+<dc:contributor>Name set in IBM Plex Mono (SIL Open Font License 1.1), converted to outlines.</dc:contributor>
+</cc:Work>
+</rdf:RDF></metadata>
+<path id="raddr-border" fill="#F5F5F5" d="M866 0L1732 500L1732 1500L866 2000L0 1500L0 500Z"></path>
+<path id="raddr-background" fill="#000000" d="M866 69.3L1672 534.6L1672 1465.4L866 1930.7L60 1465.4L60 534.6Z"></path>
+<path id="raddr-name-bold" fill="#F5F5F5" d="M793.2 1075.4L758.6 1075.4L749.1 1039.1L707.9 1039.1L698.6 1075.4L665.8 1075.4L706.6 924.6L752.4 924.6L793.2 1075.4ZM744.2 1013.0L729.5 955.9L727.8 955.9L713.1 1013.0L744.2 1013.0ZM808.1 1075.4L808.1 924.6L856.7 924.6Q887.2 924.6 901.9 944.1Q916.5 963.5 916.5 1000L916.5 1000Q916.5 1036.5 901.9 1055.9Q887.2 1075.4 856.7 1075.4L856.7 1075.4L808.1 1075.4ZM840.1 1049.9L854.6 1049.9Q869.0 1049.9 875.7 1040.6Q882.4 1031.3 882.4 1013.6L882.4 1013.6L882.4 986.2Q882.4 968.7 875.7 959.4Q869.0 950.1 854.6 950.1L854.6 950.1L840.1 950.1L840.1 1049.9ZM937.7 1075.4L937.7 924.6L986.3 924.6Q1016.8 924.6 1031.5 944.1Q1046.1 963.5 1046.1 1000L1046.1 1000Q1046.1 1036.5 1031.5 1055.9Q1016.8 1075.4 986.3 1075.4L986.3 1075.4L937.7 1075.4ZM969.7 1049.9L984.2 1049.9Q998.6 1049.9 1005.3 1040.6Q1012.0 1031.3 1012.0 1013.6L1012.0 1013.6L1012.0 986.2Q1012.0 968.7 1005.3 959.4Q998.6 950.1 984.2 950.1L984.2 950.1L969.7 950.1L969.7 1049.9ZM1101.9 1019.4L1101.9 1075.4L1069.9 1075.4L1069.9 924.6L1128.2 924.6Q1139.2 924.6 1147.9 928.0Q1156.5 931.3 1162.5 937.6Q1168.4 943.8 1171.4 952.7Q1174.4 961.6 1174.4 972.6L1174.4 972.6Q1174.4 988.6 1167.5 1000Q1160.6 1011.4 1147.9 1015.1L1147.9 1015.1L1177.5 1075.4L1142.0 1075.4L1116.8 1019.4L1101.9 1019.4ZM1101.9 994.4L1120.4 994.4Q1131.9 994.4 1136.3 990.1Q1140.8 985.7 1140.8 975.8L1140.8 975.8L1140.8 969.3Q1140.8 959.4 1136.3 955.1Q1131.9 950.8 1120.4 950.8L1120.4 950.8L1101.9 950.8L1101.9 994.4Z"></path>
+<path id="raddr-name-regular" fill="#F5F5F5" d="M572.7 1011.0L572.7 1075.4L554.5 1075.4L554.5 924.6L609.4 924.6Q630.3 924.6 641.4 936.1Q652.4 947.5 652.4 968.0L652.4 968.0Q652.4 986.4 642.9 997.4Q633.4 1008.4 615.2 1010.2L615.2 1010.2L653.7 1075.4L633.4 1075.4L596.6 1011.0L572.7 1011.0ZM572.7 995.7L609.0 995.7Q620.4 995.7 626.8 990.0Q633.2 984.2 633.2 973.6L633.2 973.6L633.2 962.4Q633.2 951.8 626.8 946.1Q620.4 940.4 609.0 940.4L609.0 940.4L572.7 940.4L572.7 995.7Z"></path>
+</svg>

@@ -1,5 +1,9 @@
 # raddr 0.1.2.9000
 
+* raddr has a logo, the fleet's black hex, in `man/figures/logo.svg` and
+  `logo.png`. r-universe shows it on the package card and pkgdown in the site
+  header, and the README heading carries it (SEOR-wxjuxbtu).
+
 * raddr now requires R 4.1.0 or later (was 4.0.0). The fleet declares the
   oldest R minor its CI can test, and no arm64 image exists for R 4.0; a weekly
   scheduled check now runs the package on R 4.1.3.
