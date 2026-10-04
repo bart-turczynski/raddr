@@ -6,10 +6,12 @@ changing the API.
 
 ## Layout
 
-- `R/`: the package source. `man/` and `NAMESPACE` are roxygen2 output.
+- `R/`: the package source. `man/` and `NAMESPACE` are roxygen2 output: edit
+  the roxygen comments in `R/` and regenerate with `devtools::document()`.
 - `tests/testthat/`: the testthat suite, including the bundled
   web-platform-tests URL corpus under `fixtures/`.
-- `vignettes/`: long-form documentation.
+- `vignettes/`: long-form documentation, built into the pkgdown articles.
+- `DESCRIPTION`: package metadata and dependencies.
 - `inst/extdata/`: the bundled IANA registry snapshots.
 - `data-raw/`: the verify chain (`verify.sh`), measurement scripts, oracles
   and the scripts that build the bundled data.

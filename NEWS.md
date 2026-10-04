@@ -21,6 +21,12 @@
   resolve for CRAN installs.
 * `URL:` now lists the CRAN page, `https://CRAN.R-project.org/package=raddr`,
   which `CITATION.cff` and `.zenodo.json` also name (`RADD-fdabvrqv`).
+* `README.md` is now for users: an Installation section (CRAN and r-universe),
+  a short example and links to the articles. The dialect essay and its measured
+  divergence tables moved to a new article, `vignette("why-raddr")`, and the
+  setup, verification and layout notes to `CONTRIBUTING.md` and
+  `ARCHITECTURE.md`. The r-universe keywords no longer list `r`, `rstats`,
+  `r-stats` or `r-package`, which r-universe ignores.
 
 ## Internal
 
