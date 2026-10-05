@@ -123,12 +123,13 @@ Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(w
 # path, the traps covering a failure and an interrupt. The diff it prints on
 # drift is the fix; devtools::document() in the checkout applies it.
 #
-# CI's images (rocker/r-ver) carry no git, so there, and only when CI=true, it
-# runs on the job's checkout instead: that checkout IS the commit, nothing
-# untracked sits in it that roxygen reads, and it is thrown away with the job.
-# On drift the step exits 1, so the rewritten files never reach rcmdcheck; on
-# a pass roxygen has written nothing, since DESCRIPTION is among the files it
-# compares. Without git outside CI the step refuses rather than touch the tree.
+# CI's images (rocker/r-ver) carry no git, so with no repository to export
+# and CI=true, and only then, it runs on the job's checkout instead: that
+# checkout IS the commit, nothing untracked sits in it that roxygen reads, and
+# it is thrown away with the job. On drift the step exits 1, so the rewritten
+# files never reach rcmdcheck; on a pass every file roxygen owns is byte-for-
+# byte what was checked out, DESCRIPTION included. With no repository outside
+# CI the step refuses rather than touch the tree.
 #
 # NO_DOCS_DRIFT=1 skips it, and only the deep-check legs set it. Drift is a
 # property of the commit, not of the R version, so check:linux-release answers
@@ -154,11 +155,11 @@ elif command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; 
     rm -rf "$docs_tmp"
     trap - EXIT HUP INT TERM
 elif [ "${CI:-}" = true ]; then
-    echo "==> scripts/check-docs-drift.R on the CI checkout (no git in this image)"
+    echo "==> scripts/check-docs-drift.R on the CI checkout (no git repository to export)"
     Rscript scripts/check-docs-drift.R .
 else
-    echo "verify: the docs-drift step needs git to export the commit; it will not" >&2
-    echo "verify: regenerate into this working tree. Install git, or set NO_DOCS_DRIFT=1." >&2
+    echo "verify: the docs-drift step needs git and a repository to export the commit;" >&2
+    echo "verify: it will not regenerate into this tree. Run it from a clone, or set NO_DOCS_DRIFT=1." >&2
     exit 1
 fi
 
