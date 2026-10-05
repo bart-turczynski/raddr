@@ -118,9 +118,10 @@ Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(w
 # disk but uncommitted, and an untracked man/*.Rd counts as present. So the
 # step exports PRE_COMMIT_TO_REF (pre-commit sets it to the local sha a
 # pre-push hook is pushing, and the hook's environment reaches this script),
-# else HEAD, with `git archive` into a temporary directory, runs that commit's
-# own scripts/check-docs-drift.R there, and removes the directory on every exit
-# path, the traps covering a failure and an interrupt. The diff it prints on
+# else HEAD, with `git archive` into a temporary directory, runs this
+# checkout's scripts/check-docs-drift.R on it (so a commit that predates the
+# script is still checked, rather than failing to find it), and removes the
+# directory on every exit path, the traps covering a failure and an interrupt. The diff it prints on
 # drift is the fix; devtools::document() in the checkout applies it.
 #
 # CI's images (rocker/r-ver) carry no git, so with no repository to export
@@ -151,7 +152,7 @@ elif command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; 
     git archive --format=tar -o "$docs_tmp/export.tar" "$docs_ref"
     mkdir "$docs_tmp/pkg"
     tar -xf "$docs_tmp/export.tar" -C "$docs_tmp/pkg"
-    Rscript "$docs_tmp/pkg/scripts/check-docs-drift.R" "$docs_tmp/pkg"
+    Rscript scripts/check-docs-drift.R "$docs_tmp/pkg"
     rm -rf "$docs_tmp"
     trap - EXIT HUP INT TERM
 elif [ "${CI:-}" = true ]; then
