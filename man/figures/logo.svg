@@ -23,7 +23,7 @@
 <dc:relation>https://CRAN.R-project.org/package=raddr</dc:relation>
 <dc:relation>https://bart-turczynski.r-universe.dev/raddr</dc:relation>
 <dc:relation>https://bart-turczynski.gitlab.io/raddr/</dc:relation>
-<dc:subject><rdf:Bag><rdf:li>R</rdf:li><rdf:li>rstats</rdf:li><rdf:li>R package</rdf:li><rdf:li>SEO</rdf:li><rdf:li>IP address</rdf:li><rdf:li>IPv4</rdf:li><rdf:li>IPv6</rdf:li></rdf:Bag></dc:subject>
+<dc:subject><rdf:Bag><rdf:li>R</rdf:li><rdf:li>rstats</rdf:li><rdf:li>R package</rdf:li><rdf:li>ip-address</rdf:li><rdf:li>ipv4</rdf:li><rdf:li>ipv6</rdf:li><rdf:li>ip-parser</rdf:li><rdf:li>inet-pton</rdf:li><rdf:li>inet-aton</rdf:li><rdf:li>whatwg-url</rdf:li><rdf:li>iana</rdf:li><rdf:li>special-purpose-registry</rdf:li><rdf:li>cidr</rdf:li></rdf:Bag></dc:subject>
 <dc:contributor>Name set in IBM Plex Mono (SIL Open Font License 1.1), converted to outlines.</dc:contributor>
 <dcterms:alternative>raddr logo</dcterms:alternative>
 <dcterms:created>2026-10-04</dcterms:created>
@@ -47,7 +47,7 @@
 <dc:publisher><rdf:Bag><rdf:li>Bart Turczynski</rdf:li></rdf:Bag></dc:publisher>
 <dc:contributor><rdf:Bag><rdf:li>Name set in IBM Plex Mono (SIL Open Font License 1.1), converted to outlines.</rdf:li></rdf:Bag></dc:contributor>
 <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">&#169; 2026 Bart Turczynski. MIT License.</rdf:li></rdf:Alt></dc:rights>
-<dc:subject><rdf:Bag><rdf:li>R</rdf:li><rdf:li>rstats</rdf:li><rdf:li>R package</rdf:li><rdf:li>SEO</rdf:li><rdf:li>IP address</rdf:li><rdf:li>IPv4</rdf:li><rdf:li>IPv6</rdf:li></rdf:Bag></dc:subject>
+<dc:subject><rdf:Bag><rdf:li>R</rdf:li><rdf:li>rstats</rdf:li><rdf:li>R package</rdf:li><rdf:li>ip-address</rdf:li><rdf:li>ipv4</rdf:li><rdf:li>ipv6</rdf:li><rdf:li>ip-parser</rdf:li><rdf:li>inet-pton</rdf:li><rdf:li>inet-aton</rdf:li><rdf:li>whatwg-url</rdf:li><rdf:li>iana</rdf:li><rdf:li>special-purpose-registry</rdf:li><rdf:li>cidr</rdf:li></rdf:Bag></dc:subject>
 <dc:source>https://gitlab.com/bart-turczynski/raddr</dc:source>
 <dc:relation><rdf:Bag><rdf:li>https://gitlab.com/bart-turczynski/raddr</rdf:li><rdf:li>https://github.com/bart-turczynski/raddr</rdf:li><rdf:li>https://CRAN.R-project.org/package=raddr</rdf:li><rdf:li>https://bart-turczynski.r-universe.dev/raddr</rdf:li><rdf:li>https://bart-turczynski.gitlab.io/raddr/</rdf:li></rdf:Bag></dc:relation>
 <dc:identifier>raddr</dc:identifier>
@@ -68,7 +68,7 @@
 <xmpRights:Owner><rdf:Bag><rdf:li>Bart Turczynski</rdf:li></rdf:Bag></xmpRights:Owner>
 <xmpMM:DocumentID>uuid:32a47155-fb40-5679-9b96-6f08f7d232cb</xmpMM:DocumentID>
 <xmpMM:OriginalDocumentID>uuid:32a47155-fb40-5679-9b96-6f08f7d232cb</xmpMM:OriginalDocumentID>
-<xmpMM:InstanceID>uuid:dfb0c160-0b78-54e0-931d-b62eafcca538</xmpMM:InstanceID>
+<xmpMM:InstanceID>uuid:ada961a0-78d5-5f3f-80ea-b3aa70789f5e</xmpMM:InstanceID>
 <photoshop:Headline>raddr: IP address library for R</photoshop:Headline>
 <photoshop:Credit>Bart Turczynski</photoshop:Credit>
 <photoshop:Source>Bart Turczynski</photoshop:Source>
