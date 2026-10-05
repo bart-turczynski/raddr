@@ -26,10 +26,13 @@ Run verification:
 sh data-raw/verify.sh
 ```
 
-That is the whole chain — floor drift, `lintr`, `spelling`, the URL check, then `rcmdcheck` with
-`--as-cran` and `error_on = "warning"` — and it is one file, so the pre-push hook
-and `.gitlab-ci.yml` run it rather than restating it. `NO_MANUAL=1` skips the PDF
-manual, which is what CI passes and the hook does not. `R CMD check` runs the
+That is the whole chain — floor drift, `lintr`, `spelling`, docs drift (`man/` and
+`NAMESPACE` must match what the pinned roxygen2 regenerates), the URL check, then
+`rcmdcheck` with `--as-cran` and `error_on = "warning"` — and it is one file, so the
+pre-push hook and `.gitlab-ci.yml` run it rather than restating it. `NO_MANUAL=1`
+skips the PDF manual, which is what CI passes and the hook does not.
+`NO_DOCS_DRIFT=1` skips the docs-drift step; only CI's deep-check legs set it.
+`R CMD check` runs the
 testthat suite, so the tests are verified as part of the check.
 
 R sources live in `R/`, tests in `tests/testthat/`, vignettes in `vignettes/`, and

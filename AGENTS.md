@@ -4,7 +4,7 @@ R package. Reports what an IP address literal means under each standard and impl
 
 **Shower, not protector.** Output is facts and reason codes — never an allow/deny verdict or a risk score. A *dialect* is one reading of a literal (`strict`, `whatwg`, `pton`, `aton`), not a locale.
 
-Verify with `sh data-raw/verify.sh`: floor drift, lintr, spelling, the URL check, `rcmdcheck --as-cran`. The pre-push hook and `.gitlab-ci.yml` both call that one file. Each clone runs `pre-commit install && pre-commit install --hook-type pre-push` once. The declared dependency floors are re-measured at release, not in the gate: see `docs/verification-gates.md`, *Dependency floors are re-measured at release*. The R floor is the exception: it follows the fleet rule (oldest R minor the CI can test) and the weekly `deep-check:floor` job tests it.
+Verify with `sh data-raw/verify.sh`: floor drift, lintr, spelling, roxygen docs drift, the URL check, `rcmdcheck --as-cran`. The pre-push hook and `.gitlab-ci.yml` both call that one file. Each clone runs `pre-commit install && pre-commit install --hook-type pre-push` once. The declared dependency floors are re-measured at release, not in the gate: see `docs/verification-gates.md`, *Dependency floors are re-measured at release*. The R floor is the exception: it follows the fleet rule (oldest R minor the CI can test) and the weekly `deep-check:floor` job tests it.
 
 Before implementing, load the issue with `fp context <id>`; before creating one, check `fp tree` for duplicates. Git follows the house `agent-workflow` skill, and fp status changes stay decoupled from git (the `fp` skill's `references/decoupling.md`).
 
