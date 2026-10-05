@@ -1,10 +1,11 @@
 # raddr 0.1.2.9000
 
-* raddr now requires R >= 4.1.0 (was 4.0.0) (`SEOR-lavybtkr`).
+* raddr now requires R >= 4.1.0, up from 4.0.0 (`SEOR-lavybtkr`).
+* `oysteR` and `rosv` are new in `Suggests` (`SEOR-fftbjnpl`).
 * `addr_registry_outdated()`'s help says what `TRUE` means; with the current snapshot it turns `TRUE` on 2026-10-10 (`RADD-poetjkbw`).
 * `addr_global_reachability()`'s help lists all four blocks that answer `NA`, 6to4 and Teredo included.
 * The documentation site moved to <https://bart-turczynski.gitlab.io/raddr/> (`SEOR-hcmtspmv`).
-* New `vignette("why-raddr")` explains how raddr differs from other address parsers.
+* New `vignette("why-raddr")` shows where IP address parsers disagree, with measured divergence tables.
 
 # raddr 0.1.2
 
