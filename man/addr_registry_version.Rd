@@ -3,7 +3,7 @@
 \name{addr_registry_version}
 \alias{addr_registry_version}
 \alias{addr_registry_outdated}
-\title{Provenance of the bundled special-purpose registry snapshot}
+\title{IANA edit date of the bundled special-purpose registry snapshot}
 \usage{
 addr_registry_version()
 
@@ -18,19 +18,22 @@ addr_registry_outdated(max_age = 365)
 \code{"YYYY-MM-DD"} date, or \code{NA_character_} when the snapshot is undated.
 \code{addr_registry_outdated()} returns a length-1 \code{logical}: \code{TRUE} when IANA's
 recorded last edit is more than \code{max_age} days ago \strong{or} the snapshot is
-undated. \code{TRUE} does not mean the installed copy differs from IANA's.
+undated. \code{TRUE} does not by itself mean the installed copy differs from
+IANA's; see Description.
 }
 \description{
-\code{addr_registry_version()} reports the date IANA itself records having last
-changed the vendored \strong{special-purpose} registries.
-\code{addr_registry_outdated()} returns \code{TRUE} when IANA has not edited those
-registries for more than \code{max_age} days. That measures IANA's quiet period,
-not the installed copy: a snapshot identical to IANA's current files still
-returns \code{TRUE} once IANA goes \code{max_age} days without an edit. raddr cannot
-tell offline whether the installed copy is behind; a newer snapshot arrives
-only with a package upgrade.
+\code{addr_registry_outdated()} returns \code{TRUE} when the IANA edit date recorded in
+the installed snapshot is more than \code{max_age} days old -- whether or not the
+installed copy is behind IANA. \code{addr_registry_version()} reports that date:
+the day IANA itself records having last changed the vendored
+\strong{special-purpose} registries.
 }
 \details{
+A \code{TRUE} has two possible causes, and raddr cannot tell them apart, because
+it never contacts IANA. Either IANA has made no edit for \code{max_age} days, so
+the installed copy is current and only old by date; or IANA has edited since
+the snapshot was built, so the installed copy is behind.
+
 These two answer for \code{\link[=addr_registry]{addr_registry()}} only. The address-space pair is
 vendored from different files and stamped separately; see
 \code{\link[=addr_address_space_version]{addr_address_space_version()}}. For \emph{which bytes} are installed rather than
@@ -56,19 +59,19 @@ is simply not an answer to "when did IANA last change this".
 Content identity is tracked separately and exactly, by a sha256 per file and
 by the single snapshot id \code{\link[=addr_registry_snapshot]{addr_registry_snapshot()}} returns.
 \code{data-raw/build-registry.R --check} compares content and never dates, so a
-stamp that drifts for deploy reasons cannot make the staleness guard pass or
+stamp that drifts for deploy reasons cannot make that content check pass or
 fail.
 }
 
-\section{Unknown is not fresh}{
+\section{An unknown date returns TRUE}{
 
 
 When either half has no date, the snapshot has no date:
 \code{addr_registry_version()} returns \code{NA} and \code{addr_registry_outdated()} returns
 \code{TRUE}.
 
-That asymmetry is deliberate. A snapshot of unknown age is one you have no
-evidence about, and treating no evidence as evidence of freshness is the one
+That asymmetry is deliberate. A snapshot with no recorded date is one you
+have no evidence about, and treating a missing date as a recent one is the
 failure mode this check exists to prevent.
 
 That extends to the source of the date. Scraping a field out of upstream
@@ -89,8 +92,10 @@ does for \code{\link[=addr_address_space_version]{addr_address_space_version()}}
 There is no \code{addr_registry_refresh()}. raddr performs no network access at
 all: the registries change on a multi-year cadence and the whole vendored
 payload is 29 KB, so shipping it outright is a cleaner claim than network
-code that defaults to off. A stale snapshot is fixed by upgrading the
-package.
+code that defaults to off. A newer IANA edit reaches you only through a newer
+raddr release. Upgrading helps when such a release exists; when IANA has made
+no edit since your snapshot, \code{addr_registry_outdated()} stays \code{TRUE} after an
+upgrade, and that \code{TRUE} needs no action.
 }
 
 \examples{

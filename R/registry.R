@@ -172,16 +172,18 @@ addr_address_space <- function() {
   raddr_registry_data$space[address_space_public_columns]
 }
 
-#' Provenance of the bundled special-purpose registry snapshot
+#' IANA edit date of the bundled special-purpose registry snapshot
 #'
-#' `addr_registry_version()` reports the date IANA itself records having last
-#' changed the vendored **special-purpose** registries.
-#' `addr_registry_outdated()` returns `TRUE` when IANA has not edited those
-#' registries for more than `max_age` days. That measures IANA's quiet period,
-#' not the installed copy: a snapshot identical to IANA's current files still
-#' returns `TRUE` once IANA goes `max_age` days without an edit. raddr cannot
-#' tell offline whether the installed copy is behind; a newer snapshot arrives
-#' only with a package upgrade.
+#' `addr_registry_outdated()` returns `TRUE` when the IANA edit date recorded in
+#' the installed snapshot is more than `max_age` days old -- whether or not the
+#' installed copy is behind IANA. `addr_registry_version()` reports that date:
+#' the day IANA itself records having last changed the vendored
+#' **special-purpose** registries.
+#'
+#' A `TRUE` has two possible causes, and raddr cannot tell them apart, because
+#' it never contacts IANA. Either IANA has made no edit for `max_age` days, so
+#' the installed copy is current and only old by date; or IANA has edited since
+#' the snapshot was built, so the installed copy is behind.
 #'
 #' These two answer for [addr_registry()] only. The address-space pair is
 #' vendored from different files and stamped separately; see
@@ -207,17 +209,17 @@ addr_address_space <- function() {
 #' Content identity is tracked separately and exactly, by a sha256 per file and
 #' by the single snapshot id [addr_registry_snapshot()] returns.
 #' `data-raw/build-registry.R --check` compares content and never dates, so a
-#' stamp that drifts for deploy reasons cannot make the staleness guard pass or
+#' stamp that drifts for deploy reasons cannot make that content check pass or
 #' fail.
 #'
-#' @section Unknown is not fresh:
+#' @section An unknown date returns TRUE:
 #'
 #' When either half has no date, the snapshot has no date:
 #' `addr_registry_version()` returns `NA` and `addr_registry_outdated()` returns
 #' `TRUE`.
 #'
-#' That asymmetry is deliberate. A snapshot of unknown age is one you have no
-#' evidence about, and treating no evidence as evidence of freshness is the one
+#' That asymmetry is deliberate. A snapshot with no recorded date is one you
+#' have no evidence about, and treating a missing date as a recent one is the
 #' failure mode this check exists to prevent.
 #'
 #' That extends to the source of the date. Scraping a field out of upstream
@@ -236,8 +238,10 @@ addr_address_space <- function() {
 #' There is no `addr_registry_refresh()`. raddr performs no network access at
 #' all: the registries change on a multi-year cadence and the whole vendored
 #' payload is 29 KB, so shipping it outright is a cleaner claim than network
-#' code that defaults to off. A stale snapshot is fixed by upgrading the
-#' package.
+#' code that defaults to off. A newer IANA edit reaches you only through a newer
+#' raddr release. Upgrading helps when such a release exists; when IANA has made
+#' no edit since your snapshot, `addr_registry_outdated()` stays `TRUE` after an
+#' upgrade, and that `TRUE` needs no action.
 #'
 #' @param max_age Days since IANA's last recorded edit beyond which
 #'   `addr_registry_outdated()` returns `TRUE`. Default 365.
@@ -246,7 +250,8 @@ addr_address_space <- function() {
 #'   `"YYYY-MM-DD"` date, or `NA_character_` when the snapshot is undated.
 #'   `addr_registry_outdated()` returns a length-1 `logical`: `TRUE` when IANA's
 #'   recorded last edit is more than `max_age` days ago **or** the snapshot is
-#'   undated. `TRUE` does not mean the installed copy differs from IANA's.
+#'   undated. `TRUE` does not by itself mean the installed copy differs from
+#'   IANA's; see Description.
 #'
 #' @seealso [addr_registry()] for the data itself.
 #'

@@ -2,9 +2,10 @@
 
 * The help page for `addr_registry_outdated()` and the edge-cases vignette now
   say what `TRUE` means: IANA has not edited the special-purpose registries for
-  more than `max_age` days. It does not mean the installed snapshot is stale;
-  with the current snapshot it turns `TRUE` on 2026-10-10. Behavior is
-  unchanged (`RADD-poetjkbw`).
+  more than `max_age` days as far as the installed snapshot records. That
+  happens when IANA has been quiet, even with a current copy, and also when the
+  copy is behind; raddr cannot tell which. With the current snapshot it turns
+  `TRUE` on 2026-10-10. Behavior is unchanged (`RADD-poetjkbw`).
 
 * raddr has a logo, the fleet's black hex, in `man/figures/logo.svg` and
   `logo.png`. r-universe shows it on the package card and the documentation
