@@ -287,7 +287,10 @@ addr_registry_outdated()
 
 The snapshots are vendored, so raddr never touches the network and a
 classification is reproducible. The cost is that the data is exactly as fresh as
-the installed package. `addr_registry_outdated()` is how you ask.
+the installed package; a newer snapshot arrives only with an upgrade.
+`addr_registry_outdated()` answers a narrower question: whether IANA itself has
+gone more than `max_age` days (365 by default) without editing the registries.
+`TRUE` there can mean IANA has been quiet, not that your copy is behind.
 
 ## What none of this decides
 

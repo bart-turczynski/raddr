@@ -1,5 +1,11 @@
 # raddr 0.1.2.9000
 
+* The help page for `addr_registry_outdated()` and the edge-cases vignette now
+  say what `TRUE` means: IANA has not edited the special-purpose registries for
+  more than `max_age` days. It does not mean the installed snapshot is stale;
+  with the current snapshot it turns `TRUE` on 2026-10-10. Behavior is
+  unchanged (`RADD-poetjkbw`).
+
 * raddr has a logo, the fleet's black hex, in `man/figures/logo.svg` and
   `logo.png`. r-universe shows it on the package card and the documentation
   site in its header, and the `README.md` heading carries it with the alt text

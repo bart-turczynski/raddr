@@ -6,6 +6,8 @@
 \alias{raddr-package}
 \title{raddr: Show What an IP Address Literal Means Under Every Standard}
 \description{
+\if{html}{\figure{logo.svg}{options: style='float: right' alt='logo' width='120'}}
+
 Standards and implementations disagree about what an IP address literal means: the string "0177.0.0.1" is rejected by the dotted-quad grammar, read as 127.0.0.1 by browsers, and read as 177.0.0.1 by some 'inet_pton' implementations. Most libraries pick one reading and discard the rest. This package reports them all, alongside the reason codes that explain each one, and classifies parsed values against the IANA special-purpose address registries. It is pure R, performs no network access, and returns facts rather than allow or deny verdicts.
 }
 \seealso{

@@ -176,8 +176,12 @@ addr_address_space <- function() {
 #'
 #' `addr_registry_version()` reports the date IANA itself records having last
 #' changed the vendored **special-purpose** registries.
-#' `addr_registry_outdated()` says whether that is longer ago than `max_age`
-#' days.
+#' `addr_registry_outdated()` returns `TRUE` when IANA has not edited those
+#' registries for more than `max_age` days. That measures IANA's quiet period,
+#' not the installed copy: a snapshot identical to IANA's current files still
+#' returns `TRUE` once IANA goes `max_age` days without an edit. raddr cannot
+#' tell offline whether the installed copy is behind; a newer snapshot arrives
+#' only with a package upgrade.
 #'
 #' These two answer for [addr_registry()] only. The address-space pair is
 #' vendored from different files and stamped separately; see
@@ -214,7 +218,7 @@ addr_address_space <- function() {
 #'
 #' That asymmetry is deliberate. A snapshot of unknown age is one you have no
 #' evidence about, and treating no evidence as evidence of freshness is the one
-#' failure mode a staleness check exists to prevent.
+#' failure mode this check exists to prevent.
 #'
 #' That extends to the source of the date. Scraping a field out of upstream
 #' markup can fail in several ways -- the field renamed, duplicated, emptied, or
@@ -235,12 +239,14 @@ addr_address_space <- function() {
 #' code that defaults to off. A stale snapshot is fixed by upgrading the
 #' package.
 #'
-#' @param max_age Maximum acceptable age in days. Default 365.
+#' @param max_age Days since IANA's last recorded edit beyond which
+#'   `addr_registry_outdated()` returns `TRUE`. Default 365.
 #'
 #' @return `addr_registry_version()` returns a length-1 `character`
 #'   `"YYYY-MM-DD"` date, or `NA_character_` when the snapshot is undated.
-#'   `addr_registry_outdated()` returns a length-1 `logical`, `TRUE` when the
-#'   snapshot is older than `max_age` days **or** undated.
+#'   `addr_registry_outdated()` returns a length-1 `logical`: `TRUE` when IANA's
+#'   recorded last edit is more than `max_age` days ago **or** the snapshot is
+#'   undated. `TRUE` does not mean the installed copy differs from IANA's.
 #'
 #' @seealso [addr_registry()] for the data itself.
 #'
@@ -248,7 +254,7 @@ addr_address_space <- function() {
 #' addr_registry_version()
 #' addr_registry_outdated()
 #'
-#' # An undated or overly old snapshot is reported, never assumed fresh
+#' # TRUE once IANA's last edit is more than max_age days old, or when undated
 #' addr_registry_outdated(max_age = 0)
 #'
 #' @export

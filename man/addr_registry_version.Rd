@@ -10,19 +10,25 @@ addr_registry_version()
 addr_registry_outdated(max_age = 365)
 }
 \arguments{
-\item{max_age}{Maximum acceptable age in days. Default 365.}
+\item{max_age}{Days since IANA's last recorded edit beyond which
+\code{addr_registry_outdated()} returns \code{TRUE}. Default 365.}
 }
 \value{
 \code{addr_registry_version()} returns a length-1 \code{character}
 \code{"YYYY-MM-DD"} date, or \code{NA_character_} when the snapshot is undated.
-\code{addr_registry_outdated()} returns a length-1 \code{logical}, \code{TRUE} when the
-snapshot is older than \code{max_age} days \strong{or} undated.
+\code{addr_registry_outdated()} returns a length-1 \code{logical}: \code{TRUE} when IANA's
+recorded last edit is more than \code{max_age} days ago \strong{or} the snapshot is
+undated. \code{TRUE} does not mean the installed copy differs from IANA's.
 }
 \description{
 \code{addr_registry_version()} reports the date IANA itself records having last
 changed the vendored \strong{special-purpose} registries.
-\code{addr_registry_outdated()} says whether that is longer ago than \code{max_age}
-days.
+\code{addr_registry_outdated()} returns \code{TRUE} when IANA has not edited those
+registries for more than \code{max_age} days. That measures IANA's quiet period,
+not the installed copy: a snapshot identical to IANA's current files still
+returns \code{TRUE} once IANA goes \code{max_age} days without an edit. raddr cannot
+tell offline whether the installed copy is behind; a newer snapshot arrives
+only with a package upgrade.
 }
 \details{
 These two answer for \code{\link[=addr_registry]{addr_registry()}} only. The address-space pair is
@@ -63,7 +69,7 @@ When either half has no date, the snapshot has no date:
 
 That asymmetry is deliberate. A snapshot of unknown age is one you have no
 evidence about, and treating no evidence as evidence of freshness is the one
-failure mode a staleness check exists to prevent.
+failure mode this check exists to prevent.
 
 That extends to the source of the date. Scraping a field out of upstream
 markup can fail in several ways -- the field renamed, duplicated, emptied, or
@@ -91,7 +97,7 @@ package.
 addr_registry_version()
 addr_registry_outdated()
 
-# An undated or overly old snapshot is reported, never assumed fresh
+# TRUE once IANA's last edit is more than max_age days old, or when undated
 addr_registry_outdated(max_age = 0)
 
 }
