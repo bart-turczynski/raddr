@@ -5,6 +5,11 @@
   site in its header, and the `README.md` heading carries it with the alt text
   "hex logo, white on black" (`SEOR-wxjuxbtu`, `SEOR-wfleahtg`).
 
+* raddr's logo files carry full metadata: every project link (GitLab, GitHub,
+  CRAN, r-universe, the documentation site), a screen-reader description and the
+  standard image metadata fields, written by seor's `scripts/logo-metadata.py`
+  (`SEOR-eyfiidrv`).
+
 * raddr now requires R 4.1.0 or later (was 4.0.0). The fleet declares the
   oldest R minor its CI can test, and no arm64 image exists for R 4.0; a weekly
   scheduled check now runs the package on R 4.1.3.
