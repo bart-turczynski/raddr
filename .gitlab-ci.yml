@@ -225,7 +225,11 @@ variables:
       when: never
     - when: on_success
 
+# NO_DOCS_DRIFT: the legs vary R, and docs drift is a property of the tree,
+# which check:linux-release answers on every push; see data-raw/verify.sh.
 .deep-check:
+  variables:
+    NO_DOCS_DRIFT: "1"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "deep-check"
     - when: never
@@ -474,10 +478,22 @@ variables:
 # raddr is NOT consolidated: folding its few push jobs would cost per-concern
 # red/green (one gates failure no longer says which check broke) and buy
 # roughly one runner acquisition. Not worth it here.
+#
+# The pinned roxygen2 is installed here, not in .r-job, because this is the
+# one job that runs data-raw/verify.sh's docs-drift step (SEOR-nwfmerhu). That
+# step demands the exact Config/roxygen2/version DESCRIPTION pins, and an
+# unpinned install.packages() resolves whatever CRAN serves now (8.1.0 against
+# a pin of 8.0.0 on 2026-10-05). pak, as in pages, because install.packages()
+# cannot ask for a version. The deep-check legs set NO_DOCS_DRIFT and skip it.
 check:linux-release:
   extends:
     - .r-job
     - .on-push
+  script:
+    - |
+      Rscript -e 'if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak"); pak::pkg_install(paste0("roxygen2@", read.dcf("DESCRIPTION", "Config/roxygen2/version")[[1]]), upgrade = FALSE)'
+    - |
+      sh data-raw/verify.sh
 
 # The deep-check schedule's four legs, the same chain on four R versions
 # (seor design/fleet-standard.md, "Scheduled pipelines"). R-devel used to run

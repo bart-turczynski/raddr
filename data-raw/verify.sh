@@ -1,9 +1,11 @@
 #!/bin/sh
 # The verify chain, in one place: floor drift, then lintr, then spelling, then
-# the URL check, then R CMD check --as-cran. Fail-fast, in that order.
+# roxygen docs drift, then the URL check, then R CMD check --as-cran.
+# Fail-fast, in that order.
 #
 #     sh data-raw/verify.sh              # the whole chain
 #     NO_MANUAL=1 sh data-raw/verify.sh  # skip the PDF manual
+#     NO_DOCS_DRIFT=1 sh data-raw/verify.sh  # skip the docs-drift step
 #
 # WHY THIS FILE EXISTS. The chain had two definitions and was acquiring a
 # third. .pre-commit-config.yaml carried it inline as one long argv element,
@@ -44,11 +46,15 @@
 # deliberate difference: they exist to TRANSCRIBE a status line for a human to
 # read, not to gate a push.
 #
-# Requires R with lintr, spelling and rcmdcheck installed, plus the package's
-# own declared closure. Nothing is written inside the working tree: rcmdcheck
+# Requires R with lintr, spelling, rcmdcheck and the roxygen2 that DESCRIPTION's
+# Config/roxygen2/version pins installed, plus the package's own declared
+# closure. Nothing is written inside the working tree: rcmdcheck
 # builds and checks under a temporary directory of its own choosing, which
 # matters because `tmp/` is gitignored but not Rbuildignored and would reach
-# `R CMD check` as a "non-standard things in the check directory" NOTE.
+# `R CMD check` as a "non-standard things in the check directory" NOTE. The
+# one exception is deliberate: on drift, scripts/check-docs-drift.R leaves the
+# regenerated man/ and NAMESPACE in place, so the fix is already applied, and
+# the chain stops there.
 
 set -eu
 
@@ -99,6 +105,25 @@ Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); q
 # rcmdcheck, neither of which sets NOT_CRAN; this call is the authoritative one.
 echo "==> spelling::spell_check_package()"
 Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }'
+
+# man/ and NAMESPACE must be what roxygen regenerates from R/. A stale .Rd is
+# still valid .Rd, so neither lintr above nor the check below can see it: the
+# logo sweep left man/raddr-package.Rd stale on main, found only by chance in
+# raddr !85 (SEOR-nwfmerhu). Offline, so it runs ahead of the URL check. It
+# runs in this tree, not in an export of its own, because raddr has no src/
+# for pkgload to compile into; the script's header has the rest.
+#
+# NO_DOCS_DRIFT=1 skips it, and only the deep-check legs set it. Drift is a
+# property of the tree, not of the R version, so check:linux-release answers
+# it once per pipeline; the legs vary R, and the floor leg's dated snapshot
+# serves a roxygen2 older than the Config/roxygen2/version pin this gate
+# requires. Same shape as NO_MANUAL: a knob CI passes, never a default.
+if [ "${NO_DOCS_DRIFT:-0}" = 1 ]; then
+    echo "==> scripts/check-docs-drift.R skipped (NO_DOCS_DRIFT=1)"
+else
+    echo "==> scripts/check-docs-drift.R"
+    Rscript scripts/check-docs-drift.R
+fi
 
 # Every URL the package declares must resolve (the fleet standard's URL check,
 # SEOR-lavybtkr). --as-cran fetches them too, but reports a dead one only as a
