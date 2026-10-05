@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 #
-# Generated-docs drift gate: fails if man/ or NAMESPACE differ from what
-# roxygen2 would regenerate from the roxygen comments in R/.
+# Generated-docs drift gate: fails if man/, NAMESPACE or DESCRIPTION differ
+# from what roxygen2 would regenerate from the roxygen comments in R/.
 #
 # WHY THIS EXISTS. A stale .Rd is still perfectly valid .Rd, so nothing else in
 # data-raw/verify.sh can see it. lintr::lint_package() reads R/ and never looks
@@ -20,21 +20,29 @@
 # document() considers clean -- an unfixable failure, the worst kind for a gate
 # to have.
 #
-# WHY IT RUNS IN THE WORKING TREE. In robotstxtr the default loader compiles
-# src/ in place through pkgload, leaving .o files and a .so behind, so there
-# it must not run in the directory rcmdcheck builds from and gets its own
-# export. raddr is pure R with no src/, so load_all() writes nothing and this
-# can run where the rest of data-raw/verify.sh runs, ahead of rcmdcheck on the
-# same tree. On a clean tree it changes nothing; on drift it exits 1 before
-# rcmdcheck starts. If raddr ever gains src/, move this onto a separate
-# git-archive export the way robotstxtr does.
+# DESCRIPTION IS WATCHED TOO. roxygenise() owns two of its fields:
+# Config/roxygen2/version (pinned below, so it cannot move here) and Collate,
+# which it rewrites from @include tags. raddr has no @include today, so this
+# costs nothing; if one appears, a stale Collate is drift like a stale .Rd.
+#
+# WHERE IT RUNS: ON A THROWAWAY COPY, NEVER ON A CHECKOUT ANYONE KEEPS.
+# roxygenise() writes into the directory it is given, so on drift this script
+# rewrites man/, NAMESPACE and possibly DESCRIPTION there before it reports.
+# data-raw/verify.sh therefore runs it on a `git archive` export of the commit
+# being pushed (PRE_COMMIT_TO_REF, else HEAD) in a temporary directory, and
+# removes that directory on every exit path. The export is also what makes the
+# answer about the commit rather than the disk: a stale committed man/ fails
+# even when the fix sits uncommitted in the working tree, and an untracked,
+# never-added man/*.Rd does not count as present. The one exception is a CI
+# image with no git, where verify.sh runs it on the job's own checkout, which
+# is the commit and is thrown away with the job.
 #
 # Usage (from the package root):
 #   Rscript scripts/check-docs-drift.R [package-dir]
 #
-# On drift the script prints the diff, exits 1, and LEAVES the regenerated
-# files in place: run against a working tree, the fix is then already applied
-# and only needs committing.
+# On drift the script prints the diff and exits 1, leaving the regenerated
+# files in package-dir. Point it at a copy, as verify.sh does; the fix in a
+# real checkout is devtools::document() and a commit.
 
 args <- commandArgs(trailingOnly = TRUE)
 pkg <- if (length(args) > 0L) args[[1L]] else "."
@@ -76,10 +84,12 @@ if (!identical(pinned, installed)) {
 }
 
 # The generated surface roxygen2 owns, relative to the package root.
+# DESCRIPTION exists (checked above) and is listed whole: see the header.
 watched_files <- function(root) {
   rd <- list.files(file.path(root, "man"), pattern = "[.]Rd$",
     recursive = TRUE)
-  c(if (file.exists(file.path(root, "NAMESPACE"))) "NAMESPACE",
+  c("DESCRIPTION",
+    if (file.exists(file.path(root, "NAMESPACE"))) "NAMESPACE",
     if (length(rd) > 0L) file.path("man", rd))
 }
 
@@ -99,8 +109,10 @@ read_bytes <- function(path) readBin(path, "raw", file.size(path))
 committed_files <- watched_files(pkg)
 committed_dir <- mirror(pkg, committed_files, tempfile("docs-committed-"))
 
-message(sprintf("Regenerating man/ and NAMESPACE with roxygen2 %s ...",
-  installed))
+message(sprintf(
+  "Regenerating man/, NAMESPACE and DESCRIPTION in %s with roxygen2 %s ...",
+  normalizePath(pkg), installed
+))
 roxygen2::roxygenise(pkg)
 
 regenerated_files <- watched_files(pkg)
@@ -115,7 +127,10 @@ changed <- Filter(
 )
 
 if (length(added) == 0L && length(removed) == 0L && length(changed) == 0L) {
-  message("Docs in sync: man/ and NAMESPACE match the roxygen comments in R/.")
+  message(
+    "Docs in sync: man/, NAMESPACE and DESCRIPTION match the roxygen ",
+    "comments in R/."
+  )
   quit(status = 0L)
 }
 
@@ -170,7 +185,7 @@ if (length(diff_out) > 0L) {
 
 message("")
 message(
-  "Fix: run devtools::document() and commit the resulting man/ and NAMESPACE ",
-  "changes."
+  "Fix: run devtools::document() in your checkout and commit the resulting ",
+  "man/, NAMESPACE and DESCRIPTION changes."
 )
 quit(status = 1L)

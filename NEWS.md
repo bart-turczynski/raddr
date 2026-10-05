@@ -52,11 +52,13 @@
 ## Internal
 
 * The pre-push gate and the `check:linux-release` CI job now fail when
-  `man/` or `NAMESPACE` differ from what roxygen2 regenerates from `R/`
-  (`scripts/check-docs-drift.R`). A stale `.Rd` is still valid `.Rd`, so
-  neither `lintr` nor `R CMD check` can see one: raddr's own
-  `man/raddr-package.Rd` drifted when the logo was added and was caught only
-  by luck, in !85 (`SEOR-nwfmerhu`).
+  `man/`, `NAMESPACE` or `DESCRIPTION` differ from what roxygen2 regenerates
+  from `R/` (`scripts/check-docs-drift.R`). Before a push it checks the commit
+  being pushed, on a `git archive` export it deletes afterwards, so it never
+  edits the working tree and an uncommitted fix cannot make it pass; CI checks
+  its own checkout. A stale `.Rd` is still valid `.Rd`, so neither `lintr` nor
+  `R CMD check` can see one: raddr's own `man/raddr-package.Rd` drifted when
+  the logo was added and was caught only by luck, in !85 (`SEOR-nwfmerhu`).
 * The verify chain (`data-raw/verify.sh`, run by the pre-push hook and CI) also
   fails when `R CMD check` exits non-zero. `rcmdcheck` reads a check that halted
   partway as 0 errors, 0 warnings and 0 notes, which is how a halted

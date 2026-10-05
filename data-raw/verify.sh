@@ -48,13 +48,11 @@
 #
 # Requires R with lintr, spelling, rcmdcheck and the roxygen2 that DESCRIPTION's
 # Config/roxygen2/version pins installed, plus the package's own declared
-# closure. Nothing is written inside the working tree: rcmdcheck
-# builds and checks under a temporary directory of its own choosing, which
-# matters because `tmp/` is gitignored but not Rbuildignored and would reach
-# `R CMD check` as a "non-standard things in the check directory" NOTE. The
-# one exception is deliberate: on drift, scripts/check-docs-drift.R leaves the
-# regenerated man/ and NAMESPACE in place, so the fix is already applied, and
-# the chain stops there.
+# closure, and git outside CI. Nothing is written inside the working tree:
+# rcmdcheck builds and checks under a temporary directory of its own choosing,
+# which matters because `tmp/` is gitignored but not Rbuildignored and would
+# reach `R CMD check` as a "non-standard things in the check directory" NOTE,
+# and the docs-drift step regenerates into a throwaway export of its own.
 
 set -eu
 
@@ -106,23 +104,62 @@ Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); q
 echo "==> spelling::spell_check_package()"
 Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }'
 
-# man/ and NAMESPACE must be what roxygen regenerates from R/. A stale .Rd is
-# still valid .Rd, so neither lintr above nor the check below can see it: the
-# logo sweep left man/raddr-package.Rd stale on main, found only by chance in
-# raddr !85 (SEOR-nwfmerhu). Offline, so it runs ahead of the URL check. It
-# runs in this tree, not in an export of its own, because raddr has no src/
-# for pkgload to compile into; the script's header has the rest.
+# man/, NAMESPACE and DESCRIPTION must be what roxygen regenerates from R/. A
+# stale .Rd is still valid .Rd, so neither lintr above nor the check below can
+# see it: the logo sweep left man/raddr-package.Rd stale on main, found only by
+# chance in raddr !85 (SEOR-nwfmerhu). Offline, so it runs ahead of the URL
+# check.
+#
+# IT CHECKS THE COMMIT BEING PUSHED, ON A THROWAWAY EXPORT. roxygenise() writes
+# into the tree it is given -- on drift it rewrites man/, NAMESPACE and maybe
+# DESCRIPTION -- so run in place it would edit the developer's checkout
+# mid-push and hand those edits to the rcmdcheck below. And a working tree
+# answers the wrong question: a stale committed man/ passes when the fix is on
+# disk but uncommitted, and an untracked man/*.Rd counts as present. So the
+# step exports PRE_COMMIT_TO_REF (pre-commit sets it to the local sha a
+# pre-push hook is pushing, and the hook's environment reaches this script),
+# else HEAD, with `git archive` into a temporary directory, runs that commit's
+# own scripts/check-docs-drift.R there, and removes the directory on every exit
+# path, the traps covering a failure and an interrupt. The diff it prints on
+# drift is the fix; devtools::document() in the checkout applies it.
+#
+# CI's images (rocker/r-ver) carry no git, so there, and only when CI=true, it
+# runs on the job's checkout instead: that checkout IS the commit, nothing
+# untracked sits in it that roxygen reads, and it is thrown away with the job.
+# On drift the step exits 1, so the rewritten files never reach rcmdcheck; on
+# a pass roxygen has written nothing, since DESCRIPTION is among the files it
+# compares. Without git outside CI the step refuses rather than touch the tree.
 #
 # NO_DOCS_DRIFT=1 skips it, and only the deep-check legs set it. Drift is a
-# property of the tree, not of the R version, so check:linux-release answers
+# property of the commit, not of the R version, so check:linux-release answers
 # it once per pipeline; the legs vary R, and the floor leg's dated snapshot
 # serves a roxygen2 older than the Config/roxygen2/version pin this gate
 # requires. Same shape as NO_MANUAL: a knob CI passes, never a default.
 if [ "${NO_DOCS_DRIFT:-0}" = 1 ]; then
     echo "==> scripts/check-docs-drift.R skipped (NO_DOCS_DRIFT=1)"
+elif command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+    docs_ref=${PRE_COMMIT_TO_REF:-HEAD}
+    echo "==> scripts/check-docs-drift.R on a git-archive export of $docs_ref"
+    docs_tmp=$(mktemp -d "${TMPDIR:-/tmp}/raddr-docs-drift.XXXXXX")
+    trap 'rm -rf "$docs_tmp"' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # To a file, then extracted, not piped: POSIX sh has no pipefail, so a
+    # failed `git archive | tar` would be judged by tar alone.
+    git archive --format=tar -o "$docs_tmp/export.tar" "$docs_ref"
+    mkdir "$docs_tmp/pkg"
+    tar -xf "$docs_tmp/export.tar" -C "$docs_tmp/pkg"
+    Rscript "$docs_tmp/pkg/scripts/check-docs-drift.R" "$docs_tmp/pkg"
+    rm -rf "$docs_tmp"
+    trap - EXIT HUP INT TERM
+elif [ "${CI:-}" = true ]; then
+    echo "==> scripts/check-docs-drift.R on the CI checkout (no git in this image)"
+    Rscript scripts/check-docs-drift.R .
 else
-    echo "==> scripts/check-docs-drift.R"
-    Rscript scripts/check-docs-drift.R
+    echo "verify: the docs-drift step needs git to export the commit; it will not" >&2
+    echo "verify: regenerate into this working tree. Install git, or set NO_DOCS_DRIFT=1." >&2
+    exit 1
 fi
 
 # Every URL the package declares must resolve (the fleet standard's URL check,
