@@ -13,8 +13,9 @@ metadata address into a "public" one is therefore an SSRF bypass in `ssrfr`.
 
 Treat every address literal as attacker-controlled. It enters through:
 
-- `addr_parse(x)`: every reading at once, with per-dialect outcomes and reason
-  codes.
+- `addr_parse(x)`: the four primitive readings at once (`strict`, `whatwg`,
+  `pton`, `aton`), with per-dialect outcomes and reason codes. The
+  compositions below are not in it; call them directly.
 - The six single-dialect parsers: `addr_strict()` (RFC dotted-quad, RFC 4291),
   `addr_whatwg()` (WHATWG URL host parser), `addr_pton()` and `addr_aton()`
   (Apple libc), and the compositions `addr_getaddrinfo()` (pton, then aton,
@@ -71,19 +72,29 @@ The vendored WPT corpus under `tests/testthat/fixtures/wpt/` is test data.
 ## How to exercise it
 
 The image has the source at `/src`, raddr installed, every Import and Suggest
-installed, and no network. There is no native code, so `R -d gdb` and
-`R -d valgrind` only help with a crash inside R itself.
+installed, gdb and valgrind installed, and no network at scan time. There is
+no native code, so gdb and valgrind only help with a crash inside R itself:
+
+- `R -d gdb --debugger-args='-batch -ex run -ex bt' -e 'library(raddr); addr_parse("0x7f.1")'`
+- `R -d valgrind -e 'library(raddr); addr_parse("0x7f.1")'`
+
+The rest:
 
 - Full suite: `Rscript -e 'testthat::test_local("/src")'`. The OSS Index and
   OSV audits (`test-security.R`, `test-osv.R`) skip offline; that is expected.
-- One literal, every reading:
+  The image build has network, so its own smoke test leaves those two files
+  out.
+- The four primitive readings of each literal:
   `Rscript -e 'library(raddr); addr_parse(c("0177.0.0.1", "0x7f.1", "::ffff:127.0.0.1", "fe80:abcd::1"))'`
+- The compositions, which `addr_parse()` does not run:
+  `Rscript -e 'library(raddr); x <- c("0177.0.0.1", "127.1 junk", "fe80:abcd::1"); print(addr_getaddrinfo(x)); print(addr_curl(x))'`
 - Classification of one reading, with every column:
   `Rscript -e 'library(raddr); as.data.frame(addr_classify(addr_whatwg("0x7f.1")))'`
-- Embedded addresses and the three-valued reachability fact:
-  `addr_embeddings(addr_strict("2002:7f00:1::1"))`,
-  `addr_global_reachability(addr_strict("64:ff9b::7f00:1"))`.
-- Containment: `addr_within_any(addr_aton("2130706433"), c("127.0.0.0/8", "::1/128"))`.
+- Embedded addresses, the three-valued reachability fact of the outer block,
+  and the codes that judge the inner address:
+  `Rscript -e 'library(raddr); a <- addr_strict(c("2002:7f00:1::1", "64:ff9b::7f00:1")); print(addr_embeddings(a)); print(addr_global_reachability(a)); print(as.data.frame(addr_classify(a))[c("globally_reachable", "codes")])'`
+- Containment:
+  `Rscript -e 'library(raddr); addr_within_any(addr_aton("2130706433"), c("127.0.0.0/8", "::1/128"))'`
 - Corpora worth reusing, all under `tests/testthat/fixtures/`:
   `ipv4-oracle.csv` and `ipv6-oracle.csv` (Apple libc and curl, measured),
   `ipv4-libc-glibc.csv` / `-musl.csv` and the IPv6 pair, `zone-native-*.csv`,
@@ -139,7 +150,10 @@ These are documented design choices (`docs/architecture.md`):
   (`%bogus0`); the zone never affects equality.
 - `addr_whatwg()` is the WHATWG IPv4/IPv6 host parser only. It does not
   percent-decode or run IDNA; that is `rurl`'s and `punycoder`'s job. A
-  reg-name such as `0x7f.0.0.0x7g` returns `NA` by design.
+  reg-name such as `0x7f.0.0.0x7g` returns `NA` by design. So does a bracketed
+  IPv6 host: `addr_whatwg("[::1]")` is `NA`, because stripping the brackets is
+  the URL layer's job and raddr is handed the text between them
+  (`docs/architecture.md`).
 - In `addr_within*()` a `::ffff:a.b.c.d` address is searched in the IPv6 space,
   so it is not inside `10.0.0.0/8`; the embedded IPv4 is reported separately by
   `addr_embeddings()`. A missing embedding is in scope; the containment rule is
@@ -147,6 +161,13 @@ These are documented design choices (`docs/architecture.md`):
 - `category` is descriptive, not a policy input, and there is deliberately no
   "not global" helper. `addr_global_reachability()` returns `NA` where neither
   registry layer settles the question; that third value is intended.
+- `globally_reachable` (and `addr_global_reachability()`) describes the outer
+  address's own registry block only. `64:ff9b::7f00:1` is `TRUE` there although
+  it carries `127.0.0.1`. An embedded address is judged through
+  `addr_embeddings()` and the classify codes `nat64_wk_embedded_not_global`,
+  `sixtofour_embedded_not_global` and `teredo_client_not_global`. A wrong or
+  missing embedded classification there is still rated Critical; the outer
+  column ignoring the inner address is not.
 
 Patch format: a minimal R fix in the package's style (vectorized, base R
 string operations, no new Imports); a `testthat` regression test in the
