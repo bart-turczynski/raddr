@@ -30,6 +30,7 @@
 # built from the main clone.
 ^\.claude$
 ^\.pre-commit-config\.yaml$
+^\.oss-scanner$
 ^\.fp$
 ^_scratch$
 ^docs$
