@@ -17,7 +17,7 @@ Useful links:
   \item \url{https://gitlab.com/bart-turczynski/raddr}
   \item \url{https://bart-turczynski.r-universe.dev/raddr}
   \item \url{https://CRAN.R-project.org/package=raddr}
-  \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/issues}
+  \item Report bugs at \url{https://gitlab.com/bart-turczynski/raddr/-/work_items}
 }
 
 }
