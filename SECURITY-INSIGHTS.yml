@@ -18,7 +18,7 @@ project:
   documentation:
     quickstart-guide: https://bart-turczynski.gitlab.io/raddr/
     detailed-guide: https://bart-turczynski.gitlab.io/raddr/reference/index.html
-    release-process: https://gitlab.com/bart-turczynski/raddr/-/blob/main/CONTRIBUTING.md
+    release-process: https://gitlab.com/bart-turczynski/raddr/-/blob/main/docs/release-build.md
   repositories:
     - name: raddr
       url: https://gitlab.com/bart-turczynski/raddr

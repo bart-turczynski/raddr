@@ -663,9 +663,9 @@ point of this run.
 
 ## The NOTE to expect on every row
 
-\`checking CRAN incoming feasibility\` reports a NOTE on every row that reaches the
-network, and it is expected rather than a defect. It says two things. The package is a
-**new submission**, which is true and which CRAN wants flagged. And \`BugReports:\` —
+\`checking CRAN incoming feasibility\` reports a NOTE on every row, and it is expected
+rather than a defect. On a first submission it also says the package is a **new
+submission**, which CRAN wants flagged; that part needs the network. And \`BugReports:\` —
 \`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws the "should likely
 be" NOTE: R's incoming check string-tests a gitlab.com \`BugReports:\` path for
 \`/issues\`, which GitLab serves as 404 to non-browser clients on every project. On
@@ -674,8 +674,9 @@ be" NOTE: R's incoming check string-tests a gitlab.com \`BugReports:\` path for
 https://gitlab.com/bart-turczynski/seor/-/blob/main/design/adr/0011-bugreports-names-work-items.md).
 Do not repoint it at \`/-/issues\`. \`URL:\` resolves 200.
 
-A row with no network access would not produce the NOTE at all, and its absence would
-mean the incoming checks did not run rather than that they passed. The findings blocks
+The \`BugReports:\` part is a string test that runs offline too, so seeing it does not
+prove a row reached the network; judge that from the parts that need it (the
+new-submission line, the URL checks). The findings blocks
 below are the authoritative record either way: if one of them shows something other
 than that NOTE, the block is what counts and this paragraph is not.
 

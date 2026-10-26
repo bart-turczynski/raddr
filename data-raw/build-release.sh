@@ -264,8 +264,8 @@ ${FINDINGS}
 \`\`\`
 
 The NOTE from \`checking CRAN incoming feasibility\` is expected on this tree and is
-not a defect to fix. It reports two things. The package is a **new submission**,
-which is true and which CRAN wants flagged. And the \`BugReports:\` field —
+not a defect to fix. On a first submission it also reports the package as a
+**new submission**, which CRAN wants flagged. And the \`BugReports:\` field —
 \`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws the
 "should likely be" NOTE: \`tools:::.check_package_CRAN_incoming\` string-tests a
 gitlab.com \`BugReports:\` path for \`/issues\`, which GitLab serves as 404 to
