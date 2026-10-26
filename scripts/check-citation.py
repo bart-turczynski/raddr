@@ -32,13 +32,8 @@ WHAT IT CHECKS.
 
 WHAT IT DOES NOT CHECK, ON PURPOSE.
 
-* `codemeta.json` is out of scope: it is generated rather than authored, so a
-  drift gate over it would assert facts about a generator's output. This
-  repository carries no `codemeta.json` at all, so the rule is stated for the
-  fleet rather than for a file present here. Where a member does carry one,
-  its `issueTracker` is `/-/work_items` on purpose while `DESCRIPTION`'s
-  `BugReports:` keeps the `/-/issues` form CRAN's incoming check demands
-  (SEOR-ocbtrrnl); a gate equating the two would force one of them wrong.
+* `codemeta.json` is out of scope here. `scripts/check-bugreports.py` holds
+  its `issueTracker` equal to `BugReports:` (seor ADR 0011, SEOR-sptibjph).
 * Nothing here touches the network. Whether a declared URL resolves is a fact
   about the rest of the world; `R CMD check --as-cran` already fetches declared
   URLs, and wiring a network call into a pre-push gate makes every push fail on

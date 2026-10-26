@@ -582,7 +582,8 @@ citation-version:
     - python3 scripts/check-citation.py
     # Rides in this job rather than its own: same image, same offline,
     # stdlib-only shape, and a separate job would take a runner slot for
-    # seconds of work. BugReports split, SEOR-ocbtrrnl.
+    # seconds of work. BugReports and tracker links name /-/work_items
+    # (seor ADR 0011, SEOR-sptibjph).
     - python3 scripts/check-bugreports.py --self-test
     - python3 scripts/check-bugreports.py
 

@@ -266,13 +266,13 @@ ${FINDINGS}
 The NOTE from \`checking CRAN incoming feasibility\` is expected on this tree and is
 not a defect to fix. It reports two things. The package is a **new submission**,
 which is true and which CRAN wants flagged. And the \`BugReports:\` field —
-\`https://gitlab.com/bart-turczynski/raddr/-/issues\` — is reported as a URL
-returning **404**. GitLab serves 404 on \`/-/issues\` to signed-out non-browser
-clients on every project (a browser is redirected to \`/-/work_items\`), and CRAN
-accepts it: rurl 3.0.1 is on CRAN with the same form. Do not repoint it at
-\`/-/work_items\`: \`tools:::.check_package_CRAN_incoming\` wants a gitlab.com
-\`BugReports:\` path ending in \`/-/issues\` and NOTEs anything else, which is what
-got pslr 1.2.1 archived at the CRAN pretest. \`URL:\` resolves **200**. If the
+\`https://gitlab.com/bart-turczynski/raddr/-/work_items\` — draws the
+"should likely be" NOTE: \`tools:::.check_package_CRAN_incoming\` string-tests a
+gitlab.com \`BugReports:\` path for \`/issues\`, which GitLab serves as 404 to
+non-browser clients on every project. On 2026-10-23 CRAN called that NOTE a bug
+in its check for GitLab and invited the \`/-/work_items\` form (seor ADR 0011,
+https://gitlab.com/bart-turczynski/seor/-/blob/main/design/adr/0011-bugreports-names-work-items.md).
+Do not repoint it at \`/-/issues\`. \`URL:\` resolves **200**. If the
 findings block above shows anything other than that NOTE, the block is the
 authoritative record and this paragraph is not.
 

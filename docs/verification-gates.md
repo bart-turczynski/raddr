@@ -52,9 +52,9 @@ Since 2026-09-12 a fourth check runs on the same pre-push hook and in the pipeli
 
 A release that stalls at "Received", a duplicate version, and the content comparison are all covered in seor's `design/github-mirror.md` §5 (§5.1 to §5.3).
 
-## The tracker link is split by audience
+## Every tracker link names /-/work_items
 
-Since 2026-09-24 a fifth check runs beside it, on the same pre-push stage and inside the same `citation-version` CI job: `scripts/check-bugreports.py`, ported from pagerankr (`SEOR-ocbtrrnl`). It enforces the split recorded as generation 4 in `docs/remotes-and-backups.md`: `DESCRIPTION`'s `BugReports:` stays on the `/-/issues` form the CRAN incoming check string-tests, `man/raddr-package.Rd` mirrors it, and no human-facing file (README, SECURITY.md, `_pkgdown.yml`, vignettes, a future `codemeta.json`) links `/-/issues`. `--self-test` runs positive and negative fixtures. raddr's README and SECURITY.md name no tracker at all, so, unlike pagerankr, the script requires a `/-/work_items` link only from `codemeta.json`.
+Since 2026-09-24 a fifth check runs beside it, on the same pre-push stage and inside the same `citation-version` CI job: `scripts/check-bugreports.py`. Since `SEOR-sptibjph` it is seor's v2, recorded as generation 5 in `docs/remotes-and-backups.md` and decided in seor's [ADR 0011](https://gitlab.com/bart-turczynski/seor/-/blob/main/design/adr/0011-bugreports-names-work-items.md): `DESCRIPTION`'s `BugReports:` names this repository's `/-/work_items`, `codemeta.json`'s `issueTracker` names the same address, `man/raddr-package.Rd` mirrors `BugReports:`, `codemeta.json`, `.bestpractices.json`, `CONTRIBUTING.md` and `SECURITY.md` each name `/-/work_items`, and no human-facing file (those four, README, `SECURITY-INSIGHTS.yml`, `_pkgdown.yml`, vignettes, `.gitlab/` templates) links `/-/issues`. `--self-test` runs positive and negative fixtures. Until then, v1 (ported from pagerankr, `SEOR-ocbtrrnl`) held the generation-4 split, with `BugReports:` on `/-/issues`; `data-raw/check-urls.R` lost that 404's exemption in the same change.
 
 ## Linux amd64 is checked at release, not in CI
 
