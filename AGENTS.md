@@ -8,6 +8,8 @@ Verify with `sh data-raw/verify.sh`: floor drift, lintr, spelling, roxygen docs 
 
 Before implementing, load the issue with `fp context <id>`; before creating one, check `fp tree` for duplicates. Git follows the house `agent-workflow` skill, and fp status changes stay decoupled from git (the `fp` skill's `references/decoupling.md`).
 
+A NEWS.md bullet is one terse line: one source line, at most 32 words, only for a change a package user acts on or notices (behavior, API, dependencies, R or system requirements, installation). Where a standard decides the change, cite the clause in a few words, such as "(RFC 4291 §2.5.5)"; the reasoning goes in the issue. At most one issue or MR reference, at the end. No bullet for housekeeping (CI, gates, lint, spelling, metadata, agent files) and no Internal section. The `news-terse` pre-push hook enforces it.
+
 Planning notes stay in `_scratch/`, uncommitted alongside `.fp/`. Transcripts under `docs/` record what was true when the run happened; never edit one to match a later state. Remaining `github.com` strings are third-party provenance or transcripts, and stay.
 
 For the epistemic rules this project works by, see `docs/working-method.md`.
