@@ -56,6 +56,10 @@ A release that stalls at "Received", a duplicate version, and the content compar
 
 Since 2026-09-24 a fifth check runs beside it, on the same pre-push stage and inside the same `citation-version` CI job: `scripts/check-bugreports.py`. Since `SEOR-sptibjph` it is seor's v2, recorded as generation 5 in `docs/remotes-and-backups.md` and decided in seor's [ADR 0011](https://gitlab.com/bart-turczynski/seor/-/blob/main/design/adr/0011-bugreports-names-work-items.md): `DESCRIPTION`'s `BugReports:` names this repository's `/-/work_items`, `codemeta.json`'s `issueTracker` names the same address, `man/raddr-package.Rd` mirrors `BugReports:`, `codemeta.json`, `.bestpractices.json`, `CONTRIBUTING.md` and `SECURITY.md` each name `/-/work_items`, and no human-facing file (those four, README, `SECURITY-INSIGHTS.yml`, `_pkgdown.yml`, vignettes, `.gitlab/` templates) links `/-/issues`. `--self-test` runs positive and negative fixtures. Until then, v1 (ported from pagerankr, `SEOR-ocbtrrnl`) held the generation-4 split, with `BugReports:` on `/-/issues`; `data-raw/check-urls.R` lost that 404's exemption in the same change.
 
+## NEWS bullets are one terse line
+
+Since 2026-10-28 a sixth check runs on the same pre-push stage and inside the same `citation-version` CI job: `scripts/check-news.py NEWS.md`, the `news-terse` hook, ported byte for byte from seor (`SEOR-skfshchx`; seor's `design/fleet-standard.md`, "`NEWS.md` bullets"). It refuses a top-level `NEWS.md` bullet that spans two source lines, runs past 32 words besides its reference, carries more than one reference, holds only a reference, or opens on a housekeeping subject, and any `Internal` heading. `--self-test` runs when the script changes.
+
 ## Linux amd64 is checked at release, not in CI
 
 **CI itself no longer covers amd64.** Since 2026-09-10 both check jobs run in Linux aarch64 containers on the self-hosted arm64 Mac, and on 2026-09-24 the owner decided not to restore native amd64 to CI (`SEOR-auklpuoa`, option 3). The pre-push hook is arm64 too, and `data-raw/check-matrix.sh` reaches amd64 only under emulation. So between releases nothing checks raddr on native amd64.

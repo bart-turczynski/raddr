@@ -15,7 +15,7 @@ both and is the version to install. Everything in the notes below is present
 here.
 
 * `URL:` and `BugReports:` name the GitLab repository. They previously named a GitHub account that no longer exists, so both fields resolved to 404.
-* No user-visible behavior change from 0.1.1. The exported functions, the six dialects and the reason-code table are identical; the `since` column reads `0.1.2`, the first obtainable release.
+* The reason-code table's `since` column reads `0.1.2`, the first obtainable release; exports, the six dialects and the reason codes are otherwise identical to 0.1.1.
 
 # raddr 0.1.1
 
@@ -38,7 +38,8 @@ collapses disagreeing sources into a single answer.
 
 * `addr_parse()` returns a `raddr_parse` record carrying the input, the reading each dialect arrived at, the per-dialect outcome, and the reason codes.
 * Six dialects. On paper: `addr_strict()` (RFC dotted-quad and RFC 4291 IPv6 text) and `addr_whatwg()` (WHATWG URL host parser). In reality: `addr_pton()`, `addr_aton()`, and the precedence orderings `addr_getaddrinfo()` and `addr_curl()`.
-* The reality dialects model **Apple**'s `inet_pton()` and `inet_aton()`, not POSIX in general; glibc and musl reject the leading zeros Apple reads as decimal and the overflow Apple wraps modulo 2^32.
+* The reality dialects model **Apple**'s `inet_pton()` and `inet_aton()`, not POSIX: glibc and musl reject Apple's decimal leading zeros and modulo-2^32 wrap.
+* `addr_getaddrinfo()` and `addr_curl()` apply Apple's scope lift across all of `fe80::/10`; glibc and musl don't.
 * Accessors read one field out of a parse without re-parsing: `addr_input()`, `addr_outcome()`, `addr_reading()`, `addr_codes()`, `addr_status()`, and `addr_is_divergent()` for the literals the dialects disagree about.
 * `addr_codes_registry()` documents every reason code, each stating what it does and does not prove, and grades the classify codes by the force of the rule they report.
 
@@ -63,10 +64,8 @@ collapses disagreeing sources into a single answer.
 * `addr_embeddings()` and `addr_embedded_kind()` decode NAT64, Teredo, and 6to4 embeddings. Both Teredo addresses are reported: the server in the clear and the bitwise-complemented client.
 * `addr_nat64_embeddings()` reads the IPv4 address embedded under a caller-supplied RFC 6052 Network-Specific Prefix, skipping the reserved u-byte at bits 64-71; every row comes back as `nat64_nsp`.
 
-## Verification and docs
+## Documentation
 
-* The full web-platform-tests URL host corpus and the IANA registry corpus run on every check, including on CRAN — no snapshots, no `skip_on_cran()`.
 * Three vignettes: `introduction`, `reason-codes`, and `edge-cases`, the last with every table computed at build time rather than transcribed.
-* The design record is `docs/architecture.md`; its reason-code table is checked against the registry in both directions on every run.
 
 The API is not yet stable. Pure R, no network access at any point.
