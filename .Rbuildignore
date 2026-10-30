@@ -14,6 +14,14 @@
 # Shared scaffold layer: everything below is dev tooling, not package content,
 # and would otherwise trip "non-standard files/directories" in R CMD check.
 ^\.gitlab-ci\.yml$
+# fleet-ci's vendored local gate and its settings, per fleet-ci's README,
+# "Adopting the template"; and the library t2-sanitizers installs into
+# before it runs `R CMD build .`. R CMD build reads every line here as a
+# perl regex, comments included, so a comment line must be one: no
+# parenthesis or bracket left open at the end of a line.
+^\.fleet-ci$
+^\.fleet-ci\.yml$
+^\.fleet-lib$
 # The CI job library. It has to live under the project directory because that
 # is the only thing GitLab's cache can carry, which puts it inside the package
 # root while R CMD build runs -- so it is ignored here rather than moved.

@@ -1,0 +1,89 @@
+# The fleet-ci local gate's settings: T0 (docs) and T1 (full) before every
+# push, run by .fleet-ci/gate in the fleet image (fleet-ci README, "The
+# .fleet-ci.yml file"; seor ADR 0012). Read from the pushed commit. The
+# t2-locale and pages CI jobs read it too. It replaces the former
+# data-raw/verify.sh chain; docs/ci.md has the tiers and the gaps.
+version: 1
+
+# The image the gate runs in. It must be .gitlab-ci.yml's
+# FLEET_RELEASE_VARIANT (default fleet-r).
+variant: fleet-r
+
+# Paths the classifier must never call docs-only, because a full-tier gate
+# reads their content:
+# - docs/architecture.md: the reason-code table test-codes.R reads
+#   (architecture_codes) and the section 3.3 divergence table test-ipv4.R
+#   reads. Both tests skip in the built package, where docs/ is not shipped,
+#   so the gate's R CMD check skips them too; the file stays full-tier so a
+#   change to it is never waved through on spelling alone.
+# - docs/r-floor-check.md and docs/dep-floor-check.md: the transcripts
+#   data-raw/check-floor-drift.R compares against DESCRIPTION, a cheap gate
+#   below.
+# No other script under tests/, scripts/ or data-raw/, nor the hook config,
+# reads an allowlisted path: the other docs/ names there are comments,
+# outputs (check-matrix.sh, build-release.sh, snapshot-tracker.sh write
+# their transcripts) or codespell excludes, and codespell runs on every push
+# whatever the tier.
+docs_exclude:
+  - docs/architecture.md
+  - docs/r-floor-check.md
+  - docs/dep-floor-check.md
+
+# T0, and the start of T1. spelling reads DESCRIPTION, roxygen, vignettes,
+# README and NEWS; genuine terms go in inst/WORDLIST. The former verify ran
+# it as its own step, because tests/spelling.R skips under R CMD check.
+docs_gates:
+  - Rscript -e 'words <- spelling::spell_check_package(); if (nrow(words)) { print(words); quit(status = 1) }'
+
+# T1, in the container after the dependency install, each run whatever the
+# others report. The former data-raw/verify.sh steps bar R CMD check (the
+# gate's own) and spelling (docs_gates above), in its order: the declared
+# floors against the measured transcripts and the R floor leg, with its
+# self-test (RADD-olitgnsw); lintr on the package; man/, NAMESPACE and
+# DESCRIPTION against a fresh run of the pinned roxygen2 (SEOR-nwfmerhu; the
+# export is the pushed commit, so no git archive step is needed); every
+# declared URL (SEOR-lavybtkr; the gate's R CMD check runs with remote
+# incoming, and so its URL check, off). Then two checks the former CI ran on
+# every push to main: README.md against a fresh knit of README.Rmd (the
+# `readme` job) and the NEWS heading against the version (`news-version`).
+cheap_gates:
+  - Rscript data-raw/check-floor-drift.R --self-test
+  - Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }'
+  - Rscript scripts/check-docs-drift.R .
+  - Rscript data-raw/check-urls.R
+  - sh scripts/check-readme-drift.sh
+  - Rscript scripts/check-news-version.R
+
+# The gate runs R CMD check with NOT_CRAN=true, so skip_on_cran() no longer
+# keeps these out of it. T2 runs both, as osv-audit and security-audit (and
+# in every T2 leg that runs the suite; docs/ci.md, "Gaps accepted").
+exclude_tests:
+  - path: tests/testthat/test-osv.R
+    why: queries osv.dev over the network; the osv-audit job runs it in T2
+  - path: tests/testthat/test-security.R
+    why: queries Sonatype OSS Index with credentials the gate does not have; the security-audit job runs it in T2
+
+# Every skip R CMD check's test run may report; any other fails the gate.
+allowed_skips:
+  - reason: docs/architecture.md is not in the tarball
+    why: test-codes.R and test-ipv4.R read the design record, which .Rbuildignore keeps out of the tarball R CMD check runs on; devtools::test() from a clone runs them
+  - reason: package sources not available
+    why: test-registry.R's no-network scan reads ../../R, which the installed package R CMD check tests has no copy of; devtools::test() from a clone runs it
+
+# The top-level .md files the pkgdown site publishes; every other one (the
+# agent files among them) is moved out before build_site() (SEOR-wqxhftpv).
+# The former pages job's keep list, unchanged: CHANGELOG.md, CONTRIBUTING.md
+# and SECURITY.md are grandfathered (their pages were live on 2026-09-23),
+# LICENSE.md, CODE_OF_CONDUCT.md and ARCHITECTURE.md are fleet-standard
+# public files, and cran-comments.md is on pkgdown's own skip list either
+# way.
+pages_keep:
+  - README.md
+  - NEWS.md
+  - cran-comments.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - LICENSE.md
+  - CODE_OF_CONDUCT.md
+  - ARCHITECTURE.md
