@@ -1,807 +1,108 @@
-# The only CI this package has. It runs once per merge, on main, and on a
-# release tag. Not on a merge request, not on an ordinary branch push; the
-# workflow: block below is where that is argued.
+# GitLab CI for raddr: fleet-ci's template, pinned by commit SHA (seor
+# ADR 0012, fleet-ci README "The CI template"). The template owns the event
+# table, the jobs and the images; this file sets only the package's switches
+# and adds its x-floor job. A push to main or a branch, and a merge request,
+# create no pipeline: the merge gate is the local one (.fleet-ci/gate, run by
+# the .fleet-ci/pre-push hook). T2 runs on the deep-check schedule
+# (SCHEDULE_KIND=deep-check), T3 on a RELEASE=1 web pipeline and a v* tag.
+# docs/ci.md has the whole picture and the gaps the migration accepted.
 #
-# .github/workflows/R-CMD-check.yaml declared six matrix rows and never executed
-# once. It was deleted on 2026-09-05 (RADD-ithxwzpr) after the GitHub account
-# hosting the repository stayed suspended from 2026-07-20 with the appeal
-# unanswered. This file is two jobs, not six rows, and the difference is
-# deliberate: five of those six rows are already answered by
-# measurements in docs/ (the pre-push hook for macOS release; check-matrix.sh
-# for the two Ubuntu rows; check-r-floor.sh and check-dep-floor.sh for the two
-# oldrel rows, which only probe toward a floor that is measured directly). What
-# CI adds is not another row. It is the things a laptop structurally cannot
-# assert about itself, and there are four:
-#
-#   1. A CLEAN CLONE. Every local measurement runs against a working tree that
-#      has been lived in. Nothing has ever proven the package checks from what
-#      git actually contains.
-#   2. A CLEAN PACKAGE LIBRARY. The host library accumulated over 0.1.0's whole
-#      development. An accidental dependency on something installed but not
-#      declared would be invisible to it and fatal on a user's machine.
-#   3. NATIVE amd64 -- NOT PROVIDED SINCE 2026-09-10. docs/check-matrix.md
-#      carries two harness caveats because its Ubuntu rows run emulated on an
-#      arm64 Mac -- a source-built `fs` needing libuv1-dev, and GNU tar 1.35
-#      unable to extract into a subdirectory under emulation. Native amd64
-#      execution on GitLab.com's SaaS runners settled both on 2026-08-02:
-#      libuv1-dev is a genuine system requirement and is installed below,
-#      while the tar failure does not exist off the emulator, because a runner
-#      clones with git and never reaches tar. Those two results stand. The
-#      amd64 coverage does not: the namespace's SaaS compute quota ran out,
-#      the last amd64 pipeline ran on 2026-09-06, and since 2026-09-10 every
-#      job here runs on `seor-local-docker`, a self-hosted Docker runner on an
-#      arm64 Mac -- Linux aarch64 containers. So CI asserts 1, 2 and 4 today,
-#      not 3, and that is now DECIDED rather than pending (SEOR-auklpuoa,
-#      2026-09-24): CI ITSELF NO LONGER COVERS amd64 and will not be made to.
-#      Instead, before every CRAN release, the tarball goes to R-hub's R
-#      Consortium runners with rhub::rc_submit() on its Linux x86_64
-#      platforms, and the result is recorded in that release's
-#      cran-comments.md. docs/verification-gates.md carries the exact step.
-#   4. A RESULT TIED TO A COMMIT. The hook proves a tree passed on the way out;
-#      it leaves no artifact saying which one.
-#
-# WHAT THIS DOES NOT ADD, stated so the gap is not quietly closed by implication:
-# not Windows, which is still checked by nothing (RADD-xxuzwmuj holds that, and
-# the answer there is win-builder, not a runner -- GitLab's two Windows shared
-# runners report online=true but status=paused); not macOS beyond the pre-push
-# hook, and a self-hosted Mac runner for macOS is REJECTED, not pending (see
-# RADD-fgciezpx for why a route to an already-covered platform is worth
-# nothing) -- the self-hosted runner CI does use today runs Linux containers
-# on a Mac, which adds no macOS coverage; not minimum
-# dependency versions, which check-dep-floor.sh measures at exactly vctrs 0.7.0
-# on R 4.0.0; and no additional semantic diversity, since the libc dialects are
-# already measured under glibc and musl by data-raw/oracle-libc-linux.sh
-# independent of any pipeline.
-#
-# THE CHECK COMMANDS ARE NOT HERE. They are in data-raw/verify.sh, which the
-# pre-push hook also calls. That is what keeps "the hook runs the same chain as
-# CI" a fact instead of a hand-maintained coincidence, and it is what keeps a
-# move to any other provider small: a provider installs an environment and calls
-# a script. It is also load-bearing for the rule set below, which is only
-# affordable BECAUSE the hook runs the identical chain on the merge requests
-# that no longer get a pipeline.
-#
-# THE FLEET STANDARD (seor design/fleet-standard.md; SEOR-lavybtkr,
-# 2026-10-03). A push to main runs check:linux-release, coverage, readme,
-# news-version, citation-version and pages. Two weekly schedules on main,
-# told apart by the SCHEDULE_KIND variable each one sets, add the rest:
-# `deep-check` (the R release, oldrel, devel and floor legs) and
-# `dependency-audit` (osv-audit and security-audit). A scheduled pipeline
-# runs every push-to-main job plus the jobs of its own kind, never the other
-# kind's (seor design/fleet.md, "Scheduled pipelines"). A v* tag runs the
-# push jobs except pages.
-
-default:
-  # The fleet's jobs run only on the self-hosted Docker runners on the
-  # maintainer's Mac, which carry this tag. Naming it makes that dependency
-  # explicit: while the Mac sleeps, jobs sit pending and then fail as
-  # `stuck_pending_no_matching_runners`, which is infrastructure, not code
-  # (seor design/stuck-pending-runbook.md; SEOR-hhtzaknn).
-  tags: [local-docker]
-  image: rocker/r-ver:latest
-  # Runner slots are finite -- one Mac serves the whole fleet -- and
-  # superseded pipelines answer a question nobody is still asking.
-  interruptible: true
-
-# ONE PIPELINE, ON MAIN (SEOR-bmgkzhvy). Not on a merge request, not on an
-# ordinary branch push.
-#
-# This replaces the version-bump posture that stood here from 2026-08-02
-# (RADD-ofvmkjsj) until today: a merge request that changed DESCRIPTION got a
-# pipeline BEFORE the merge, a v* tag got one AFTER it, and `glab ci run -b
-# <branch>` (or the API equivalent) was a standing escape hatch open on any
-# branch. That design's own history -- the earlier posture running
-# unconditionally on every merge_request_event, the 2026-08-13 quota
-# narrowing, two reversals of only_allow_merge_if_pipeline_succeeds, and the
-# escape hatch dying to quota exhaustion and reviving once a project runner
-# was attached -- is not repeated here; it lived in this block until today
-# and is recoverable from git history (RADD-jzwticug, RADD-fgciezpx) if it is
-# ever needed again. It is dropped now because the setting it was all
-# reasoning about just changed underneath it.
-#
-# WHY NOW. SEOR-bmgkzhvy measured a fleet-wide pathology: a merged slice was
-# firing THREE pipelines -- one for the branch, one for the merge request, one
-# on main -- and two of the three are guaranteed waste. The branch pipeline
-# dies at get_sources once the slice-flow deletes the branch it ran for; the
-# MR pipeline for an already-merged MR has nothing left to gate. Twice this
-# stalled the runner for 30+ minutes re-verifying trees that no longer
-# existed, on multiple repos at once; more runner slots would only have run
-# the waste sooner. That runner is not a GitLab.com shared runner and was
-# never capped at 1: it is `seor-local-docker`, a self-hosted Docker runner on
-# one Mac, registered to six of the fleet's eight repos (raddr among them).
-# Its job slots are `concurrent` in ~/.gitlab-runner/config.toml, which was 2
-# then and is 4 since 2026-09-23 (seor design/adr/0003). raddr was the one
-# repo where the fix below was structurally blocked: this project alone
-# carried only_allow_merge_if_pipeline_succeeds=true (see "IT DRIFTED BACK
-# ON" in git history) with allow_merge_on_skipped_pipeline=false, and the old
-# rules gave a pipeline only to a DESCRIPTION-changing MR, a v* tag, or a
-# web/api run -- so a docs-only MR got NO pipeline and GitLab then refused to
-# merge it (`detailed_merge_status: ci_must_pass`, `head_pipeline: null`).
-# MR !46 hit exactly that deadlock this morning (RADD-dyqdamzt).
-#
-# RESOLVED 2026-09-22 (RADD-dyqdamzt): the owner set
-# only_allow_merge_if_pipeline_succeeds=false on raddr, matching the other
-# seven projects in the fleet. Verify before relying on it rather than
-# trusting this comment:
-#
-#   glab api projects/:id | python3 -c \
-#     'import sys,json; print(json.load(sys.stdin)["only_allow_merge_if_pipeline_succeeds"])'
-#
-# With that false, suppressing the MR pipeline below no longer locks
-# anything out -- nothing on this project has required a passing pipeline to
-# merge since. The deadlock above is gone because the setting changed, not
-# because this rule set works around it; if that value ever reads true
-# again, suppressing the MR pipeline recreates MR !46 for every MR that
-# never touches DESCRIPTION, i.e. nearly all of them.
-#
-# WHAT THIS GIVES UP THAT THE OLD RULES HAD:
-#   - The pre-merge, DESCRIPTION-gated clean-room check. A version-bump MR no
-#     longer gets its own pipeline before it lands; the only pipeline is the
-#     one that runs after, on main, once the bump is already there.
-#   - The api escape hatch on a BRANCH. `glab ci run -b <branch>` (the
-#     documented unblock above) creates nothing for any branch other than
-#     main -- $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH falls through to the
-#     final `when: never`. The WEB half of that hatch was restored on
-#     2026-09-23 by exactly the one-line amendment this comment used to
-#     propose, so a clean-room check CAN be hand-triggered on a branch before
-#     it merges -- but from Build > Pipelines > Run pipeline, not from the
-#     CLI, because `glab ci run` starts an api-source pipeline. That
-#     asymmetry is deliberate: the button is a human deciding to spend a
-#     runner slot, an api call is a script that could do it in a loop.
-#   - The unconditional `schedule` carve-out. A schedule MUST target main to
-#     survive; one targeting a branch creates nothing. The fleet standard's
-#     two schedules do (SEOR-lavybtkr), and the rule above admits them
-#     through `$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH`.
-#
-# WHAT THIS ADDS THAT THE OLD RULES DID NOT: a plain push to main now gets a
-# pipeline UNCONDITIONALLY, whether or not DESCRIPTION changed. Read that the
-# right way round -- most merges to main do not bump DESCRIPTION, and under
-# the old rules those got no pipeline at all, before or after the merge.
-# Under this rule set every one of them now runs the push jobs listed at the
-# top of this file. THAT IS MORE CI THAN THE OLD DESIGN
-# RAN FOR ORDINARY, NON-RELEASE WORK, not less, even though SEOR-bmgkzhvy's
-# fleet-wide point is reducing pipeline count. The fleet-wide reduction is
-# real -- one pipeline per merged slice instead of three -- but for raddr
-# specifically, "the one pipeline" now fires on every merge, where the old
-# design's DESCRIPTION-gated pipeline fired on almost none. If that trade is
-# unwanted, the fix is a `changes: [DESCRIPTION]` filter on the main-push
-# rule below, at the cost of losing the clean-clone / clean-library check on
-# ordinary merges again -- raised here, not resolved by this change.
-workflow:
-  rules:
-    # No pipeline before the merge. The merge request that would have gated
-    # a version bump is checked by the pre-push hook instead (data-raw/
-    # verify.sh, the same chain this pipeline runs) -- see "WHAT THIS GIVES
-    # UP" above.
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: never
-    # THE RECORD. Tied to the commit that carries the version. Tag creation
-    # is restricted to Maintainers (v*, protected since 2026-08-02), so this
-    # cannot be triggered by an ordinary push even though the rule below does
-    # not itself restrict to v*.
-    - if: $CI_COMMIT_TAG
-    # THE ONLY OTHER CASE: an ordinary push to main, after the merge,
-    # unconditionally -- see "WHAT THIS ADDS" above for what that costs.
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - when: never
+# Bump the pin by changing `ref:` and re-running fleet-ci's bin/vendor at the
+# same SHA, in one merge request: .fleet-ci/VERSION must equal `ref:`.
+include:
+  - project: bart-turczynski/fleet-ci
+    ref: 864e5386511de38b0dff594ba3118a800f662cc7
+    file: templates/r-package.yml
 
 variables:
-  # A project-local library, so the cache below has something to carry and so
-  # the job cannot silently depend on whatever the image happens to ship.
-  R_LIBS_USER: "$CI_PROJECT_DIR/.rlib"
-  # rcmdcheck shells out to `R CMD check`; keeping sources makes a traceback in
-  # the log point at a line rather than at a byte offset.
-  R_KEEP_PKG_SOURCE: "yes"
-  GIT_DEPTH: "1"
-  # The pandoc every R job runs, installed by .pandoc_install, which .r-job's
-  # and pages' before_script both name. Here rather than in .r-job's variables because `pages` does not extend .r-job,
-  # and every job that renders needs the same value. scripts/check-toolchain.R
-  # reads this line and fails the pre-push gate when the local pandoc differs;
-  # seor's scripts/check-fleet-standard.py checks it against the fleet's
-  # version (seor design/fleet-standard.md, "CI on every push to `main`";
-  # SEOR-egfbijyi). It is not the only place the version lives. A bump moves
-  # these together, in one change:
-  #   - this PANDOC_VERSION;
-  #   - both sha256 digests (amd64, arm64) in .pandoc_install, the
-  #     release's own published values;
-  #   - README.md, re-knit under the new pandoc.
-  PANDOC_VERSION: "3.10"
+  # raddr has no compiled code (no src/), which the sanitizer leg exists
+  # for; the former CI had no sanitizer job either.
+  FLEET_SANITIZERS: "false"
+  # The template's t2-floor installs into a bare rocker/r-ver:4.1.3, which
+  # has no curl binary: every R curl since 7.0.0 wants libcurl >= 7.73, the
+  # image's focal has 7.68, and curl's configure then fetches a static
+  # libcurl with that binary or fails (`CURLINFO_EFFECTIVE_METHOD
+  # undeclared`). rcmdcheck and the audits' oysteR and rosv all need curl.
+  # The template installs no apt package, so the floor leg is x-floor, on
+  # .t2-job, in its place: the former deep-check:floor recipe.
+  FLEET_FLOOR: "false"
 
-# Which pipeline runs a job. A schedule on main is admitted by the workflow:
-# rules above like any push to main, so every job states which side it is on.
-# Push jobs also run on a schedule on main, whatever its kind: that re-checks
-# main against dependencies that moved since the last merge, and it keeps the
-# coverage badge alive, because GitLab reads it from the latest SUCCESSFUL
-# pipeline on main and a schedule pipeline without the coverage job left it
-# reading "unknown" after every green weekly run (SEOR-lavybtkr). The first
-# rule only spells out what the workflow already guarantees. Scheduled jobs
-# require a schedule AND its SCHEDULE_KIND, a variable set on the schedule
-# itself, never a project or group variable that every schedule would inherit
-# (seor design/fleet.md; SEOR-ihmntqzm, SEOR-fftbjnpl).
-.on-push:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
-      when: never
-    - when: on_success
-
-# NO_DOCS_DRIFT: the legs vary R, and docs drift is a property of the tree,
-# which check:linux-release answers on every push; see data-raw/verify.sh.
-.deep-check:
-  variables:
-    NO_DOCS_DRIFT: "1"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "deep-check"
-    - when: never
-
-.dependency-audit:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "dependency-audit"
-    - when: never
-
-# pandoc is PINNED, in every R job, as the fleet standard requires (seor
-# design/fleet-standard.md, "CI on every push to `main`"; SEOR-egfbijyi).
-# Its markdown writer reflows text and pads tables differently between
-# versions, so README.md is byte-stable only under the pandoc that knit it,
-# PANDOC_VERSION in the global variables. rocker/r-ver ships no pandoc, and
-# the older pandoc each image's apt provides differs from leg to leg. The one
-# on the push jobs' image pads every pipe table to its widest cell where 3.10
-# writes them compact: pipeline 2909397101 went red on exactly that, a
-# README.md nobody had hand-edited (SEOR-lavybtkr). Until SEOR-dpjdwhbi only
-# `readme` pinned it, so check:linux-release, coverage and pages rendered the
-# vignettes and the site with the apt pandoc.
+# The deep-check leg at the declared R floor, `Depends: R (>= 4.1.0)`, in
+# place of the template's t2-floor (FLEET_FLOOR above): the former
+# `deep-check:floor` job's install, with R CMD check in place of the rest of
+# data-raw/verify.sh (lintr, spelling, the URL and floor checks run in T1,
+# whatever the R version). 4.1.3 is the last 4.1 patch and the oldest minor
+# rocker publishes an arm64 image for, which the runner needs; 4.0.5 has
+# none. data-raw/check-floor-drift.R reads the image line below and fails T1
+# when it is not DESCRIPTION's floor minor, so keep it one literal line.
 #
-# The release .deb is installed over the apt pandoc .r-job and pages install
-# first (it declares `Replaces: pandoc-data`). The two sha256 values are the
-# release's own published digests, copied from seor's `.r` template; what
-# else moves with them on a bump is listed at PANDOC_VERSION. A failed or
-# mismatched download only warns and leaves the apt pandoc in place, so every
-# job still runs and reports; `readme` alone refuses to knit under it (see
-# there). Nothing unverified is ever installed. The download retries and has
-# a ceiling: --max-time (which the fleet checker requires) bounds each
-# attempt and --retry-max-time the retries, so a stalled CDN reaches the
-# warning in about seven minutes at most instead of hanging every R job.
+# - FLOOR_SNAPSHOT is the newest p3m date whose closure builds on this image
+#   (Ubuntu 20.04: gcc 9, libcurl 7.68), and its window is narrow. vctrs
+#   0.7.0, the Imports floor, reached CRAN on 2026-01-16; bit64 4.8.0, whose
+#   integer64.h puts `__has_builtin(...)` in an #if that gcc 9 rejects, is in
+#   every snapshot from 2026-04-22. So 2026-04-21 (bit64 4.6.0-1, vctrs
+#   0.7.3); 2026-09-01 failed on exactly that in pipeline 2909397520
+#   (SEOR-lavybtkr). Source packages: the runner is arm64. Move the date
+#   forward only to a snapshot re-proven in this image.
+# - The apt line is the former .r-job's, less pandoc: curl, the binary, for
+#   curl's static libcurl (above); the libcurl and OpenSSL headers for curl
+#   and openssl; libxml2 and hunspell for spelling; libuv for fs; qpdf for
+#   --as-cran's PDF checks.
+# - Every Suggests package is installed, as before: a check that skips is
+#   not a check that passed (test-property.R skips whole without hedgehog,
+#   and the bignum, bit64 and digest paths do the same). vctrs is asserted
+#   at or above 0.7.0 (RADD-vppmbsia), and what the snapshot resolved is
+#   printed, since only that record makes the run checkable afterwards.
+# - Vignettes are neither built nor checked: this image has no pandoc (the
+#   former job installed one), as in the template's t2-floor. The check is
+#   --as-cran with CRAN incoming off (_R_CHECK_CRAN_INCOMING_ below; the two
+#   R_CRAN_* variables point any CRAN metadata read at cloud.r-project.org
+#   rather than the snapshot), error_on = "warning", and a guard on R CMD
+#   check's own exit status, because rcmdcheck reads a check that halted
+#   partway as 0/0/0 and returns normally (SEOR-maavnxdm).
 #
-# A hidden, anchored LIST, named by alias from .r-job's before_script and
-# from `pages`' (GitLab flattens the nested list), so the digests live in one
-# place. pagerankr's `.pandoc_script` is the same form.
-.pandoc_install: &pandoc_install
-  # `apt-mark hold pandoc`, only after a successful `dpkg -i`: no later apt
-  # step replaces the pin. An upgrade leaves it, and an install that needs
-  # another pandoc fails loudly. Where apt's pandoc is older than the pin, as
-  # on rocker images, apt would not replace it anyway; the hold is the fleet's
-  # canonical shape. A failed hold only warns, so it never stops a gate (seor
-  # design/fleet-standard.md; SEOR-vzupmeqj).
-  - |
-    ARCH=$(dpkg --print-architecture)
-    case "$ARCH" in
-      amd64) PANDOC_SHA256=d502599878eb29af3ae5f0cb5d559134df96534125d452c7a0674a5bad2c5ecf ;;
-      arm64) PANDOC_SHA256=b651c8bfd5a0a2f6650d6c0830131747ef67a1d9c0475b1399626611419e2205 ;;
-      *) PANDOC_SHA256=unknown ;;
-    esac
-    if curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 300 --connect-timeout 20 --max-time 120 \
-      -o /tmp/pandoc.deb "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-${ARCH}.deb" \
-      && echo "${PANDOC_SHA256}  /tmp/pandoc.deb" | sha256sum -c - \
-      && dpkg -i /tmp/pandoc.deb; then
-      apt-mark hold pandoc || echo "WARNING: pandoc ${PANDOC_VERSION} installed but not held; a later apt step may replace it"
-      echo "pandoc ${PANDOC_VERSION} installed"
-    else
-      echo "WARNING: pandoc ${PANDOC_VERSION} not installed; this job runs on the apt pandoc"
-    fi
-    pandoc --version | sed -n 1p
-
-.r-job:
-  variables:
-    # The images carry no LaTeX toolchain and gain nothing from one. The
-    # pre-push hook deliberately does not set this; see data-raw/verify.sh.
-    NO_MANUAL: "1"
-    # Where `--as-cran`'s "checking CRAN incoming feasibility" reads CRAN's
-    # metadata. By default that is the repos option's CRAN entry, which
-    # rocker/r-ver:latest points at p3m, and p3m serves neither
-    # src/contrib/Meta/current.rds nor web/packages/packages.rds (404). Once
-    # raddr was on CRAN, the check halted there about 12 seconds in, and
-    # rcmdcheck read the cut-off log as "0 errors | 0 warnings | 0 notes": the
-    # job went green having checked nothing (pipeline 2893490558,
-    # check:linux-release). These two variables move only that step to
-    # cloud.r-project.org; package installs still come from p3m. The devel
-    # image already points at cloud.r-project.org, where they change nothing.
-    # SEOR-ygzjighu.
-    R_CRAN_SRC: "https://cloud.r-project.org"
-    R_CRAN_WEB: "https://cloud.r-project.org"
-  cache:
-    # Keyed on DESCRIPTION, so the library is rebuilt exactly when the declared
-    # closure changes and reused when it has not. Shared-runner caches are
-    # best-effort and frequently cold: this is a speed optimization, never a
-    # correctness input. `policy` stays the default pull-push.
-    #
-    # SEOR-bmgkzhvy (this rule fires on every push to main, not only when
-    # DESCRIPTION changes) FLIPS THIS FROM MOSTLY COLD TO MOSTLY WARM. Under
-    # the old DESCRIPTION-gated MR rule the key changed on every run by
-    # construction -- a gated run was asking for a clean library, which was
-    # the point. Now most merges to main leave DESCRIPTION untouched, so most
-    # runs reuse the cached library from the previous run, and it is only a
-    # DESCRIPTION-changing merge or the v* tag pipeline right behind it that
-    # forces a rebuild. Still a speed optimization, never a correctness
-    # input: the vctrs >= 0.7.0 assert below runs regardless of cache state.
-    #
-    # The prefix is not decoration. Without it `check:linux-release`
-    # (rocker/r-ver:latest) and `check:linux-devel` (rocker/r-ver:devel) shared
-    # one entry, so whichever ran first handed the other a library of binaries
-    # built against a different R and a different base image. That is not
-    # hypothetical: pipeline 2875359066 died with
-    #
-    #     unable to load shared object '.../.rlib/xml2/libs/xml2.so':
-    #     libxml2.so.2: cannot open shared object file
-    #
-    # because the release image carries libxml2.so.2 and the devel image
-    # (Ubuntu 26.04) carries libxml2.so.16. Installing libxml2-dev does not
-    # help -- the job already does, and it supplies the NEW soname, not the one
-    # the cached object was linked against (SEOR-huidaviw).
-    key:
-      prefix: "$CI_JOB_NAME_SLUG"
-      files:
-        - DESCRIPTION
-    paths:
-      - .rlib/
-  before_script:
-    # data-raw/check-matrix.sh's apt list, plus one entry it does not need, for
-    # the same reasons: pandoc so the vignettes really re-build instead of being
-    # skipped, libhunspell-dev and libxml2-dev for spelling, qpdf for the PDF
-    # checks --as-cran performs, and libuv1-dev because fs links libuv and is
-    # how testthat and rmarkdown both reach the filesystem through pkgload.
-    #
-    # libcurl4-openssl-dev and libssl-dev are the entry that is new here, and
-    # they were DISCOVERED BY THE FIRST RUN rather than carried over --
-    # pipeline 2725127124, where check:linux-devel failed with "Configuration
-    # failed because libcurl was not found" while check:linux-release passed.
-    # Worth recording precisely, because the difference between the two jobs is
-    # the whole reason this file has a devel job at all:
-    #
-    #   * rcmdcheck imports curl. verify.sh calls rcmdcheck rather than
-    #     `R CMD check` because only rcmdcheck offers error_on = "warning",
-    #     which is what makes a WARNING fail the gate. So curl is a build
-    #     dependency of the GATE, not of raddr.
-    #   * The release job installs a p3m BINARY of curl, already linked, and so
-    #     never sees the requirement. The devel job resolves against
-    #     cloud.r-project.org because p3m serves no R-devel binaries, builds
-    #     curl from source, and needs the headers.
-    #   * check-matrix.sh's devel row never hit this because it calls
-    #     `R CMD check` directly and so never installs rcmdcheck at all.
-    #
-    # That is the same shape as the libuv1-dev finding: a system requirement
-    # that is invisible wherever a binary is available and fatal wherever one is
-    # not. On GitHub, setup-r-dependencies resolves this whole category
-    # automatically; this line is the hand-maintained stand-in, so expect a
-    # future source-built dependency to add another entry, and read a failure of
-    # this shape as a missing -dev package before anything else.
-    #
-    # `curl`, the binary, is the floor leg's entry: the R curl package's
-    # configure needs it to fetch a static libcurl where the system one is
-    # too old (see deep-check:floor).
-    #
-    # Every command below is a literal block scalar. That is not a style
-    # choice: a plain YAML scalar may not contain ": ", and the vctrs assert
-    # further down calls message("vctrs: ", v). It parsed as a mapping and the
-    # file was rejected. Keeping the whole list in one form stops the next
-    # command from re-discovering that.
-    - |
-      apt-get update
-    - |
-      apt-get install -y --no-install-recommends \
-        pandoc libhunspell-dev libxml2-dev libuv1-dev qpdf \
-        libcurl4-openssl-dev libssl-dev curl
-    # The pinned pandoc, from .pandoc_install above (SEOR-dpjdwhbi).
-    - *pandoc_install
-    # Only the floor leg sets FLOOR_SNAPSHOT. Its image's own repository is a
-    # p3m snapshot from the year that R was released, which predates
-    # vctrs 0.7.0, so point it at a dated snapshot whose closure still
-    # installs on the floor R. Source packages (the runner is arm64); the
-    # option is appended, so the later line wins. Every other job leaves the
-    # image's repository alone. The date is chosen at the floor leg below.
-    - |
-      if [ -n "${FLOOR_SNAPSHOT:-}" ]; then
-        echo "options(repos = c(CRAN = 'https://p3m.dev/cran/${FLOOR_SNAPSHOT}'))" >> "${R_HOME}/etc/Rprofile.site"
-      fi
-    # SEOR-dyzgzyot: the cache above was never holding anything. rocker's own
-    # Renviron.site sets `R_LIBS=${R_LIBS-'/usr/local/lib/R/site-library:...'}`,
-    # and R_LIBS -- not R_LIBS_USER -- wins first place in .libPaths(), so every
-    # install.packages() call in this job installed into the image and died
-    # with the container. `.libPaths()` on this image, measured with docker,
-    # before this line: `c("/usr/local/lib/R/site-library", ...)`, $R_LIBS_USER
-    # nowhere in the first two entries and dropped off the list entirely if its
-    # directory does not yet exist. Appending to Rprofile.site rather than
-    # setting R_LIBS puts $R_LIBS_USER first without fighting rocker's own
-    # variable, which a later image update could redefine out from under a
-    # hand-set R_LIBS.
-    - |
-      echo '.libPaths(c(Sys.getenv("R_LIBS_USER"), .libPaths()))' >> "${R_HOME}/etc/Rprofile.site"
-    - |
-      mkdir -p "$R_LIBS_USER"
-    # The prefix above stops two DIFFERENT jobs sharing one entry. It cannot
-    # stop ONE job's entry going stale, because `rocker/r-ver:devel` and
-    # `:latest` are moving tags: the same job name legitimately gets a new R
-    # and a new base image without DESCRIPTION or the job name changing, and
-    # the cached binaries silently stop being loadable. So record what built
-    # the library and throw it away when that no longer matches. A rebuild
-    # costs minutes; a library that half-loads costs a red pipeline and an
-    # afternoon reading the wrong logs (SEOR-huidaviw).
-    #
-    # `install -d` rather than repeating the mkdir line above:
-    # data-raw/check-libpaths-fix.R requires that exact line to appear ONCE,
-    # because it uses its position to prove the Rprofile.site fix runs ahead of
-    # it. A second copy is not a second anchor, it is an ambiguous one, and the
-    # guard is right to reject it -- it rejected the first draft of this block.
-    # Recreating the directory here is a different concern from establishing
-    # it, so it gets a different command rather than a disguised duplicate.
-    - |
-      stamp="$R_LIBS_USER/.toolchain-stamp"
-      . /etc/os-release
-      want="$(Rscript -e 'cat(R.version$major, R.version$minor, R.version$platform, sep = "-")')-${ID}-${VERSION_ID}"
-      have="$(cat "$stamp" 2>/dev/null || echo none)"
-      if [ "$have" != "$want" ]; then
-        echo "cache: built by '$have', this job is '$want' -- discarding the cached library"
-        rm -rf "$R_LIBS_USER"
-        install -d "$R_LIBS_USER"
-        printf '%s' "$want" > "$stamp"
-      else
-        echo "cache: '$want' matches the cached library -- keeping it"
-      fi
-    # Prove the line above actually bites, in this job, on this image -- not by
-    # re-reading the comment. $R_LIBS_USER is silently dropped from
-    # .libPaths() if its directory does not exist, which is why this runs
-    # after the mkdir rather than before it. Site-library must stay visible
-    # (just not first), because system packages the job does not reinstall
-    # still have to resolve.
-    - |
-      Rscript -e 'lp <- .libPaths(); stopifnot(normalizePath(lp[[1]]) == normalizePath(Sys.getenv("R_LIBS_USER")), any(grepl("site-library", lp))); message("libPaths ok: ", paste(lp, collapse = " -> "))'
-    # Every Suggests package is installed deliberately, for the reason the
-    # GitHub workflow gives: a check that skips is not a check that passed.
-    # tests/testthat/test-hedgehog.R skips whole when hedgehog is absent, and
-    # the bignum, bit64 and digest paths do the same.
-    - |
-      Rscript -e 'p <- c("rlang", "vctrs", "bignum", "bit64", "digest", "hedgehog", "knitr", "oysteR", "rmarkdown", "rosv", "spelling", "testthat", "lintr", "rcmdcheck"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); print(ok); if (!all(ok)) quit(status = 1)'
-    # Asserted rather than assumed, because vctrs is the one dependency whose
-    # version has already produced a wrong conclusion. vctrs < 0.7.0 modifies
-    # vctrs_rcrd types in place in vec_assign(), which corrupts raddr_address
-    # (RADD-vppmbsia). A job resolving 0.6.5 -- from a stale cache, say -- would
-    # report test failures that have nothing to do with the thing it is varying.
-    - |
-      Rscript -e 'v <- packageVersion("vctrs"); message("vctrs: ", v); if (v < "0.7.0") quit(status = 1)'
-    # The record of what "current" resolved to on this run. No date is pinned,
-    # deliberately: these jobs ask about platform and about upcoming R, and both
-    # questions are only meaningful against packages as they are now. Since
-    # "current" is not reproducible, only this record makes a run checkable
-    # after the fact. data-raw/check-r-floor.sh pins precisely because it asks a
-    # different question.
-    - |
-      Rscript -e 'cat(R.version.string, "\n"); cat("platform:", R.version[["platform"]], "\n"); cat("repos:", getOption("repos")[["CRAN"]], "\n"); ip <- installed.packages(); ip <- ip[is.na(ip[, "Priority"]), c("Package", "Version"), drop = FALSE]; write.table(ip[order(rownames(ip)), ], quote = FALSE, row.names = FALSE, col.names = FALSE)'
-  script:
-    - |
-      sh data-raw/verify.sh
-
-# Fleet-wide job consolidation (SEOR-pgammbgo) folded cheap verify-stage jobs
-# into one `gates` job on pagerankr, punycoder and robotstxtr -- repos with a
-# dozen-plus jobs where per-job GitLab overhead dwarfed the work each one did.
-# raddr is NOT consolidated: folding its few push jobs would cost per-concern
-# red/green (one gates failure no longer says which check broke) and buy
-# roughly one runner acquisition. Not worth it here.
-#
-# The pinned roxygen2 is installed here, not in .r-job, because this is the
-# one job that runs data-raw/verify.sh's docs-drift step (SEOR-nwfmerhu). That
-# step demands the exact Config/roxygen2/version DESCRIPTION pins, and an
-# unpinned install.packages() resolves whatever CRAN serves now (8.1.0 against
-# a pin of 8.0.0 on 2026-10-05). pak, as in pages, because install.packages()
-# cannot ask for a version. The deep-check legs set NO_DOCS_DRIFT and skip it.
-check:linux-release:
-  extends:
-    - .r-job
-    - .on-push
-  script:
-    - |
-      Rscript -e 'if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak"); pak::pkg_install(paste0("roxygen2@", read.dcf("DESCRIPTION", "Config/roxygen2/version")[[1]]), upgrade = FALSE)'
-    - |
-      sh data-raw/verify.sh
-
-# The deep-check schedule's four legs, the same chain on four R versions
-# (seor design/fleet-standard.md, "Scheduled pipelines"). R-devel used to run
-# on every push to main as check:linux-devel; it moved here with the fleet
-# standard (SEOR-lavybtkr), so a red devel leg reports upcoming-R breakage
-# weekly rather than on every merge. allow_failure is not set on any leg: a
-# scheduled detector that cannot go red is worthless.
-#
-# oldrel is pinned to the previous R minor's image tag, so it moves when R
-# releases a new minor. The floor leg tests DESCRIPTION's `R (>= x.y)` at
-# that minor's last patch release; data-raw/check-floor-drift.R fails the
-# verify chain when the two disagree. rocker publishes no arm64 image for any
-# R 4.0.x, so 4.1 is the oldest minor the fleet's arm64 runner can test.
-deep-check:release:
-  extends:
-    - .r-job
-    - .deep-check
-  image: rocker/r-ver:latest
-
-deep-check:oldrel:
-  extends:
-    - .r-job
-    - .deep-check
-  image: rocker/r-ver:4.5
-
-# R-devel resolves against cloud.r-project.org because p3m serves no R-devel
-# binaries, so its whole closure builds from source; the libcurl headers in
-# .r-job's apt list were found by this leg's first run (pipeline 2725127124).
-deep-check:devel:
-  extends:
-    - .r-job
-    - .deep-check
-  image: rocker/r-ver:devel
-
-# FLOOR_SNAPSHOT is the newest p3m date whose closure builds on this image
-# (Ubuntu 20.04: gcc 9, libcurl 7.68), and its window is narrow. vctrs 0.7.0,
-# the Imports floor, reached CRAN on 2026-01-16; bit64 4.8.0, whose
-# integer64.h puts `__has_builtin(...)` in an #if that gcc 9's preprocessor
-# rejects, is in every snapshot from 2026-04-22. So 2026-04-21 (bit64
-# 4.6.0-1, vctrs 0.7.3). 2026-09-01 failed on exactly that in pipeline
-# 2909397520 (SEOR-lavybtkr). Every curl since 7.0.0 wants libcurl >= 7.73
-# and, below that, has its configure fetch a static libcurl -- with the curl
-# binary, which this image lacks and .r-job's apt list now installs; without
-# it the build falls through to `CURLINFO_EFFECTIVE_METHOD undeclared`. Move
-# the date forward only to a snapshot re-proven in this image.
-deep-check:floor:
-  extends:
-    - .r-job
-    - .deep-check
+# BLOCKING, like every T2 leg: a scheduled detector that cannot go red is
+# worthless.
+x-floor:
+  extends: .t2-job
   image: rocker/r-ver:4.1.3
   variables:
-    FLOOR_SNAPSHOT: "2026-04-21"
-
-# CITATION.cff's `version:` and .zenodo.json's `"version"` must name the release
-# DESCRIPTION's Version points at (X.Y.Z -> X.Y.Z; X.Y.Z.9000 -> X.Y.Z), plus
-# every URL those two files declare must also appear in DESCRIPTION's URL field.
-# Ported from seor, where the rule is design/adr/0001 and design/adr/0002.
-#
-# raddr carries both files (RADD-dxzfcbjx).
-#
-# The workflow rules above (SEOR-bmgkzhvy) mean this pipeline now fires on
-# every push to main and on a v* tag, not only on a DESCRIPTION-changing MR --
-# so this job runs more often than the moment it actually cares about (both
-# files move at the DESCRIPTION bump, not at every merge), but that is a cost
-# paid once per merge either way, and it is seconds. Like every push job
-# (.on-push) it also runs on the two schedules on main.
-#
-# Offline and stdlib-only: no R image, no `.r-job`, no cache. It costs seconds,
-# which matters because the fleet shares a few runner slots on one Mac
-# (`concurrent` = 4 since 2026-09-23) and the two check jobs are long.
-citation-version:
-  extends: .on-push
-  stage: test
-  image: python:3.14-alpine
-  cache: []
-  before_script: []
-  script:
-    - python3 scripts/check-citation.py --self-test
-    - python3 scripts/check-citation.py
-    # Rides in this job rather than its own: same image, same offline,
-    # stdlib-only shape, and a separate job would take a runner slot for
-    # seconds of work. BugReports and tracker links name /-/work_items
-    # (seor ADR 0011, SEOR-sptibjph).
-    - python3 scripts/check-bugreports.py --self-test
-    - python3 scripts/check-bugreports.py
-    # NEWS.md bullets are one terse line (SEOR-mjrpwnqz): the same offline,
-    # stdlib-only shape, the `news-terse` pre-push hooks' twin.
-    - python3 scripts/check-news.py --self-test
-    - python3 scripts/check-news.py NEWS.md
-
-# The top NEWS.md heading must be either "(development version)" or exactly
-# the DESCRIPTION Version, which catches a stale heading left in at release.
-# seor's job, the package name swapped (SEOR-lavybtkr). Pure shell, so it does
-# not need the R image and runs in seconds.
-news-version:
-  extends: .on-push
-  stage: test
-  image: alpine:3
-  cache: []
-  before_script:
-    - apk add --no-cache grep sed
+    FLOOR_SNAPSHOT: "https://p3m.dev/cran/2026-04-21"
+    R_CRAN_SRC: "https://cloud.r-project.org"
+    R_CRAN_WEB: "https://cloud.r-project.org"
+    # Incoming off: .t2-job runs this leg in v* tag pipelines too, where the
+    # incoming feasibility check's "Insufficient package version" (the tag's
+    # version already on CRAN) would fail it and so block `pages`. t2-ascran
+    # runs the incoming checks, on R release.
+    _R_CHECK_CRAN_INCOMING_: "false"
   script:
     - |
-      set -eu
-      version="$(grep -E '^Version:' DESCRIPTION | head -n1 | sed -E 's/^Version:[[:space:]]*//')"
-      # First top-level NEWS heading, e.g. "# raddr 0.1.2" or
-      # "# raddr (development version)". Strip the name prefix.
-      heading="$(grep -m1 -E '^# ' NEWS.md | sed -E 's/^#[[:space:]]+(raddr[[:space:]]+)?//')"
-      echo "DESCRIPTION Version : '$version'"
-      echo "Top NEWS heading    : '$heading'"
-      if [ "$heading" = "(development version)" ] || [ "$heading" = "$version" ]; then
-        echo "OK: NEWS heading and version are consistent."
-      else
-        echo "Top NEWS.md heading ('$heading') is neither '(development version)' nor the DESCRIPTION Version ('$version'). Update NEWS.md before release."
-        exit 1
-      fi
-
-# README.md is knit from README.Rmd, so a hand-edit to the markdown is lost on
-# the next render. README.Rmd has no code chunks, so rendering it needs
-# rmarkdown and pandoc but not raddr itself. Blank-line-only differences don't
-# count: pandoc versions disagree about the blank line after
-# `<!-- badges: start -->` (seor SEOR-oaqnafzs).
-#
-# The knit runs under the pinned pandoc (PANDOC_VERSION, 3.10, the version
-# README.md is knit with locally), which .r-job's before_script installs for
-# every R job (SEOR-dpjdwhbi). Blank lines are not the only thing pandoc
-# versions disagree about: the older pandoc this job's image gets from apt
-# pads every pipe table to its widest cell, where 3.10 writes them compact.
-# Pipeline 2909397101 went red on exactly that, a README.md nobody had
-# hand-edited (SEOR-lavybtkr). That install only warns when it fails, so this
-# job asserts the pin before it knits: drift reported under the apt pandoc
-# would be a false alarm, and a failed install should fail here, by name.
-# Bump the pin when the local pandoc moves, in the same commit that re-knits
-# README.md.
-readme:
-  extends:
-    - .r-job
-    - .on-push
-  script:
+      apt-get update -qq
+      apt-get install -y --no-install-recommends \
+        libhunspell-dev libxml2-dev libuv1-dev qpdf \
+        libcurl4-openssl-dev libssl-dev curl
     - |
-      Rscript -e 'v <- rmarkdown::pandoc_version(); message("rmarkdown sees pandoc ", v); if (v != Sys.getenv("PANDOC_VERSION")) quit(status = 1)'
+      Rscript -e 'options(repos = c(CRAN = Sys.getenv("FLOOR_SNAPSHOT")))
+        p <- c("rlang", "vctrs", "bignum", "bit64", "digest", "hedgehog", "knitr",
+          "oysteR", "rmarkdown", "rosv", "spelling", "testthat", "rcmdcheck")
+        install.packages(p, Ncpus = 4L)
+        ok <- vapply(p, requireNamespace, NA, quietly = TRUE)
+        print(ok)
+        if (!all(ok)) quit(status = 1)
+        v <- packageVersion("vctrs")
+        message("vctrs: ", v)
+        if (v < "0.7.0") quit(status = 1)
+        cat(R.version.string, "\n")
+        ip <- installed.packages()
+        ip <- ip[is.na(ip[, "Priority"]), c("Package", "Version"), drop = FALSE]
+        write.table(ip[order(rownames(ip)), ], quote = FALSE, row.names = FALSE, col.names = FALSE)'
     - |
-      cp README.md /tmp/README.committed.md
-    - |
-      Rscript -e 'rmarkdown::render("README.Rmd", output_options = list(html_preview = FALSE))'
-    - |
-      if ! diff -B -u /tmp/README.committed.md README.md; then
-        echo "README.md is out of sync with README.Rmd. Run devtools::build_readme() and commit the result."
-        exit 1
-      fi
-
-# Coverage, reported through GitLab natively: the `coverage:` regex drives the
-# badge and the cobertura artifact drives per-line annotations in a diff. The
-# job fails below 95%, the fleet's floor, which is never lowered: a package
-# under it adds tests (seor design/adr/0007; SEOR-lavybtkr).
-coverage:
-  extends:
-    - .r-job
-    - .on-push
-  script:
-    - |
-      Rscript -e 'p <- c("covr", "xml2"); m <- p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)]; if (length(m)) install.packages(m, Ncpus = 4)'
-    - |
-      Rscript -e 'cov <- covr::package_coverage(quiet = FALSE); covr::to_cobertura(cov); pct <- covr::percent_coverage(cov); cat(sprintf("Coverage: %.2f%%\n", pct)); if (pct < 95) quit(status = 1)'
-  coverage: '/Coverage: (\d+\.\d+)%/'
+      Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran", "--ignore-vignettes"),
+        build_args = c("--no-manual", "--no-build-vignettes"),
+        error_on = "warning", check_dir = "check")
+        if (!identical(as.integer(res$status), 0L)) stop("R CMD check exited with status ", res$status, "; the run did not complete.", call. = FALSE)'
   artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: cobertura.xml
-
-# The pkgdown site (RADD-yksdevhs). Must be named `pages` and publish
-# `public/` -- that pairing is what GitLab Pages deploys, and it is why
-# _pkgdown.yml sets `destination: public` (docs/ holds the project notes).
-#
-# Default branch only, not the v* tag pipeline: the site tracks main, and a
-# tag rebuild would publish the same commit twice. A schedule on main runs it
-# like every other push job (.on-push), so a weekly run also re-proves the
-# site still builds against current pkgdown and dependencies.
-#
-# Needs only check:linux-release. Waiting on the devel job would tie the docs
-# to upcoming-R breakage, which that job reports loudly on its own.
-#
-# pak rather than install.packages() so pkgdown's system libraries (ragg,
-# xml2, openssl) are resolved and installed rather than hand-listed the way
-# .r-job has to.
-#
-# SEOR-wqxhftpv: pkgdown renders every top-level .md (pkgdown:::package_mds()
-# hardcodes its own skip list -- README/NEWS/LICENSE, cran-comments.md as
-# no_render -- so _pkgdown.yml has no setting that can exclude anything else).
-# This used to be a deny-list, `rm -f AGENTS.md CLAUDE.md FP_AGENTS.md`, which
-# only hides names it was told about: a new file in an existing family
-# (FP_CLAUDE.md, as pslr has) or a new family entirely (GEMINI.md) would sail
-# straight through and get published. Inverted to a keep-list below: every
-# top-level .md is moved out UNLESS it is named here, which hides an unlisted
-# agent file automatically instead of waiting for someone to add its name.
-#
-# Moved rather than deleted, matching pslr's `pages` job (search this repo's
-# .gitlab-ci.yml peer for "agent-md"): deleting after pkgdown has already
-# indexed the source tree leaves search.json pointing at pages that 404, where
-# moving the source file first means pkgdown never sees it and never indexes
-# it.
-#
-# The keep-list is the currently-published set, checked against the live site
-# on 2026-09-23 (CHANGELOG.html, CONTRIBUTING.html and SECURITY.html all
-# return 200 at https://bart-turczynski.gitlab.io/raddr/) -- de-publishing any
-# of them is an editorial call this ticket does not make, so all three are
-# grandfathered rather than dropped. LICENSE.md, CODE_OF_CONDUCT.md and
-# ARCHITECTURE.md joined on 2026-10-03 with the fleet standard (SEOR-lavybtkr),
-# which makes them public files in every package. README.md, NEWS.md and cran-comments.md
-# are listed too even though pkgdown special-cases them on its own (index.html,
-# the changelog, and a no_render inventory entry respectively): moving one of
-# those out from under pkgdown would break the site rather than merely hide a
-# page, so they stay off the candidate list entirely instead of relying on
-# pkgdown's own skip list a second time.
-#
-# Fails loudly, not silently, if a keep-listed file is missing -- a vanished
-# README must stop the build, not quietly stop being published. That is also
-# why this is a stopifnot() up front rather than a per-file mv that could
-# partially succeed.
-#
-# Copy-then-unlink, NOT file.rename(), and a postcondition before build_site.
-# The first cut used file.rename() and discarded its result. On the runner the
-# checkout is a mounted volume and /tmp is the container's own filesystem, so
-# every rename failed with "Invalid cross-device link" -- file.rename() only
-# WARNS on that -- the script still printed "moved: AGENTS.md, CLAUDE.md,
-# FP_AGENTS.md", and pkgdown published all three. Live from 2026-09-23 until
-# this fix: https://bart-turczynski.gitlab.io/raddr/AGENTS.html returned 200,
-# while a static pin (data-raw/check-agent-md-filter.R) reported the filter correct.
-# So the move is now checked, and whatever the mechanism does, the job
-# refuses to build while any unlisted .md is still at the top level. That
-# final check is the one the keep-list's safety actually rests on.
-pages:
-  stage: deploy
-  needs:
-    - job: check:linux-release
-      artifacts: false
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  cache: []
-  before_script:
-    - |
-      apt-get update
-    - |
-      apt-get install -y --no-install-recommends pandoc git ca-certificates curl
-    # The pinned pandoc, from .pandoc_install: this job has its own
-    # before_script and does not extend .r-job, so it names the list itself.
-    - *pandoc_install
-    - |
-      Rscript -e 'if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")'
-    - |
-      Rscript -e 'pak::pkg_install("pkgdown")'
-    - |
-      Rscript -e 'pak::local_install_deps(dependencies = TRUE, upgrade = FALSE)'
-    - |
-      Rscript -e 'pak::local_install(upgrade = FALSE)'
-  script:
-    - |
-      mkdir -p /tmp/agent-md
-    - |
-      Rscript -e 'keep <- c("README.md", "NEWS.md", "cran-comments.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE.md", "CODE_OF_CONDUCT.md", "ARCHITECTURE.md"); missing <- keep[!file.exists(keep)]; if (length(missing)) stop("keep-listed file(s) missing, would silently stop publishing: ", paste(missing, collapse = ", "), call. = FALSE); drop <- setdiff(list.files(".", pattern = "\\.md$"), keep); copied <- file.copy(drop, "/tmp/agent-md", overwrite = TRUE); if (!all(copied)) stop("could not copy into /tmp/agent-md: ", paste(drop[!copied], collapse = ", "), call. = FALSE); unlink(drop); left <- setdiff(list.files(".", pattern = "\\.md$"), keep); if (length(left)) stop("unlisted .md still in the site source, refusing to publish it: ", paste(left, collapse = ", "), call. = FALSE); message("kept: ", paste(keep, collapse = ", ")); message("moved: ", paste(drop, collapse = ", "))'
-    - |
-      Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
-  artifacts:
+    when: always
     paths:
-      - public
-
-# The dependency-audit schedule: seor's two audits, in seor's shape
-# (seor design/fleet-standard.md, "dependency-audit"). raddr's written
-# exemption from them (RADD-hmvlwcyi) was reversed by the owner on 2026-10-03
-# for fleet alignment (SEOR-lavybtkr). Each runs one test file with
-# testthat::test_local(), which loads raddr with pkgload, so the package's
-# closure is installed by .r-job and raddr itself never is.
-#
-# NOT_CRAN makes sure skip_on_cran() cannot skip an audit silently.
-
-# OSV (https://osv.dev) via {rosv}: no account, token or CI/CD variable.
-osv-audit:
-  extends:
-    - .r-job
-    - .dependency-audit
-  variables:
-    NOT_CRAN: "true"
-  script:
-    - |
-      Rscript -e 'testthat::test_local(filter = "osv", stop_on_failure = TRUE)'
-
-# Sonatype OSS Index via {oysteR}. OSS Index rejects anonymous requests, so
-# this job needs two CI/CD variables: OSSINDEX_USER, the literal placeholder
-# `x` (not the account email), and OSSINDEX_TOKEN, a Sonatype Guide personal
-# access token (seor's security-audit job has the measurements, SEOR-ipgxtzca).
-# OSSINDEX_AUDIT_REQUIRED turns every missing precondition in
-# tests/testthat/test-security.R into a failure, so this job goes red rather
-# than green when the credentials are absent. It is set here and nowhere else.
-security-audit:
-  extends:
-    - .r-job
-    - .dependency-audit
-  variables:
-    NOT_CRAN: "true"
-    OSSINDEX_AUDIT_REQUIRED: "true"
-  script:
-    - |
-      Rscript -e 'testthat::test_local(filter = "security", stop_on_failure = TRUE)'
+      - check/
+    expire_in: 1 week

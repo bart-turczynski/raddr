@@ -17,6 +17,12 @@
 # route to the rows below, and it still cannot become a replacement for CI: one of
 # the six rows is unreachable from a Mac at all.
 #
+# SINCE THE FLEET-CI MIGRATION (SEOR-aukvuvtw) the pre-push gate runs in a Linux
+# container (fleet-ci's fleet image), not on the macOS host, so the macOS row
+# below is the only macOS check left. Run this script before a CRAN release
+# (docs/ci.md, "Before a CRAN release"); the merge gate is the containerized
+# check.
+#
 # THE MECHANISM IS BORROWED, NOT INVENTED. data-raw/check-r-floor.sh already
 # runs `R CMD check --as-cran` inside `docker build --platform linux/amd64` from
 # a rocker/r-ver image. This generalizes that across R versions instead of
@@ -32,8 +38,9 @@
 #                            libc but runs oracles, not a package check.
 #   ubuntu-latest / devel    RUN. Catches upcoming breakage; nothing covers it.
 #   macos-latest / release   RUN, natively. This IS the host. Containerizing it
-#                            would measure something other than the machine the
-#                            gate runs on, which is the one thing already known.
+#                            would measure something other than macOS. Since the
+#                            fleet-ci migration nothing else checks macOS: the
+#                            gate runs in a Linux container.
 #   ubuntu / oldrel-1, -2    SKIPPED deliberately. AGENTS.md records that these
 #                            "only probe toward the floor without reaching it",
 #                            and the floor itself is measured at R 4.0.0 with
@@ -42,7 +49,7 @@
 #                            floor and a covered release earn little.
 #   windows-latest / release UNREACHABLE. Recorded as an open gap. Not
 #                            simulated, not approximated, not quietly dropped.
-#   verify (lintr, spelling) COVERED ELSEWHERE: it is the pre-push hook.
+#   verify (lintr, spelling) COVERED ELSEWHERE: the pre-push gate's full tier.
 #
 # THE SNAPSHOT-PIN TRAP, WHICH THIS HAS TO RESPECT ROW BY ROW. AGENTS.md
 # records that "a dated snapshot pin freezes the entire closure, not just R, so a
@@ -445,7 +452,7 @@ accounts for were run here: macOS release on the host, Ubuntu release in a
 container, and Ubuntu devel in a container.
 **${VERDICT}**
 Two of the remaining rows were skipped deliberately, one is unreachable from this
-machine, and the \`verify\` job is already the pre-push hook. The per-row accounting
+machine, and the \`verify\` job is the pre-push gate's. The per-row accounting
 below is the point of this file: a reader should be able to tell exactly what this
 buys and what it does not.
 
@@ -457,7 +464,7 @@ buys and what it does not.
 | \`ubuntu-latest\` / \`oldrel-1\` | — | deliberately skipped: probes toward a floor that is already measured |
 | \`ubuntu-latest\` / \`oldrel-2\` | — | deliberately skipped: same reason |
 | \`windows-latest\` / \`release\` | — | **unreachable locally: an open gap, checked by nothing** |
-| \`verify\` job (lintr, spelling) | host | covered elsewhere: the pre-push \`verify\` hook in \`.pre-commit-config.yaml\` |
+| \`verify\` job (lintr, spelling) | fleet image | covered elsewhere: the pre-push gate's full tier (\`.fleet-ci.yml\`) |
 
 One row that is not in the matrix belongs in the same table, because it is what makes
 two of the skips defensible: R 4.0.0, the floor \`DESCRIPTION\` declares, is covered
@@ -537,11 +544,11 @@ if a version-sensitive bug ever appears.
 **\`windows-latest\` / \`release\` — unreachable.** Stated above and not softened here.
 
 **The \`verify\` job — covered elsewhere.** It runs \`lintr::lint_package()\` and
-\`spelling::spell_check_package()\`, which is exactly what the pre-push \`verify\` hook
-runs, in the same order, on the host. Both are host-independent: they read source and
-prose, not platform behavior. Re-running them in a container would consume time to
-re-confirm something the hook confirms on every push, so this script does not run them
-at all. The hook is the coverage.
+\`spelling::spell_check_package()\`, which the pre-push gate (fleet-ci's full tier,
+\`.fleet-ci.yml\`) runs in the fleet image. Both are host-independent: they read source
+and prose, not platform behavior. Re-running them here would consume time to
+re-confirm something the gate confirms on every push, so this script does not run them
+at all. The gate is the coverage.
 
 ## The snapshot-pin decision, per row
 
@@ -557,8 +564,8 @@ was varying on purpose.
 So the package source is a per-row decision here, and each row's is deliberate.
 
 **Host row: no pin is possible, and none is wanted.** The host's installed library is
-what the pre-push gate uses, so recording it is the honest thing to do rather than
-choosing it. The declared dependencies and their installed versions are in the
+this machine's own (the pre-push gate runs in a container since the fleet-ci
+migration), so recording it is the honest thing to do rather than choosing it. The declared dependencies and their installed versions are in the
 environment block below.
 
 **Ubuntu release row: current, not pinned.** The image resolves

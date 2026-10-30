@@ -6,8 +6,9 @@
 #
 # Ported from sitemapr's `urls` stage in tools/verify.R, which is the fleet
 # standard's shape for this check (seor design/fleet-standard.md, "Local
-# pre-push gate"; SEOR-lavybtkr). data-raw/verify.sh runs it ahead of
-# `R CMD check`, so the pre-push hook and CI both carry it.
+# pre-push gate"; SEOR-lavybtkr). The fleet-ci local gate's full tier runs
+# it as a cheap gate (.fleet-ci.yml), ahead of `R CMD check`; the former
+# data-raw/verify.sh ran it in the same place.
 #
 # Why a separate check when `--as-cran` already fetches these URLs: its
 # `checking CRAN incoming feasibility` step reports a dead link only as a NOTE,

@@ -1,9 +1,11 @@
 url: https://bart-turczynski.gitlab.io/raddr/
 
 # Not the pkgdown default. docs/ holds the project's own notes and transcripts
-# (see AGENTS.md), which a build into docs/ would overwrite. public/ is also
-# the directory GitLab Pages publishes, so the pages job needs no rename.
-destination: public
+# (see AGENTS.md), which a build into docs/ would overwrite. Not public/
+# either: fleet-ci's `pages` job publishes this destination by moving it to
+# public/, and refuses a destination that is public/ or inside it (fleet-ci
+# README, "What `pages` publishes").
+destination: site
 
 template:
   bootstrap: 5

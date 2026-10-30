@@ -20,8 +20,13 @@
 # tags and nothing else, which is the whole of what a mirror of this repository
 # needs to agree on.
 #
-# WHY `--no-verify`. The pre-push hook runs the verify gate: lintr, spelling,
-# then rcmdcheck --as-cran. That gate exists to guard what ENTERS the canonical
+# WHY `--no-verify`. The pre-push hook runs the fleet-ci local gate (lintr,
+# spelling, R CMD check --as-cran in the fleet image), then the pre-commit
+# pre-push hooks. The gate skips a push to a local mirror by itself (fleet-ci
+# v1.2.0 on), but under pre-commit's migration mode the hygiene hooks still
+# run, and the gate would refuse a push to main adding more than one
+# first-parent merge on any remote it does gate. That gate exists to guard
+# what ENTERS the canonical
 # history. A mirror receives commits that already passed it on the way to the
 # primary remote, so re-running it here checks the same tree a second time and
 # tells you nothing new. This also sidesteps a cost that was measured rather

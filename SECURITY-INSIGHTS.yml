@@ -73,13 +73,14 @@ repository:
         integration:
           adhoc: false
           ci: true
-          release: false
+          release: true
         results: {}
         comment: |
-          The osv-audit job in .gitlab-ci.yml audits the runtime dependency
-          closure against the OSV database (osv.dev). No account or secrets
-          required. It runs only on a pipeline schedule that sets
-          SCHEDULE_KIND=dependency-audit.
+          The osv-audit job (fleet-ci's template, included by .gitlab-ci.yml)
+          audits the runtime dependency closure against the OSV database
+          (osv.dev). No account or secrets required. It runs on the weekly
+          pipeline schedule that sets SCHEDULE_KIND=deep-check and in every
+          release pipeline (RELEASE=1, and the v* tag).
       - name: oysteR (Sonatype OSS Index)
         type: SCA
         rulesets:
@@ -87,11 +88,11 @@ repository:
         integration:
           adhoc: false
           ci: true
-          release: false
+          release: true
         results: {}
         comment: |
-          The security-audit job in .gitlab-ci.yml audits the hard
-          dependencies against the Sonatype OSS Index, on the same
-          dependency-audit schedule. It needs the OSSINDEX_USER and
+          The security-audit job (fleet-ci's template) audits the hard
+          dependencies against the Sonatype OSS Index, in the same weekly
+          and release pipelines as osv-audit. It needs the OSSINDEX_USER and
           OSSINDEX_TOKEN CI/CD variables and fails, rather than skipping,
           when they are missing.

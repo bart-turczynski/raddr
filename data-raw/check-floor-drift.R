@@ -38,12 +38,17 @@
 # THE R FLOOR MOVED TO THE CI FLOOR LEG (2026-10-03, SEOR-lavybtkr). The
 # fleet standard declares the oldest R minor its arm64 CI runner can test,
 # which is 4.1 (rocker publishes no arm64 image for any R 4.0.x), and the
-# `deep-check:floor` job in .gitlab-ci.yml checks the package there weekly.
-# So the declared R floor is now compared with that leg's image tag, at minor
-# precision. The two docker transcripts under docs/ were taken on R 4.0.0,
-# below the new floor; they still carry the Imports floor measurements, so
-# they must record an R at or below the declared floor, and each docker
-# script's image must match the R its transcript records.
+# floor leg in .gitlab-ci.yml checks the package there weekly: the
+# `deep-check:floor` job until the fleet-ci migration, `x-floor` since
+# (SEOR-aukvuvtw), each with its image on one `  image: rocker/r-ver:X.Y.Z`
+# line. So the declared R floor is now compared with that leg's image tag, at
+# minor precision. The fleet-ci local gate's full tier runs this script as a
+# cheap gate (.fleet-ci.yml), which is why docs/r-floor-check.md and
+# docs/dep-floor-check.md are on its docs_exclude. The two docker transcripts
+# under docs/ were taken on R 4.0.0, below the new floor; they still carry the
+# Imports floor measurements, so they must record an R at or below the
+# declared floor, and each docker script's image must match the R its
+# transcript records.
 #
 # WHY EQUALITY AND NOT `>=` ON THE IMPORTS FLOORS. RADD-lfjdkynn's own finding:
 # an earlier script asserted `>=`, installed vctrs 0.7.2, and produced something
@@ -160,7 +165,7 @@ r_floor_checks <- function(root, r_floor) {
   )
   list(
     check_anchor(
-      "R floor deep-check leg", minor_of(r_floor), root, "ci",
+      "R floor CI leg", minor_of(r_floor), root, "ci",
       "^  image: rocker/r-ver:([0-9]+[.][0-9]+)[.][0-9]+$"
     ),
     at_or_below("R floor transcript taken at or below it", r_floor, root,

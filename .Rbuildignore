@@ -22,9 +22,9 @@
 ^\.fleet-ci$
 ^\.fleet-ci\.yml$
 ^\.fleet-lib$
-# The CI job library. It has to live under the project directory because that
-# is the only thing GitLab's cache can carry, which puts it inside the package
-# root while R CMD build runs -- so it is ignored here rather than moved.
+# The former CI job library, cached inside the project directory. No job
+# writes it since the fleet-ci migration; kept so a leftover local copy never
+# reaches a tarball.
 ^\.rlib$
 ^\.editorconfig$
 ^\.env$
@@ -56,10 +56,12 @@
 ^scripts$
 # Release build scratch. Without this, R CMD build copies it into the
 # tarball and the check reports a top-level-files NOTE -- the one that
-# data-raw/verify.sh's own header says cannot happen (RADD-mmsfavww).
+# former data-raw/verify.sh's own header said cannot happen (RADD-mmsfavww).
 ^tmp$
-# pkgdown config and its build output (destination: public in _pkgdown.yml).
+# pkgdown config and its build output: destination: site in _pkgdown.yml,
+# which fleet-ci's pages job moves to public/.
 ^_pkgdown\.yml$
+^site$
 ^public$
 # Citation metadata for the forge and Zenodo (RADD-dxzfcbjx), not package
 # content. In the tarball, CITATION.cff is a non-standard top-level file and

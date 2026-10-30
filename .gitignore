@@ -24,8 +24,8 @@ vectors/
 *.Rproj
 *.Rcheck/
 *.tar.gz
-# The GitLab CI job library (R_LIBS_USER), which lands inside the project
-# directory so the runner cache can carry it.
+# The former GitLab CI job library (R_LIBS_USER), which no job writes since
+# the fleet-ci migration.
 .rlib/
 src/*.o
 src/*.so
@@ -45,5 +45,8 @@ tests/testthat/_snaps/
 # (RADD-mmsfavww).
 tmp/
 
-# pkgdown build output (see _pkgdown.yml)
+# pkgdown build output (see _pkgdown.yml), and the public/ the pages job
+# moves it to; .fleet-lib/ is the library t2-sanitizers installs into.
+site/
 public/
+.fleet-lib/
