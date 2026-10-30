@@ -2,7 +2,7 @@
 
 raddr runs fleet-ci's tiered CI (seor ADR 0012) since the fleet-ci migration
 (`SEOR-aukvuvtw`, 2026-10-30). `.gitlab-ci.yml` includes fleet-ci's
-`templates/r-package.yml`, pinned by commit SHA (v1.2.1), and sets only
+`templates/r-package.yml`, pinned by commit SHA (v1.2.3), and sets only
 package variables plus one `x-*` job, `x-floor`; `.fleet-ci.yml` holds the
 local gate's settings, and `.fleet-ci/` is fleet-ci's vendored gate (re-run
 fleet-ci's `bin/vendor`, never edit it). The job names below are the
