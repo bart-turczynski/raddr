@@ -10,7 +10,7 @@ Gate: local
 Verify: .fleet-ci/gate auto
 
 The merge gate is fleet-ci's local gate, run in the fleet image by the pre-push hook (install it once per clone with `pre-commit install`, then `.fleet-ci/pre-push --install`); its settings are `.fleet-ci.yml`. Until it is installed, the warn-only `fleet-ci-hook-installed` hook prints a WARNING on every push, which then ran only the hygiene hooks. A diff against `main` that the classifier calls docs-only (`docs/**/*.md` and the like, minus `.fleet-ci.yml`'s `docs_exclude`) gets T0, spelling and `pkgdown::check_pkgdown()`; any other gets T1, the cheap gates (floor drift, lintr, docs drift, the URL, README and NEWS-heading checks) and one `R CMD check --as-cran`.
-Branch pushes, merge requests and pushes to `main` create no pipeline, and an empty pipeline list is not a pass. CI runs fleet-ci's template: T2 on the weekly `deep-check` schedule, T3 on a `RELEASE=1` web pipeline and on the `v*` tag (seor ADR 0012; `docs/ci.md` has the event table and the gaps). The declared dependency floors are re-measured at release, not in the gate: see `docs/verification-gates.md`, *Dependency floors are re-measured at release*. The R floor is the exception: it follows the fleet rule (oldest R minor the CI can test) and T2's `x-floor` job tests it.
+Branch pushes, merge requests and pushes to `main` create no pipeline, and an empty pipeline list is not a pass. CI runs fleet-ci's template: T2 on the weekly `deep-check` schedule, T3 on a `RELEASE=1` web pipeline and on the `v*` tag (seor ADR 0012; `design/ci.md` has the event table and the gaps). The declared dependency floors are re-measured at release, not in the gate: see `docs/verification-gates.md`, *Dependency floors are re-measured at release*. The R floor is the exception: it follows the fleet rule (oldest R minor the CI can test) and T2's `x-floor` job tests it.
 
 The gate refuses a push to `main` that adds more than one first-parent merge, and skips a push to the local `backup` mirror (its URL is a path). `sh data-raw/mirror-drain.sh` still pushes the mirror with `--no-verify`, for the pre-commit hooks: an agent asks the owner before running it (a gate bypass is confirm-first).
 
@@ -23,7 +23,7 @@ A NEWS.md bullet is one terse line: one source line, at most 32 words, only for 
 Planning notes stay in `_scratch/`, uncommitted alongside `.fp/`. Transcripts under `docs/` record what was true when the run happened; never edit one to match a later state. Remaining `github.com` strings are third-party provenance or transcripts, and stay.
 
 For the epistemic rules this project works by, see `docs/working-method.md`.
-For the tiers, the hook and the gaps the fleet-ci migration accepted, see `docs/ci.md`.
+For the tiers, the hook and the gaps the fleet-ci migration accepted, see `design/ci.md`.
 For the history of the verify gate and CI, and what neither covers, see `docs/verification-gates.md`.
 For remotes, mirrors, bundles and the tracker snapshot, see `docs/remotes-and-backups.md`.
 For design decisions, see `docs/architecture.md`.

@@ -18,8 +18,11 @@ changing the API.
 - `bench/`: benchmarks.
 - `docs/`: durable project notes and run transcripts. Not the pkgdown site,
   which builds into `site/`.
+- `design/`: maintainer notes in the fleet's place for them; `design/ci.md`
+  holds the CI tiers, the local gate and the gaps the fleet-ci migration
+  accepted.
 - `scripts/`: the citation, BugReports, NEWS, toolchain, docs-drift,
   README-drift and hook checks shared with the rest of the fleet.
 - `.fleet-ci/` and `.fleet-ci.yml`: fleet-ci's vendored local gate and its
-  settings (`docs/ci.md`). Re-run fleet-ci's `bin/vendor`; never edit
+  settings (`design/ci.md`). Re-run fleet-ci's `bin/vendor`; never edit
   `.fleet-ci/`.

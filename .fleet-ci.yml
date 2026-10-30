@@ -2,7 +2,7 @@
 # push, run by .fleet-ci/gate in the fleet image (fleet-ci README, "The
 # .fleet-ci.yml file"; seor ADR 0012). Read from the pushed commit. The
 # t2-locale and pages CI jobs read it too. It replaces the former
-# data-raw/verify.sh chain; docs/ci.md has the tiers and the gaps.
+# data-raw/verify.sh chain; design/ci.md has the tiers and the gaps.
 version: 1
 
 # The image the gate runs in. It must be .gitlab-ci.yml's
@@ -56,7 +56,7 @@ cheap_gates:
 
 # The gate runs R CMD check with NOT_CRAN=true, so skip_on_cran() no longer
 # keeps these out of it. T2 runs both, as osv-audit and security-audit (and
-# in every T2 leg that runs the suite; docs/ci.md, "Gaps accepted").
+# in every T2 leg that runs the suite; design/ci.md, "Gaps accepted").
 exclude_tests:
   - path: tests/testthat/test-osv.R
     why: queries osv.dev over the network; the osv-audit job runs it in T2

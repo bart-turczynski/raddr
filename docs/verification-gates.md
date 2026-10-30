@@ -2,9 +2,9 @@
 
 Demoted verbatim from `AGENTS.md` on 2026-09-05, apart from the Windows corrections noted below. Self-references such as "this file" and "this section" refer to the original.
 
-**Superseded in part on 2026-10-30 (`SEOR-aukvuvtw`).** raddr moved to fleet-ci's tiered CI and containerized local gate: `data-raw/verify.sh`, the `verify` pre-push hook and every pipeline on a push to `main` are gone. The merge gate is `.fleet-ci/gate`, run by fleet-ci's pre-push hook (T0/T1), and CI runs only on the weekly `deep-check` schedule (T2) and in release pipelines (T3). `docs/ci.md` is the current description and lists the gaps that move accepted. The *Pre-push verify gate* section below is kept as the history of the shape it replaced; the release-time sections after it still hold, with the current job names.
+**Superseded in part on 2026-10-30 (`SEOR-aukvuvtw`).** raddr moved to fleet-ci's tiered CI and containerized local gate: `data-raw/verify.sh`, the `verify` pre-push hook and every pipeline on a push to `main` are gone. The merge gate is `.fleet-ci/gate`, run by fleet-ci's pre-push hook (T0/T1), and CI runs only on the weekly `deep-check` schedule (T2) and in release pipelines (T3). `design/ci.md` is the current description and lists the gaps that move accepted. The *Pre-push verify gate* section below is kept as the history of the shape it replaced; the release-time sections after it still hold, with the current job names.
 
-This project uses the [pre-commit](https://pre-commit.com) framework. Its config (`.pre-commit-config.yaml`) is cloned with the repo; each clone enables the hooks once, then installs fleet-ci's pre-push hook over pre-commit's (`docs/ci.md`, "The hook, once per clone"):
+This project uses the [pre-commit](https://pre-commit.com) framework. Its config (`.pre-commit-config.yaml`) is cloned with the repo; each clone enables the hooks once, then installs fleet-ci's pre-push hook over pre-commit's (`design/ci.md`, "The hook, once per clone"):
 
 ```bash
 pre-commit install
@@ -19,7 +19,7 @@ On every commit, lightweight hooks run: end-of-file fixer, trailing-whitespace t
 
 ## Pre-push verify gate
 
-*History: the shape from 2026-08-02 until the fleet-ci migration on 2026-10-30. `docs/ci.md` has the current one.*
+*History: the shape from 2026-08-02 until the fleet-ci migration on 2026-10-30. `design/ci.md` has the current one.*
 
 On `git push`, the `verify` hook runs the project's verify command: `data-raw/check-floor-drift.R --self-test`, then `lintr::lint_package()`, then `spelling::spell_check_package()`, then `scripts/check-docs-drift.R` (man/, NAMESPACE and DESCRIPTION must be what roxygen regenerates from R/, at the pinned roxygen2; added 2026-10-05, `SEOR-nwfmerhu`; it checks the commit being pushed, `PRE_COMMIT_TO_REF` or else `HEAD`, on a `git archive` export in a temporary directory that is removed on every exit, so it never rewrites the working tree and an uncommitted fix or an untracked `.Rd` cannot make it pass; CI's images have no git, so `check:linux-release` runs it on the job's own checkout, which is the commit; the deep-check legs set `NO_DOCS_DRIFT=1`), then `data-raw/check-urls.R` (every declared URL must resolve; added 2026-10-03, `SEOR-lavybtkr`), then `rcmdcheck::rcmdcheck(args = "--as-cran", error_on = "warning")`. Since 2026-08-02 that chain lives in **`data-raw/verify.sh`**, and the hook and `.gitlab-ci.yml` both invoke it — so "the hook runs the same chain as CI" is a fact about one file rather than a coincidence between hand-maintained copies that was about to become three (`RADD-fgciezpx`). The one deliberate difference is a `NO_MANUAL` knob: CI images carry no LaTeX toolchain and pass `--no-manual`, the hook does not, and `docs/ci-workflow-lint.md` is where that asymmetry was examined and found correct. Server-side branch protection was unavailable on the GitHub plan, which is why this local pre-push gate was built as the stand-in for it. It is no longer the only layer: since 2026-08-01 `main` is a protected branch on the GitLab remote — `allow_force_push=false`, push and merge restricted to Maintainers — so the guarantee the hook was approximating now also exists server-side, on the remote actually being pushed to. Since 2026-08-02 the release **tags** are protected too, `v*` with creation restricted to Maintainers, which closes the asymmetry that had `main` guarded while `v0.1.1` — by then the only thing claiming that version number (`RADD-xuqkzgdl`) — could still be moved or deleted by a push. The two are not redundant. Protection rejects a bad *push*; it has no opinion about whether the tree passes `--as-cran`.
 
@@ -96,7 +96,7 @@ Some fleet packages run a dependency vulnerability audit: `tests/testthat/test-s
 
 ## What the local gate does not cover
 
-*Since the fleet-ci migration the gate runs in a Linux container (the fleet image), not on the host, so the first sentence below describes the former hook. macOS is now checked only by `data-raw/check-matrix.sh`'s host row, before a release (`docs/ci.md`).*
+*Since the fleet-ci migration the gate runs in a Linux container (the fleet image), not on the host, so the first sentence below describes the former hook. macOS is now checked only by `data-raw/check-matrix.sh`'s host row, before a release (`design/ci.md`).*
 
 The hook checks whatever host invokes it, which for the whole of 0.1.0's development was **one platform and one R version**: macOS arm64 (Darwin 25.4.0) on R 4.6.0. CRAN checks Windows, Linux and r-devel. That is still true of *the hook*, but the sentence that used to follow it here — that the gap cannot be closed locally — was wrong, and `data-raw/check-matrix.sh` is what disproved it. What survives of the claim is Windows, which no local run reaches; `docs/win-builder.md` records the one manual win-builder submission that has ever checked it.
 

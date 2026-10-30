@@ -5,7 +5,7 @@
 # create no pipeline: the merge gate is the local one (.fleet-ci/gate, run by
 # the .fleet-ci/pre-push hook). T2 runs on the deep-check schedule
 # (SCHEDULE_KIND=deep-check), T3 on a RELEASE=1 web pipeline and a v* tag.
-# docs/ci.md has the whole picture and the gaps the migration accepted.
+# design/ci.md has the whole picture and the gaps the migration accepted.
 #
 # Bump the pin by changing `ref:` and re-running fleet-ci's bin/vendor at the
 # same SHA, in one merge request: .fleet-ci/VERSION must equal `ref:`.

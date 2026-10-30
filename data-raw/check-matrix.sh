@@ -20,7 +20,7 @@
 # SINCE THE FLEET-CI MIGRATION (SEOR-aukvuvtw) the pre-push gate runs in a Linux
 # container (fleet-ci's fleet image), not on the macOS host, so the macOS row
 # below is the only macOS check left. Run this script before a CRAN release
-# (docs/ci.md, "Before a CRAN release"); the merge gate is the containerized
+# (design/ci.md, "Before a CRAN release"); the merge gate is the containerized
 # check.
 #
 # THE MECHANISM IS BORROWED, NOT INVENTED. data-raw/check-r-floor.sh already
