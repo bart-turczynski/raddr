@@ -191,7 +191,13 @@ would inherit it.
   host row, run before a CRAN release, is the only macOS check left.
 - **`t2-locale`'s leg runs under `LC_ALL=C`**, the template's default, which
   the former CI never ran (it had no locale leg, and neither did the
-  hook). The gate runs no locale leg, to keep T1 at one `R CMD check`.
+  hook). It passed, tests included (one NOTE, the `spelling.Rout.save`
+  difference), when run once through the gate on a throwaway commit
+  (`locales: [en_US.UTF-8]`, `locale_legs: [C]`, 2026-10-30): under `C`,
+  `R CMD check`'s syntax check switches to `en_US.UTF-8` for the UTF-8
+  sources, which CI's image ships and the gate's own locale directory holds
+  only when listed. The gate itself runs no locale leg, to keep T1 at one
+  `R CMD check`.
 - **`pages` deploys from a `v*` tag only**, not on every push to `main`, so
   the site documents the release CRAN serves. The template moves an
   unlisted top-level `.md` out of the site's source with `file.rename()` and
