@@ -20,22 +20,22 @@
 # tags and nothing else, which is the whole of what a mirror of this repository
 # needs to agree on.
 #
-# WHY `--no-verify`. The pre-push hook runs the fleet-ci local gate (lintr,
-# spelling, R CMD check --as-cran in the fleet image), then the pre-commit
-# pre-push hooks. The gate skips a push to a local mirror by itself (fleet-ci
-# v1.2.0 on), but under pre-commit's migration mode the hygiene hooks still
-# run, and the gate would refuse a push to main adding more than one
-# first-parent merge on any remote it does gate. That gate exists to guard
-# what ENTERS the canonical
-# history. A mirror receives commits that already passed it on the way to the
-# primary remote, so re-running it here checks the same tree a second time and
-# tells you nothing new. This also sidesteps a cost that was measured rather
-# than assumed on 2026-08-01: git runs the pre-push hook ONCE PER PUSH URL, so
-# the alternative design -- one remote carrying several pushurls, fanning out on
-# a single `git push` -- runs the full --as-cran check once per target. A
-# two-URL remote with a counting hook fired it twice for one push. That is what
-# ruled the fan-out out, and it is why mirror traffic is kept on this separate
-# ungated path instead.
+# WHY `--no-verify`. Pre-commit's own pre-push hooks still run on a mirror
+# push: under pre-commit's migration mode, or in a clone without fleet-ci's
+# hook. The fleet-ci local gate (lintr, spelling, R CMD check --as-cran in the
+# fleet image), which the pre-push hook runs first, already skips a push to a
+# local mirror by itself (fleet-ci v1.2.0 on); on a remote it does gate, it
+# would refuse a push to main adding more than one first-parent merge. That
+# gate exists to guard what ENTERS the canonical history. A mirror receives
+# commits that already passed it on the way to the primary remote, so
+# re-running any of it here checks the same tree a second time and tells you
+# nothing new. This also sidesteps a cost that was measured rather than
+# assumed on 2026-08-01: git runs the pre-push hook ONCE PER PUSH URL, so the
+# alternative design -- one remote carrying several pushurls, fanning out on a
+# single `git push` -- runs the full --as-cran check once per target. A
+# two-URL remote with a counting hook fired it twice for one push. That is
+# what ruled the fan-out out, and it is why mirror traffic is kept on this
+# separate ungated path instead.
 #
 # WHAT IS NOT A MIRROR TARGET. `origin` (GitLab) is the working remote, not a
 # mirror: work reaches it through the ordinary gated branch -> push -> MR flow,

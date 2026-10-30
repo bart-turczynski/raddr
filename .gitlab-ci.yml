@@ -57,9 +57,11 @@ variables:
 #   former job installed one), as in the template's t2-floor. The check is
 #   --as-cran with CRAN incoming off (_R_CHECK_CRAN_INCOMING_ below; the two
 #   R_CRAN_* variables point any CRAN metadata read at cloud.r-project.org
-#   rather than the snapshot), error_on = "warning", and a guard on R CMD
+#   rather than the snapshot), error_on = "warning", and the template
+#   t2-floor's two guards: a `Status:` line in 00check.log, then R CMD
 #   check's own exit status, because rcmdcheck reads a check that halted
-#   partway as 0/0/0 and returns normally (SEOR-maavnxdm).
+#   partway as 0/0/0 and returns normally, and a halt can exit 0
+#   (SEOR-maavnxdm).
 #
 # BLOCKING, like every T2 leg: a scheduled detector that cannot go red is
 # worthless.
@@ -100,6 +102,8 @@ x-floor:
       Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran", "--ignore-vignettes"),
         build_args = c("--no-manual", "--no-build-vignettes"),
         error_on = "warning", check_dir = "check")
+        log <- file.path(res$checkdir, "00check.log")
+        if (!file.exists(log) || !any(grepl("^Status:", readLines(log, warn = FALSE)))) stop("R CMD check did not complete", call. = FALSE)
         if (!identical(as.integer(res$status), 0L)) stop("R CMD check exited with status ", res$status, "; the run did not complete.", call. = FALSE)'
   artifacts:
     when: always

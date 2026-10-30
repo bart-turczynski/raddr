@@ -39,7 +39,9 @@ docs_gates:
 # others report. The former data-raw/verify.sh steps bar R CMD check (the
 # gate's own) and spelling (docs_gates above), in its order: the declared
 # floors against the measured transcripts and the R floor leg, with its
-# self-test (RADD-olitgnsw); lintr on the package; man/, NAMESPACE and
+# self-test (RADD-olitgnsw); lintr on the package and on
+# scripts/check-news-version.R, a gate script lint_package() does not reach
+# (the other scripts there are seor's copies); man/, NAMESPACE and
 # DESCRIPTION against a fresh run of the pinned roxygen2 (SEOR-nwfmerhu; the
 # export is the pushed commit, so no git archive step is needed); every
 # declared URL (SEOR-lavybtkr; the gate's R CMD check runs with remote
@@ -48,7 +50,7 @@ docs_gates:
 # `readme` job) and the NEWS heading against the version (`news-version`).
 cheap_gates:
   - Rscript data-raw/check-floor-drift.R --self-test
-  - Rscript -e 'lints <- lintr::lint_package(); if (length(lints)) { print(lints); quit(status = 1) }'
+  - Rscript -e 'n <- 0L; for (l in list(lintr::lint_package(), lintr::lint("scripts/check-news-version.R"))) if (length(l)) { print(l); n <- n + length(l) }; if (n) quit(status = 1)'
   - Rscript scripts/check-docs-drift.R .
   - Rscript data-raw/check-urls.R
   - sh scripts/check-readme-drift.sh
