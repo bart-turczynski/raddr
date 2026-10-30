@@ -42,6 +42,7 @@
 ^\.fp$
 ^_scratch$
 ^docs$
+^design$
 ^CLAUDE\.md$
 ^AGENTS\.md$
 ^CONTRIBUTING\.md$
