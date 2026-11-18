@@ -163,7 +163,7 @@ oss_index_allowlist_violations <- function(rows) {
 # package (another libcurl binding, say) needs a row of its own
 # (SEOR-hzjslawq). A space appears in neither a package name nor a CVE id.
 oss_index_key <- function(package, id) {
-  id
+  paste(package, id)
 }
 
 # A single R package name: no NA, and no space for the key to trip on.
@@ -231,7 +231,7 @@ oss_index_warn_drift <- function(found, rows, today = Sys.Date()) {
         call. = FALSE
       )
     }
-    hit <- found[which(found$id == row$id), ]
+    hit <- found[which(found$package == row$package & found$id == row$id), ]
     if (
       nrow(hit) > 0 &&
         !is.na(hit$version[1]) &&
